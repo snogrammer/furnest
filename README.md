@@ -90,6 +90,28 @@ FURNEST_IMAGE=registry.example.com/furnest FURNEST_TAG=v0.1.0 docker compose up 
 
 Put a TLS reverse proxy in front. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the proxy's address.
 
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request to `main`, on pushes to `main` and on `v*` tags. GitHub Actions and Gitea Actions both run it unchanged:
+
+- **lint:** `ruff check`, `ruff format --check`, `mypy`
+- **test:** `pytest` with coverage. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
+- **migrations:** migration round-trips plus `alembic check`
+- **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker` and validates `docker-compose.yml`
+
+Run the same gates locally with `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
+
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after CI passes on `main`, and on `v*` tags. It builds the image for each platform in `vars.IMAGE_PLATFORMS` (default `linux/amd64`; other platforms build under QEMU) and pushes `:<sha>` as a multi-arch index, plus `:latest` from main or `:<tag>` from a tag. On main it then redeploys the Portainer stack and waits until `furnest-web` and `furnest-worker` are healthy on the new image. Everything environment-specific comes from repository or organisation settings:
+
+| Kind | Name | Purpose |
+|---|---|---|
+| var | `REGISTRY` | registry host. Unset means nothing is published. |
+| var | `IMAGE` | image path, e.g. `org/furnest` |
+| var | `IMAGE_PLATFORMS` | e.g. `linux/amd64 linux/arm64` |
+| var | `PORTAINER_URL`, `PORTAINER_STACK_ID`, `PORTAINER_ENDPOINT_ID` | redeploy target. Unset means no redeploy. |
+| secret | `REGISTRY_USERNAME`, `REGISTRY_PASSWORD` | registry login |
+| secret | `PORTAINER_API_KEY` | Portainer API access |
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
 ## License

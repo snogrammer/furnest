@@ -61,7 +61,9 @@ def test_tampered_session_is_rejected() -> None:
     cookie = authenticator.issue_session()
     payload, _, signature = cookie.rpartition(".")
 
-    flipped = signature[:-1] + ("A" if signature[-1] != "A" else "B")
+    # Change the first character: the last one of unpadded base64 carries padding
+    # bits, so flipping it can decode to the same signature bytes.
+    flipped = ("A" if signature[0] != "A" else "B") + signature[1:]
     assert not authenticator.session_valid(f"{payload}.{flipped}")
     assert not authenticator.session_valid("garbage")
 

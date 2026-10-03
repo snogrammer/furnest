@@ -1,0 +1,159 @@
+name: Publish
+
+# Build and push the image after CI passes on main, and for version tags. On main,
+# also redeploy the Portainer stack. Pull requests never get here, so they never push.
+#
+# Repository / organisation configuration (nothing deployment-specific is
+# hardcoded):
+#   secrets: REGISTRY_USERNAME, REGISTRY_PASSWORD
+#            PORTAINER_API_KEY            (only for the redeploy)
+#   vars:    REGISTRY                     registry host, e.g. registry.example.com
+#            IMAGE                        image path, e.g. org/furnest (default: furnest)
+#            IMAGE_PLATFORMS              space-separated, e.g. "linux/amd64 linux/arm64"
+#                                         (default: linux/amd64). Non-native platforms
+#                                         build under QEMU emulation, so the runner
+#                                         must allow binfmt registration (privileged).
+#            PORTAINER_URL                e.g. https://portainer.example.com
+#            PORTAINER_STACK_ID, PORTAINER_ENDPOINT_ID (default 1)
+# Without REGISTRY nothing is built, and the `config` job warns about it. Without
+# PORTAINER_URL/PORTAINER_STACK_ID the image is pushed but no redeploy happens.
+#
+# Tags pushed: :<sha> (a multi-arch index) and :<sha>-<arch> per platform, plus
+# :latest from main, or :<tag> (e.g. :v1.2.3) from a version tag.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ["v*"]
+
+# Gitea can fire workflow_run more than once for one CI run (once per job).
+# Runs for one commit are serialised, and a run finds `:<sha>` already pushed
+# and exits early, so duplicates are no-ops.
+concurrency:
+  group: publish-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  config:
+    if: vars.REGISTRY == ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publishing is not configured
+        run: echo "::warning::vars.REGISTRY is unset, so no image is built or pushed. Set REGISTRY and IMAGE (see the header of .github/workflows/publish.yml)."
+
+  publish:
+    if: >-
+      vars.REGISTRY != '' &&
+      (github.event_name == 'push' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ vars.REGISTRY }}
+      IMAGE: ${{ vars.IMAGE || 'furnest' }}
+      IMAGE_PLATFORMS: ${{ vars.IMAGE_PLATFORMS || 'linux/amd64' }}
+      GIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # :latest for main, the tag name (v1.2.3) for tag pushes.
+      ALIAS_TAG: ${{ github.event_name == 'push' && github.ref_name || 'latest' }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+      PORTAINER_URL: ${{ vars.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID || '1' }}
+      # Containers polled after redeploy (container_name in docker-compose.yml).
+      PORTAINER_CONTAINERS: "furnest-web furnest-worker"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_SHA }}
+
+      # Images are built into the local daemon, then pushed with regctl rather
+      # than `docker push`: a registry behind Cloudflare answers 413 for request
+      # bodies over 100 MB, and `docker push` sends each layer in one request.
+      - name: Install regctl
+        env:
+          REGCTL_VERSION: v0.11.6
+          REGCTL_SHA256: 8e0e62a497fcdb8048d18aa927a139613176ba0531f412bc541044e28f9856bd
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /usr/local/bin/regctl \
+            "https://github.com/regclient/regclient/releases/download/$REGCTL_VERSION/regctl-linux-amd64"
+          echo "$REGCTL_SHA256  /usr/local/bin/regctl" | sha256sum -c -
+          chmod +x /usr/local/bin/regctl
+          # 50 MiB per request keeps every upload under a 100 MB proxy cap.
+          regctl registry set "$REGISTRY" --blob-max 52428800 --blob-chunk 52428800
+          echo "$REGISTRY_PASSWORD" | regctl registry login "$REGISTRY" -u "$REGISTRY_USERNAME" --pass-stdin
+
+      - name: Already built?
+        id: check
+        run: |
+          if regctl manifest head "$REGISTRY/$IMAGE:$GIT_SHA" >/dev/null 2>&1; then
+            echo "Image for $GIT_SHA already pushed by an earlier run; only retagging."
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.check.outputs.built != 'true' && env.IMAGE_PLATFORMS != 'linux/amd64'
+        uses: docker/setup-qemu-action@v3
+
+      # Plain `docker` driver: the docker-container driver's BuildKit can't run on
+      # cgroup-v1 runner hosts. It builds one platform at a time, so each platform
+      # is built, loaded and pushed on its own, and joined into one index below.
+      - name: Set up Buildx
+        if: steps.check.outputs.built != 'true'
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Build and push each platform
+        if: steps.check.outputs.built != 'true'
+        run: |
+          set -euo pipefail
+          pushed=()
+          for platform in $IMAGE_PLATFORMS; do
+            arch="${platform#*/}"; arch="${arch//\//-}"
+            ref="$REGISTRY/$IMAGE:$GIT_SHA-$arch"
+            echo "::group::$platform -> $ref"
+            docker buildx build --platform "$platform" --load \
+              --build-arg GIT_SHA="$GIT_SHA" -t "$ref" .
+            docker save "$ref" -o /tmp/image.tar
+            regctl image import "ocidir:///tmp/oci-image:$arch" /tmp/image.tar
+            rm -f /tmp/image.tar
+            # docker save writes uncompressed layers; gzip them before upload.
+            regctl image mod "ocidir:///tmp/oci-image:$arch" --layer-compress gzip --replace
+            regctl image copy "ocidir:///tmp/oci-image:$arch" "$ref"
+            echo "::endgroup::"
+            pushed+=("$platform=$ref")
+          done
+          rm -rf /tmp/oci-image
+          # Single-platform images carry no platform in a new index entry, so set
+          # it explicitly; otherwise pulls can't pick the right architecture.
+          regctl index create "$REGISTRY/$IMAGE:$GIT_SHA-index"
+          for entry in "${pushed[@]}"; do
+            regctl index add "$REGISTRY/$IMAGE:$GIT_SHA-index" --ref "${entry#*=}" --desc-platform "${entry%%=*}"
+          done
+          # Tag :<sha> last: the "Already built?" check treats it as "done".
+          regctl image copy "$REGISTRY/$IMAGE:$GIT_SHA-index" "$REGISTRY/$IMAGE:$GIT_SHA"
+          # Registries that disable deletes keep the staging tag; harmless.
+          regctl tag delete "$REGISTRY/$IMAGE:$GIT_SHA-index" || true
+          regctl manifest get "$REGISTRY/$IMAGE:$GIT_SHA" --format '{{range .Manifests}}{{.Platform}} {{.Digest}}{{"\n"}}{{end}}'
+
+      # Server-side copy: the blobs already exist, so nothing is re-uploaded.
+      - name: Tag ${{ env.ALIAS_TAG }}
+        run: regctl image copy "$REGISTRY/$IMAGE:$GIT_SHA" "$REGISTRY/$IMAGE:$ALIAS_TAG"
+
+      - name: Redeploy stack in Portainer
+        if: >-
+          steps.check.outputs.built != 'true' && github.event_name == 'workflow_run' &&
+          env.PORTAINER_URL != '' && env.PORTAINER_STACK_ID != ''
+        env:
+          REGISTRY_REF_NAME: refs/heads/main # branch Portainer pulls the stack file from
+        run: bash deploy/portainer-redeploy.sh
+
+      - name: Cleanup containers and images
+        if: always()
+        run: docker system prune -af

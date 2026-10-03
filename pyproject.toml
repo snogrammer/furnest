@@ -37,6 +37,7 @@ dev = [
     "pre-commit>=3.8",
     "pytest>=8.3",
     "pytest-cov>=5.0",
+    "pytest-socket>=0.8.1",
     "ruff>=0.6",
 ]
 
@@ -68,7 +69,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers -ra --cov=furnest --cov-report=term-missing"
+# --disable-socket: tests never touch the network (pytest-socket). Unix sockets stay
+# allowed because asyncio uses a socketpair for its event-loop wakeups.
+addopts = "--strict-markers -ra --cov=furnest --cov-report=term-missing --disable-socket --allow-unix-socket"
 markers = [
     "unit: fast, isolated tests",
     "integration: tests that exercise several components together",
@@ -82,3 +85,4 @@ source = ["furnest"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+fail_under = 90

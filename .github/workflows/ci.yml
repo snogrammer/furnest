@@ -1,0 +1,153 @@
+name: CI
+
+# GitHub Actions syntax, run as-is by Gitea Actions (which reads .github/workflows
+# when there is no .gitea/workflows). Feature branches are checked through their
+# pull request only, so a shared runner does each change once.
+#
+# Images are built here but never pushed. publish.yml pushes after CI passes
+# on main, and on version tags.
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  UV_VERSION: "0.11.16"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No cache: the shared runner has no cache backend and the save step hangs.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Network sockets are refused (pytest-socket, see addopts in pyproject.toml),
+      # and coverage below [tool.coverage.report] fail_under fails the job.
+      - name: Tests with coverage
+        run: uv run pytest -m "not migrations" --tb=short --cov-report=term --cov-report=xml
+
+  migrations:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Upgrade/downgrade round-trips and "models match migrations". Coverage is
+      # measured by the test job; this subset alone would miss the threshold.
+      - name: Migration tests
+        run: uv run pytest -m migrations --tb=short --no-cov
+
+      - name: Models and migrations agree
+        env:
+          DB_URL: sqlite:///${{ runner.temp }}/alembic-check.db
+        run: |
+          uv run furnest migrate
+          uv run alembic check
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint
+    env:
+      IMAGE: furnest:ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Plain `docker` driver: the docker-container driver's BuildKit can't run
+      # on cgroup-v1 runner hosts.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+
+      - name: Image runs as non-root
+        run: |
+          uid=$(docker run --rm --entrypoint id "$IMAGE" -u)
+          echo "uid=$uid"
+          test "$uid" = 10001
+
+      - name: Smoke test web, worker and migrate
+        run: |
+          set -euo pipefail
+          name="furnest-ci-${{ github.run_id }}"
+          vol="$name-data"
+          env=(-e AUTH_TOKEN=ci-token-0123456789abcdef -e AUTH_SESSION_SECRET=ci-secret-0123456789abcdef)
+          # shellcheck disable=SC2329 # invoked by the trap
+          cleanup() { docker rm -f "$name-web" "$name-worker" >/dev/null 2>&1 || true; docker volume rm "$vol" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --rm "$IMAGE" --version
+          docker run --rm -v "$vol:/data" "$IMAGE" migrate
+          docker run -d --name "$name-web" -v "$vol:/data" "${env[@]}" "$IMAGE" web
+          docker run -d --name "$name-worker" -v "$vol:/data" "$IMAGE" worker
+          for _ in $(seq 1 30); do
+            if docker exec "$name-web" furnest healthcheck web \
+              && docker exec "$name-worker" furnest healthcheck worker; then
+              echo "web and worker healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::containers did not become healthy"
+          docker logs "$name-web" 2>&1 | tail -50
+          docker logs "$name-worker" 2>&1 | tail -50
+          exit 1
+
+      - name: Compose file validates
+        run: |
+          cp .env.example stack.env
+          docker compose config -q
+          echo "docker-compose.yml is valid"
+
+      - name: Remove CI image
+        if: always()
+        run: docker image rm -f "$IMAGE" || true
