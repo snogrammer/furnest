@@ -3,6 +3,13 @@
 Nothing here imports from the rest of furnest or does I/O; everything else depends on it.
 """
 
+from furnest.domain.criteria import (
+    Area,
+    Criteria,
+    CriteriaChange,
+    DistanceUnit,
+    diff_criteria,
+)
 from furnest.domain.listing import Address, Contact, NormalizedListing
 from furnest.domain.money import (
     DEFAULT_CURRENCY,
@@ -21,13 +28,18 @@ __all__ = [
     "MONTHLY_FACTOR",
     "USD",
     "Address",
+    "Area",
     "Contact",
+    "Criteria",
+    "CriteriaChange",
     "Currency",
+    "DistanceUnit",
     "Money",
     "NormalizedListing",
     "Price",
     "PropertyType",
     "RentPeriod",
+    "diff_criteria",
     "get_currency",
     "normalize_property_type",
     "parse_period",

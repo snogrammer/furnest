@@ -7,7 +7,7 @@ from furnest.db.migrate import downgrade, head_revision, migration_status, upgra
 
 pytestmark = pytest.mark.migrations
 
-P1_TABLES = {"settings", "worker_heartbeat", "job_locks", "jobs"}
+TABLES = {"settings", "worker_heartbeat", "job_locks", "jobs", "criteria_versions"}
 
 
 def _tables(engine: Engine) -> set[str]:
@@ -24,7 +24,7 @@ def test_empty_database_is_not_up_to_date(engine: Engine) -> None:
 
 def test_upgrade_downgrade_upgrade_round_trip(engine: Engine) -> None:
     upgrade(engine)
-    assert _tables(engine) >= P1_TABLES
+    assert _tables(engine) >= TABLES
     assert migration_status(engine).up_to_date
 
     downgrade(engine, "base")
@@ -32,7 +32,7 @@ def test_upgrade_downgrade_upgrade_round_trip(engine: Engine) -> None:
     assert migration_status(engine).current is None
 
     upgrade(engine)
-    assert _tables(engine) >= P1_TABLES
+    assert _tables(engine) >= TABLES
     assert migration_status(engine).up_to_date
 
 
