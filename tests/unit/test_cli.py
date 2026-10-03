@@ -48,6 +48,8 @@ def test_web_serves_app_on_configured_address(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))
     monkeypatch.setenv("WEB_HOST", "0.0.0.0")  # noqa: S104 - the container setting
     monkeypatch.setenv("WEB_PORT", "8123")
+    monkeypatch.setenv("AUTH_TOKEN", "a-test-token-0123456789")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "a-test-secret-0123456789")
 
     result = runner.invoke(app, ["web"])
 
@@ -58,6 +60,18 @@ def test_web_serves_app_on_configured_address(monkeypatch: pytest.MonkeyPatch) -
     assert kwargs["port"] == 8123
     assert kwargs["log_config"] is None
     assert kwargs["server_header"] is False
+    assert kwargs["proxy_headers"] is False
+
+
+def test_web_refuses_to_start_without_auth_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append(app))
+
+    result = runner.invoke(app, ["web"])
+
+    assert result.exit_code == 1
+    assert "AUTH_TOKEN must be set" in result.output
+    assert calls == []
 
 
 def test_migrate_upgrades_database_to_head(monkeypatch: pytest.MonkeyPatch, db_url: str) -> None:

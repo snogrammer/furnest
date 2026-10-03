@@ -26,8 +26,8 @@ def test_csp_is_strict_self_only() -> None:
     assert "unsafe-eval" not in CONTENT_SECURITY_POLICY
 
 
-def test_index_renders_layout_with_security_headers(client: TestClient) -> None:
-    response = client.get("/", headers=HTML)
+def test_index_renders_layout_with_security_headers(authed_client: TestClient) -> None:
+    response = authed_client.get("/", headers=HTML)
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
@@ -39,16 +39,16 @@ def test_index_renders_layout_with_security_headers(client: TestClient) -> None:
     assert 'aria-current="page"' in response.text
 
 
-def test_index_answers_head(client: TestClient) -> None:
-    response = client.head("/")
+def test_index_answers_head(authed_client: TestClient) -> None:
+    response = authed_client.head("/")
 
     assert response.status_code == 200
     assert response.content == b""
     _assert_security_headers(response.headers)
 
 
-def test_pages_load_no_external_resources(client: TestClient) -> None:
-    text = client.get("/", headers=HTML).text
+def test_pages_load_no_external_resources(authed_client: TestClient) -> None:
+    text = authed_client.get("/", headers=HTML).text
 
     assert "http://" not in text
     assert "https://" not in text

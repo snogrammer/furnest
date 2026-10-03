@@ -41,7 +41,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,10 @@ class AuthSettings(_Group):
     token: SecretStr | None = None
     session_secret: SecretStr | None = None
     cookie_secure: bool = True
+    session_max_age_seconds: PositiveInt = 7 * 24 * 3600
+    # Failed logins allowed per client IP within the window before it is locked out.
+    login_max_attempts: PositiveInt = 5
+    login_window_seconds: PositiveInt = 300
 
 
 class WebSettings(_Group):
@@ -152,6 +156,16 @@ class WebSettings(_Group):
     # Loopback by default; containers set WEB_HOST=0.0.0.0 behind the reverse proxy.
     host: str = "127.0.0.1"
     port: Port = 8000
+    # Reverse proxies (IPs or CIDRs) whose X-Forwarded-For/-Proto headers are believed.
+    # Empty means forwarded headers are ignored and the socket peer is the client.
+    trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def _split_csv(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
 
 class WorkerSettings(_Group):

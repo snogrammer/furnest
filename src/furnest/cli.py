@@ -76,16 +76,24 @@ def web() -> None:
     import uvicorn
 
     from furnest.web.app import create_app
+    from furnest.web.auth import AuthConfigError
 
     settings = _bootstrap("web")
+    try:
+        web_app = create_app(settings)
+    except AuthConfigError as exc:
+        typer.echo(f"furnest web: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     uvicorn.run(
-        create_app(settings),
+        web_app,
         host=settings.web.host,
         port=settings.web.port,
         # No uvicorn logging config: its loggers propagate to the root handler set up
         # by _bootstrap, so access and error logs are redacted JSON like everything else.
         log_config=None,
         server_header=False,
+        # Forwarded headers are interpreted inside the app, from WEB_TRUSTED_PROXIES.
+        proxy_headers=False,
     )
 
 

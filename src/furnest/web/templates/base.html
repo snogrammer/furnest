@@ -9,14 +9,22 @@
   <link rel="stylesheet" href="{{ url_for('static', path='css/app.css').path }}">
   <script src="{{ url_for('static', path='vendor/htmx.min.js').path }}" defer></script>
 </head>
-<body>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token(request) }}"}'>
   <header class="site-header">
     <a class="brand" href="/">furnest</a>
+    {% if request.state.auth %}
     <nav aria-label="Main">
       <ul>
         <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a></li>
       </ul>
     </nav>
+    {% endif %}
+    {% if request.state.auth == "session" %}
+    <form class="logout" method="post" action="/logout">
+      {{ csrf_field(request) }}
+      <button type="submit" class="link-button">Log out</button>
+    </form>
+    {% endif %}
   </header>
   <main>
     {% block content %}{% endblock %}

@@ -112,6 +112,63 @@ main {
   text-align: center;
 }
 
+.logout {
+  margin: 0 0 0 auto;
+}
+
+.link-button {
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.login {
+  max-width: 24rem;
+  margin: calc(var(--space) * 2) auto;
+}
+
+.login form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) / 2);
+}
+
+.login input[type="password"] {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.login button {
+  padding: 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.form-error {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .form-error {
+    color: #f2b8b5;
+  }
+}
+
 /* htmx request indicators; htmx's own inline styles are disabled for the CSP. */
 .htmx-indicator {
   opacity: 0;

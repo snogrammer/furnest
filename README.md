@@ -46,6 +46,15 @@ Two unauthenticated endpoints are for orchestrators and uptime checks:
 
 Pages send a strict self-only Content Security Policy. htmx is vendored under `src/furnest/web/static/vendor/`, so there is no CDN and no JS build step.
 
+### Dashboard auth
+
+One token protects everything except the health probes, static files and the login page. `furnest web` refuses to start unless `AUTH_TOKEN` and `AUTH_SESSION_SECRET` are each set to a random value of at least 16 characters (`python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+
+- **Browser:** sign in at `/login` with the token. You get a signed, HttpOnly, SameSite=Lax session cookie that lasts `AUTH_SESSION_MAX_AGE_SECONDS` (7 days by default). It is marked Secure when `AUTH_COOKIE_SECURE=true` (the default) or the request arrived over HTTPS. Sessions are stateless, so logging out only clears that browser's cookie. To sign out every browser, rotate `AUTH_TOKEN` or `AUTH_SESSION_SECRET`.
+- **API/scripts:** send `Authorization: Bearer <AUTH_TOKEN>`. Without valid credentials an API request gets `401`, and a browser page load is redirected to `/login`.
+- **CSRF:** every form post and htmx request carries a token tied to a signed cookie. Requests authenticated with Bearer are exempt.
+- **Login rate limit:** after `AUTH_LOGIN_MAX_ATTEMPTS` failed logins from one IP within `AUTH_LOGIN_WINDOW_SECONDS`, `/login` answers `429` with `Retry-After` until the window slides. Behind a reverse proxy, list its address(es) in `WEB_TRUSTED_PROXIES` so the real client IP and scheme come from `X-Forwarded-For`/`X-Forwarded-Proto`. Otherwise those headers are ignored.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
 ## License
