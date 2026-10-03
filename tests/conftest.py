@@ -1,11 +1,15 @@
 """Shared pytest configuration. Fixtures common to all test tiers go here."""
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import sentry_sdk
+import structlog
 from sqlalchemy import Engine
 
+from furnest import logging as furnest_logging
 from furnest.config import env_var_names, get_settings
 from furnest.db.engine import create_sqlite_engine
 from furnest.db.migrate import upgrade
@@ -24,6 +28,22 @@ def isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterat
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_observability() -> Iterator[None]:
+    """Undo ``configure_logging``/``init_sentry`` so global state never leaks between tests."""
+    yield
+    root = logging.getLogger()
+    for handler in [h for h in root.handlers if isinstance(h, furnest_logging._StderrHandler)]:
+        root.removeHandler(handler)
+    root.setLevel(logging.WARNING)
+    logging.captureWarnings(False)
+    structlog.reset_defaults()
+    structlog.contextvars.clear_contextvars()
+    sentry_sdk.get_client().close()
+    sentry_sdk.get_global_scope().set_client(None)
+    sentry_sdk.get_global_scope().remove_tag("component")
 
 
 @pytest.fixture

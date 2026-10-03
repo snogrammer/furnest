@@ -31,6 +31,10 @@ furnest is configured through environment variables, or a `.env` file in the wor
 
 A few preferences, such as `INQUIRY_MODE`, can also be changed from the dashboard. An env var that is explicitly set always wins over the dashboard value.
 
+### Logging and Sentry
+
+Every process logs to stderr, one JSON object per line by default. Set `LOG_FORMAT=console` for human-readable output and `LOG_LEVEL` to control verbosity. Secrets are redacted before anything is written: configured tokens and passwords, `SecretStr` values, `Authorization`/cookie headers, bearer tokens and credentials embedded in URLs. When `SENTRY_DSN` is set, errors go to Sentry, tagged with release, environment and component (`web`/`worker`), without default PII and after the same redaction.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
 ## License
