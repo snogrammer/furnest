@@ -16,6 +16,12 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pre-commit install     # optional: run the same checks on every commit
 ```
 
+## Configuration
+
+furnest is configured through environment variables, or a `.env` file in the working directory. [`.env.example`](.env.example) documents every setting. Copy it to `.env` and fill in what you use. Optional integrations (Sentry, LLM, geocoding, reverse image search, IMAP) stay off until configured.
+
+A few preferences, such as `INQUIRY_MODE`, can also be changed from the dashboard. An env var that is explicitly set always wins over the dashboard value.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
 ## License
