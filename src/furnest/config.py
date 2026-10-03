@@ -36,10 +36,12 @@ from pydantic import (
     Field,
     HttpUrl,
     JsonValue,
+    PositiveFloat,
     SecretStr,
     TypeAdapter,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -173,6 +175,26 @@ class WorkerSettings(_Group):
 
     # /readyz fails when the newest worker heartbeat is older than this.
     heartbeat_max_age_seconds: PositiveInt = 120
+    heartbeat_interval_seconds: PositiveInt = 30
+    # How long an idle queue consumer sleeps before looking for work again.
+    poll_interval_seconds: PositiveFloat = 2.0
+    # Queue consumer threads, i.e. how many queued jobs run at once.
+    concurrency: PositiveInt = 2
+    # Default per-job timeout; a job handler can register its own.
+    job_timeout_seconds: PositiveInt = 300
+    # Failed queued jobs retry after min(max, base * 2^(attempt-1)) seconds, jittered.
+    retry_base_seconds: PositiveInt = 30
+    retry_max_seconds: PositiveInt = 3600
+    # On SIGTERM, how long running jobs get to finish. Keep it below the container's
+    # stop grace period (Docker's default is 10s; set stop_grace_period accordingly).
+    shutdown_timeout_seconds: PositiveInt = 25
+
+    @model_validator(mode="after")
+    def _heartbeat_beats_faster_than_max_age(self) -> WorkerSettings:
+        if self.heartbeat_interval_seconds >= self.heartbeat_max_age_seconds:
+            msg = "WORKER_HEARTBEAT_INTERVAL_SECONDS must be below WORKER_HEARTBEAT_MAX_AGE_SECONDS"
+            raise ValueError(msg)
+        return self
 
 
 class SentrySettings(_Group):

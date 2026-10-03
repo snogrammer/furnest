@@ -5,9 +5,6 @@ Production runs the same container image with a different command:
 * ``furnest web``     serves the dashboard, JSON API and Discord interactions.
 * ``furnest worker``  runs scheduled source scrapes and drains the job queue.
 * ``furnest migrate`` applies Alembic migrations once and exits.
-
-``worker`` is a stub until #8 lands. A stub exits non-zero so that a container
-started on an unfinished command fails loudly instead of looking healthy.
 """
 
 from typing import TYPE_CHECKING, Annotated
@@ -27,16 +24,10 @@ app = typer.Typer(
 )
 
 
-def _not_implemented(command: str, issue: int) -> None:
-    typer.echo(f"furnest {command}: not implemented yet (see #{issue}).", err=True)
-    raise typer.Exit(code=1)
-
-
 def _bootstrap(component: str) -> "Settings":
     """Load settings, configure redacted logging and (if configured) Sentry.
 
-    Every long-running command calls this first; ``worker`` (#8) will when it stops
-    being a stub.
+    Every command calls this first.
     """
     from furnest.config import get_settings
     from furnest.logging import bind_context, configure_logging, secret_values
@@ -100,7 +91,25 @@ def web() -> None:
 @app.command()
 def worker() -> None:
     """Run scheduled source scrapes and background jobs."""
-    _not_implemented("worker", 8)
+    from furnest.db.engine import create_engine_from_settings
+    from furnest.db.migrate import migration_status
+    from furnest.worker.execution import default_registry
+    from furnest.worker.runtime import Worker
+
+    settings = _bootstrap("worker")
+    engine = create_engine_from_settings(settings)
+    try:
+        status = migration_status(engine)
+        if not status.up_to_date:
+            typer.echo(
+                f"furnest worker: database at revision {status.current or 'none'}, "
+                f"code expects {status.head}; run `furnest migrate` first.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        Worker(settings, engine, default_registry()).run()
+    finally:
+        engine.dispose()
 
 
 @app.command()

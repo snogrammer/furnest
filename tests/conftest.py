@@ -8,11 +8,13 @@ import pytest
 import sentry_sdk
 import structlog
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from furnest import logging as furnest_logging
 from furnest.config import env_var_names, get_settings
 from furnest.db.engine import create_sqlite_engine
 from furnest.db.migrate import upgrade
+from furnest.db.session import make_session_factory
 
 
 @pytest.fixture(autouse=True)
@@ -65,3 +67,9 @@ def migrated_engine(engine: Engine) -> Engine:
     """``engine``, upgraded to head."""
     upgrade(engine)
     return engine
+
+
+@pytest.fixture
+def session_factory(migrated_engine: Engine) -> sessionmaker[Session]:
+    """A session factory on the migrated database."""
+    return make_session_factory(migrated_engine)

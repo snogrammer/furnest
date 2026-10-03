@@ -42,9 +42,21 @@ Every process logs to stderr, one JSON object per line by default. Set `LOG_FORM
 Two unauthenticated endpoints are for orchestrators and uptime checks:
 
 - `GET /healthz`: liveness. Always `200 {"status": "ok"}` while the process is serving. It does not touch the database.
-- `GET /readyz`: readiness. Returns `200` when the database is reachable, migrations are at head and a worker heartbeat is newer than `WORKER_HEARTBEAT_MAX_AGE_SECONDS`, and `503` otherwise. The JSON body reports each check. Until a worker runs (#8), `/readyz` reports `worker: no heartbeat`.
+- `GET /readyz`: readiness. Returns `200` when the database is reachable, migrations are at head and a worker heartbeat is newer than `WORKER_HEARTBEAT_MAX_AGE_SECONDS`, and `503` otherwise. The JSON body reports each check. With no worker running it reports `worker: no heartbeat`.
 
 Pages send a strict self-only Content Security Policy. htmx is vendored under `src/furnest/web/static/vendor/`, so there is no CDN and no JS build step.
+
+### Worker process
+
+`furnest worker` runs the background work. It refuses to start until the database is at the migration head, so run `furnest migrate` first. It does three things:
+
+- **Heartbeat:** it writes a row every `WORKER_HEARTBEAT_INTERVAL_SECONDS`, which is what `/readyz` checks.
+- **Scheduled jobs:** these run on an interval with jitter. Before each run the worker takes a lease in `job_locks`, so a job never overlaps with itself, even across several workers or a restart. If a worker dies, its lease expires.
+- **Job queue:** the web process adds rows to `jobs` and `WORKER_CONCURRENCY` consumer threads run them. Each run has a timeout (`WORKER_JOB_TIMEOUT_SECONDS`, or a per-handler value). A failed or timed-out run is retried after `min(WORKER_RETRY_MAX_SECONDS, WORKER_RETRY_BASE_SECONDS × 2^(attempt−1))`, jittered, until the job's `max_attempts` runs out and it is marked `dead`. Every failure is logged and sent to Sentry, tagged with the job id and type. If a worker dies mid-job, another worker reclaims the job once its lease expires.
+
+On `SIGTERM` or `SIGINT` the worker stops taking new work and waits up to `WORKER_SHUTDOWN_TIMEOUT_SECONDS` for running jobs to finish. A queued job still running after that goes back to the queue without using up an attempt. A second signal skips the wait. Set the container's stop grace period (e.g. compose `stop_grace_period: 30s`) above the shutdown timeout. Docker's default is only 10s.
+
+Job handlers must be idempotent and should stop when `ctx.cancelled` is set. Python can't kill a thread, so a timed-out job is told to stop, and its retry may start before the old run has fully exited.
 
 ### Dashboard auth
 

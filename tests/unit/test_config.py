@@ -189,3 +189,13 @@ def test_reset_restores_env_default() -> None:
     runtime.reset(INQUIRY_MODE)
 
     assert runtime.get(INQUIRY_MODE) is InquiryMode.REVIEW
+
+
+def test_worker_heartbeat_interval_must_be_below_max_age(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WORKER_HEARTBEAT_INTERVAL_SECONDS", "120")
+    monkeypatch.setenv("WORKER_HEARTBEAT_MAX_AGE_SECONDS", "120")
+
+    with pytest.raises(ValidationError, match="must be below WORKER_HEARTBEAT_MAX_AGE_SECONDS"):
+        Settings()

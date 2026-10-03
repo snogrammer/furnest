@@ -1,1 +1,4 @@
-"""Scheduler, job queue, DB lease locks and heartbeat for the worker process. Built in #8."""
+"""The worker process: scheduler, job queue, DB lease locks and heartbeat.
+
+``runtime.Worker`` wires together ``queue``, ``locks``, ``heartbeat`` and ``execution``.
+"""

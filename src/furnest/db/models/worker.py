@@ -1,4 +1,4 @@
-"""Worker liveness, read by ``/readyz``. The heartbeat loop itself lands in #8."""
+"""Worker liveness, read by ``/readyz`` and written by ``furnest.worker.heartbeat``."""
 
 from datetime import datetime
 

@@ -1,4 +1,4 @@
-"""Job queue (web → worker) and lease locks. Queue and lease logic lands in #8.
+"""Job queue (web → worker) and lease locks; the logic is in ``furnest.worker``.
 
 ``jobs`` holds work the web process hands to the worker (inquiry sends,
 enrichment, Discord message sync). ``job_locks`` holds leases with an expiry, so

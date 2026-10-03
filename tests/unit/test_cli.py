@@ -36,11 +36,30 @@ def test_version_flag_prints_package_version() -> None:
     assert result.output.strip() == f"furnest {furnest.__version__}"
 
 
-def test_worker_stub_fails_loudly() -> None:
+def test_worker_refuses_to_start_on_an_unmigrated_database(
+    monkeypatch: pytest.MonkeyPatch, db_url: str
+) -> None:
+    monkeypatch.setenv("DB_URL", db_url)
+
     result = runner.invoke(app, ["worker"])
 
     assert result.exit_code == 1
-    assert "not implemented yet (see #8)" in result.output
+    assert f"database at revision none, code expects {head_revision()}" in result.output
+    assert "furnest migrate" in result.output
+
+
+def test_worker_runs_until_stopped(monkeypatch: pytest.MonkeyPatch, db_url: str) -> None:
+    from furnest.worker.runtime import Worker
+
+    runs: list[Worker] = []
+    monkeypatch.setattr(Worker, "run", lambda self: runs.append(self))
+    monkeypatch.setenv("DB_URL", db_url)
+    assert runner.invoke(app, ["migrate"]).exit_code == 0
+
+    result = runner.invoke(app, ["worker"])
+
+    assert result.exit_code == 0, result.output
+    assert len(runs) == 1
 
 
 def test_web_serves_app_on_configured_address(monkeypatch: pytest.MonkeyPatch) -> None:
