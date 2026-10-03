@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from enum import StrEnum
 from typing import Annotated, Self
 
 from pydantic import (
@@ -27,6 +26,7 @@ from pydantic import (
     model_validator,
 )
 
+from furnest.domain.geo import DistanceUnit
 from furnest.domain.money import Money
 from furnest.domain.property_type import PropertyType
 
@@ -47,11 +47,6 @@ TagList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique_lower)]
 TextList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique)]
 TypeList = Annotated[tuple[PropertyType, ...], AfterValidator(_sorted_types)]
 Weight = Annotated[float, Field(gt=0, le=100)]
-
-
-class DistanceUnit(StrEnum):
-    MILES = "mi"
-    KILOMETERS = "km"
 
 
 class Area(BaseModel):

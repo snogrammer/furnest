@@ -42,7 +42,8 @@ src/furnest/
   logging.py      structured JSON logs with secret redaction                (#5)
   observability.py Sentry init (no-op without SENTRY_DSN), release/env tags (#5)
   db/             engine (WAL, busy_timeout, FK), models/, migrations/      (#4)
-  domain/         NormalizedListing, Criteria, money and rent periods       (P2)
+  domain/         NormalizedListing, Criteria, money, rent periods, geo,
+                  ParsedAddress + AddressParser interface                   (P2)
   matching/       hard filters, scoring, amenities/ (keyword, optional LLM) (P2)
   sources/        base (SourceAdapter), registry, http, browser (optional),
                   adapters/<name>/                                          (P3, P7)
@@ -99,6 +100,8 @@ Each phase adds its tables in its own Alembic migration.
 **Money and rent periods.** Prices are integer minor units (cents) plus a currency code from a small registry in `domain/money.py`; USD is the default and other currencies are added by registering them. A `Price` keeps the amount (or range) and period the source quoted, and matching compares its monthly equivalent: nightly × 365/12, weekly × 52/12, monthly × 1. The factors are exact fractions and the result is rounded half-up once, to a whole cent. An unknown price is `None`, never 0. `NormalizedListing` (`domain/listing.py`) is the frozen shape every adapter returns; unknown fields stay `None`, and raw property-type labels are mapped onto `PropertyType` with unrecognised ones becoming `other`.
 
 **Criteria versions.** The search profile is a frozen `Criteria` (`domain/criteria.py`). `CriteriaStore` (`db/criteria_store.py`) appends every save to `criteria_versions` as version `max + 1`, and never edits or deletes a version. Activating a version, new or old, clears the previous flag in the same transaction. A partial unique index (`WHERE is_active = 1`) makes a second active row impossible, and the first version saved is always active, so a non-empty history has exactly one. `diff(a, b)` lists the top-level fields that changed. Collections are stored sorted and de-duplicated, so equal profiles compare and serialize identically.
+
+**Location matching.** `matching/location.py` checks a listing against the criteria's areas (haversine distance ≤ radius, in each area's own mi/km unit), ZIP codes (ZIP+4 compares as its 5-digit ZIP) and neighborhoods (case- and whitespace-insensitive). Any one match qualifies. A criterion the listing has no data for is skipped and noted as "location unknown". The result is `match`, `no_match` (everything was checked), `unknown` (nothing matched but something couldn't be checked), or `not_configured`, with a reason per check. The hard filters decide what `unknown` means. Addresses are parsed through the `AddressParser` protocol (`domain/address.py`) into a `ParsedAddress` with USPS-style normalization and a `canonical` string for dedup. `dedup/address.py` implements it for the US with `usaddress`, and `PassthroughAddressParser` handles other countries and input that won't tag.
 
 **Property state machine.** Status changes only through `pipeline`, which checks the transition against an explicit allow-list and writes an `audit_events` row in the same transaction.
 

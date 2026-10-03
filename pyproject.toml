@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "structlog>=26.1.0",
     "typer>=0.12",
+    "usaddress>=0.5.16",
     "uvicorn>=0.54.0",
 ]
 
@@ -66,6 +67,11 @@ mypy_path = "src"
 # APScheduler 3.x ships no type hints; it is only used in furnest.worker.runtime.
 module = "apscheduler.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# usaddress ships an __init__.pyi but no py.typed marker; use its stub anyway.
+module = "usaddress.*"
+follow_untyped_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
