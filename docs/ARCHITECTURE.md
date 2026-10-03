@@ -96,6 +96,8 @@ Each phase adds its tables in its own Alembic migration.
 
 **Listing flow.** worker → adapter `search(criteria)` → `NormalizedListing`s → upsert (exact dedup on `(source, source_id)`, price history, `last_seen`) → group into a `Property` → match (hard filters pass/fail + 0–100 score with a breakdown) → `suggested` → Discord notification job. Listings no longer seen move their property to `unavailable`.
 
+**Money and rent periods.** Prices are integer minor units (cents) plus a currency code from a small registry in `domain/money.py`; USD is the default and other currencies are added by registering them. A `Price` keeps the amount (or range) and period the source quoted, and matching compares its monthly equivalent: nightly × 365/12, weekly × 52/12, monthly × 1. The factors are exact fractions and the result is rounded half-up once, to a whole cent. An unknown price is `None`, never 0. `NormalizedListing` (`domain/listing.py`) is the frozen shape every adapter returns; unknown fields stay `None`, and raw property-type labels are mapped onto `PropertyType` with unrecognised ones becoming `other`.
+
 **Property state machine.** Status changes only through `pipeline`, which checks the transition against an explicit allow-list and writes an `audit_events` row in the same transaction.
 
 ```
