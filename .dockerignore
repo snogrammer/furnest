@@ -1,0 +1,26 @@
+# Only pyproject.toml, uv.lock, README.md, LICENSE and src/ are copied into the image.
+.git
+.github
+.gitea
+.claude
+docs/
+tests/
+deploy/
+observability/
+data/
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.env
+.env.*
+stack.env
+*.db
+*.db-*
+.DS_Store

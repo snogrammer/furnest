@@ -47,7 +47,7 @@ def check_readiness(
         checks={
             "database": _check_database(engine),
             "migrations": _check_migrations(engine),
-            "worker": _check_worker(engine, max_heartbeat_age, now or utcnow()),
+            "worker": check_worker(engine, max_heartbeat_age, now),
         }
     )
 
@@ -73,7 +73,11 @@ def _check_migrations(engine: Engine) -> CheckResult:
     return CheckResult(ok=True, detail=f"at head {status.head}")
 
 
-def _check_worker(engine: Engine, max_age: timedelta, now: datetime) -> CheckResult:
+def check_worker(engine: Engine, max_age: timedelta, now: datetime | None = None) -> CheckResult:
+    """Is the newest worker heartbeat younger than ``max_age``?
+
+    Also used by ``furnest healthcheck worker``, the worker container's probe.
+    """
     try:
         with engine.connect() as connection:
             last_seen = connection.execute(
@@ -85,7 +89,7 @@ def _check_worker(engine: Engine, max_age: timedelta, now: datetime) -> CheckRes
     if last_seen is None:
         return CheckResult(ok=False, detail="no heartbeat")
     # Clamp at zero: a worker clock slightly ahead of ours is still fresh.
-    age = max(now - last_seen, timedelta(0))
+    age = max((now or utcnow()) - last_seen, timedelta(0))
     seconds = int(age.total_seconds())
     if age > max_age:
         return CheckResult(ok=False, detail=f"stale (last seen {seconds}s ago)")

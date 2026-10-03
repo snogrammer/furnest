@@ -1,0 +1,27 @@
+# Example Caddy site for furnest. Replace furnest.example.com with your domain;
+# Caddy fetches a TLS certificate for it automatically.
+#
+# Caddy must reach the web container, e.g. on a shared Docker network as
+# `furnest-web:8000`, or at 127.0.0.1:8000 when Caddy runs on the host.
+#
+# In stack.env, set:
+#   BASE_URL=https://furnest.example.com
+#   WEB_TRUSTED_PROXIES=<Caddy's address or network, e.g. 172.16.0.0/12>
+# so login rate limiting sees the real client IP and HTTPS is detected.
+
+furnest.example.com {
+	encode zstd gzip
+
+	# /discord/interactions MUST stay reachable from the public internet: Discord
+	# calls it for every button press, and every request is checked against the
+	# application's Ed25519 public key. The dashboard is token-protected, but you
+	# can also restrict it to trusted networks (VPN, LAN) by uncommenting this:
+	#
+	# @dashboard {
+	# 	not path /discord/interactions /healthz
+	# 	not remote_ip 192.0.2.0/24 2001:db8::/32
+	# }
+	# respond @dashboard 403
+
+	reverse_proxy furnest-web:8000
+}

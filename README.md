@@ -10,7 +10,7 @@ Requires [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 itself if you
 
 ```sh
 uv sync                       # create .venv and install dependencies
-uv run furnest --help         # web | worker | migrate
+uv run furnest --help         # web | worker | migrate | healthcheck
 uv run pytest                 # tests + coverage
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pre-commit install     # optional: run the same checks on every commit
@@ -66,6 +66,29 @@ One token protects everything except the health probes, static files and the log
 - **API/scripts:** send `Authorization: Bearer <AUTH_TOKEN>`. Without valid credentials an API request gets `401`, and a browser page load is redirected to `/login`.
 - **CSRF:** every form post and htmx request carries a token tied to a signed cookie. Requests authenticated with Bearer are exempt.
 - **Login rate limit:** after `AUTH_LOGIN_MAX_ATTEMPTS` failed logins from one IP within `AUTH_LOGIN_WINDOW_SECONDS`, `/login` answers `429` with `Retry-After` until the window slides. Behind a reverse proxy, list its address(es) in `WEB_TRUSTED_PROXIES` so the real client IP and scheme come from `X-Forwarded-For`/`X-Forwarded-Proto`. Otherwise those headers are ignored.
+
+## Docker deployment
+
+One image runs every role. The command picks it: `web` (default), `worker` or `migrate`.
+
+```sh
+docker build -t furnest .                                  # ~280 MB
+docker build -t furnest:browser --build-arg WITH_PLAYWRIGHT=true .  # + Chromium for JS-heavy sources
+docker run --rm -v furnest-data:/data --env-file .env furnest migrate
+```
+
+The container runs as uid 10001 and keeps all state in the `/data` volume. It sets `WEB_HOST=0.0.0.0`, `WEB_PORT=8000`, `DATA_DIR=/data` and `LOG_FORMAT=json`.
+
+[`docker-compose.yml`](docker-compose.yml) is a Portainer-ready stack. Copy `.env.example` to `stack.env` next to it (or set the variables in Portainer), then choose the image with `FURNEST_IMAGE` / `FURNEST_TAG`:
+
+```sh
+cp .env.example stack.env   # set AUTH_TOKEN, AUTH_SESSION_SECRET, BASE_URL, ...
+FURNEST_IMAGE=registry.example.com/furnest FURNEST_TAG=v0.1.0 docker compose up -d
+```
+
+`migrate` runs once and exits, then `web` and `worker` start. Each has a healthcheck (`furnest healthcheck web|worker`), memory limit and restart policy. The worker gets a 30s stop grace period, so running jobs can finish on redeploy. Alternatively, set `DB_AUTO_MIGRATE=true` to have `web` migrate on start.
+
+Put a TLS reverse proxy in front. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the proxy's address.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 

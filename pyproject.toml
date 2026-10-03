@@ -25,6 +25,11 @@ dependencies = [
 [project.scripts]
 furnest = "furnest.cli:app"
 
+[project.optional-dependencies]
+browser = [
+    "playwright>=1.63.0",
+]
+
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",

@@ -1,16 +1,23 @@
 """Smoke tests for the ``furnest`` CLI surface."""
 
+import urllib.error
+import urllib.request
+from datetime import timedelta
+from email.message import Message
 from typing import Any
 
 import pytest
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy.orm import Session, sessionmaker
 from typer.testing import CliRunner
 
 import furnest
 from furnest.cli import app
+from furnest.db.base import utcnow
 from furnest.db.engine import create_sqlite_engine
 from furnest.db.migrate import head_revision, migration_status
+from furnest.worker.heartbeat import WorkerIdentity, beat
 
 runner = CliRunner()
 
@@ -19,7 +26,7 @@ def test_help_lists_all_commands() -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("web", "worker", "migrate"):
+    for command in ("web", "worker", "migrate", "healthcheck"):
         assert command in result.output
 
 
@@ -108,3 +115,99 @@ def test_migrate_upgrades_database_to_head(monkeypatch: pytest.MonkeyPatch, db_u
         assert migration_status(engine).up_to_date
     finally:
         engine.dispose()
+
+
+class _FakeResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_healthcheck_web_probes_local_healthz(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+
+    def fake_urlopen(url: str, timeout: float) -> _FakeResponse:
+        urls.append(url)
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("WEB_HOST", "0.0.0.0")  # noqa: S104 - the container setting
+    monkeypatch.setenv("WEB_PORT", "8123")
+
+    result = runner.invoke(app, ["healthcheck", "web"])
+
+    assert result.exit_code == 0, result.output
+    assert urls == ["http://127.0.0.1:8123/healthz"]
+    assert "answered 200" in result.output
+
+
+def test_healthcheck_web_fails_on_error_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(url: str, timeout: float) -> _FakeResponse:
+        raise urllib.error.HTTPError(url, 503, "Service Unavailable", Message(), None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    result = runner.invoke(app, ["healthcheck", "web"])
+
+    assert result.exit_code == 1
+    assert "answered 503" in result.output
+
+
+def test_healthcheck_web_fails_when_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(url: str, timeout: float) -> _FakeResponse:
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    result = runner.invoke(app, ["healthcheck", "web"])
+
+    assert result.exit_code == 1
+    assert "unreachable" in result.output
+
+
+@pytest.mark.parametrize(
+    ("age_seconds", "exit_code", "detail"),
+    [(5, 0, "heartbeat last seen 5s ago"), (500, 1, "heartbeat stale (last seen 500s ago)")],
+)
+def test_healthcheck_worker_checks_heartbeat_age(
+    monkeypatch: pytest.MonkeyPatch,
+    db_url: str,
+    session_factory: sessionmaker[Session],
+    age_seconds: int,
+    exit_code: int,
+    detail: str,
+) -> None:
+    monkeypatch.setenv("DB_URL", db_url)
+    beat(session_factory, WorkerIdentity(), now=utcnow() - timedelta(seconds=age_seconds))
+
+    result = runner.invoke(app, ["healthcheck", "worker"])
+
+    assert result.exit_code == exit_code, result.output
+    assert detail in result.output
+
+
+def test_healthcheck_worker_fails_without_heartbeat(
+    monkeypatch: pytest.MonkeyPatch, db_url: str, session_factory: sessionmaker[Session]
+) -> None:
+    monkeypatch.setenv("DB_URL", db_url)
+
+    result = runner.invoke(app, ["healthcheck", "worker"])
+
+    assert result.exit_code == 1
+    assert "heartbeat no heartbeat" in result.output
+
+
+def test_healthcheck_worker_fails_on_unmigrated_database(
+    monkeypatch: pytest.MonkeyPatch, db_url: str
+) -> None:
+    monkeypatch.setenv("DB_URL", db_url)
+
+    result = runner.invoke(app, ["healthcheck", "worker"])
+
+    assert result.exit_code == 1
+    assert "heartbeat unknown" in result.output

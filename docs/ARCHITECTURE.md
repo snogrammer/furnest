@@ -21,6 +21,8 @@ One container image runs three commands, all sharing a SQLite database on the `/
 | `furnest worker` | Scheduler: one job per enabled source on its own interval with jitter. Also drains the DB job queue (inquiry sends, enrichment, criteria re-runs, Discord message sync) and writes a heartbeat. |
 | `furnest migrate` | Applies Alembic migrations once and exits. Web can also auto-migrate on start. |
 
+`furnest healthcheck web|worker` is each container's health probe: `web` asks its own `/healthz`, `worker` checks that the newest heartbeat is fresh. `docker-compose.yml` runs `migrate` as a one-shot service that must exit 0 before `web` and `worker` start (both refuse an out-of-date schema). The image runs as uid 10001, with the venv root-owned and read-only. A build arg adds Playwright and Chromium for sources that need a browser.
+
 SQLite runs in WAL mode with `busy_timeout` and foreign keys on, so web and worker can share it safely. The worker does all slow or network-bound work. The web process only reads, writes small rows, and enqueues jobs.
 
 ```
@@ -35,7 +37,7 @@ SQLite runs in WAL mode with `busy_timeout` and foreign keys on, so web and work
 
 ```
 src/furnest/
-  cli.py          furnest web | worker | migrate
+  cli.py          furnest web | worker | migrate | healthcheck
   config.py       pydantic-settings; env → DB settings precedence           (#3)
   logging.py      structured JSON logs with secret redaction                (#5)
   observability.py Sentry init (no-op without SENTRY_DSN), release/env tags (#5)
@@ -57,6 +59,7 @@ tests/
   integration/    API routes, auth, Discord signatures + interactions, email
   migrations/     upgrade/downgrade round-trips against an empty DB
   fixtures/<adapter>/  recorded HTML/JSON per adapter (sanitized)
+Dockerfile, docker-compose.yml   one image, Portainer-ready stack        (#9)
 deploy/Caddyfile.example
 docs/
 .github/workflows/ci.yml   (GitHub Actions syntax, portable to Gitea Actions)

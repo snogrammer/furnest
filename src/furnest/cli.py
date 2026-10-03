@@ -5,8 +5,12 @@ Production runs the same container image with a different command:
 * ``furnest web``     serves the dashboard, JSON API and Discord interactions.
 * ``furnest worker``  runs scheduled source scrapes and drains the job queue.
 * ``furnest migrate`` applies Alembic migrations once and exits.
+
+``furnest healthcheck web|worker`` is the containers' health probe.
 """
 
+from enum import StrEnum
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -128,3 +132,57 @@ def migrate() -> None:
         engine.dispose()
     get_logger(__name__).info("migrations_applied", revision=status.current, head=status.head)
     typer.echo(f"furnest migrate: database at revision {status.current} (head {status.head}).")
+
+
+class Probe(StrEnum):
+    web = "web"
+    worker = "worker"
+
+
+@app.command()
+def healthcheck(
+    probe: Annotated[Probe, typer.Argument(help="Which process to probe.")],
+) -> None:
+    """Exit 0 if the process is healthy, 1 if not. Used as the container healthcheck.
+
+    ``web`` asks the local server's ``/healthz``. ``worker`` checks that the newest
+    heartbeat is younger than ``WORKER_HEARTBEAT_MAX_AGE_SECONDS``. It runs every few
+    seconds, so it skips logging and Sentry setup.
+    """
+    from furnest.config import get_settings
+
+    settings = get_settings()
+    ok, detail = _probe_web(settings) if probe is Probe.web else _probe_worker(settings)
+    typer.echo(f"furnest healthcheck {probe}: {detail}", err=not ok)
+    if not ok:
+        raise typer.Exit(code=1)
+
+
+def _probe_web(settings: "Settings") -> tuple[bool, str]:
+    import urllib.error
+    import urllib.request
+
+    # Always loopback: the probe runs inside the web container, and WEB_HOST may be 0.0.0.0.
+    url = f"http://127.0.0.1:{settings.web.port}/healthz"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+    except OSError as exc:
+        return False, f"{url} unreachable ({exc})"
+    return status == HTTPStatus.OK, f"{url} answered {status}"
+
+
+def _probe_worker(settings: "Settings") -> tuple[bool, str]:
+    from datetime import timedelta
+
+    from furnest.db.engine import create_engine_from_settings
+    from furnest.web.health import check_worker
+
+    engine = create_engine_from_settings(settings)
+    try:
+        result = check_worker(engine, timedelta(seconds=settings.worker.heartbeat_max_age_seconds))
+    finally:
+        engine.dispose()
+    return result.ok, f"heartbeat {result.detail}"
