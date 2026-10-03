@@ -27,3 +27,6 @@ stack.env
 
 # Local agent tooling logs
 observability/
+
+# Local development database
+/dev.db*

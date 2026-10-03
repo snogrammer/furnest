@@ -16,6 +16,15 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pre-commit install     # optional: run the same checks on every commit
 ```
 
+Schema changes ship as Alembic migrations in `src/furnest/db/migrations/versions/`:
+
+```sh
+export DB_URL=sqlite:///./dev.db
+uv run furnest migrate                                    # upgrade to head
+uv run alembic revision --autogenerate -m "add listings"  # then review the generated file
+uv run alembic check                                      # models and migrations agree
+```
+
 ## Configuration
 
 furnest is configured through environment variables, or a `.env` file in the working directory. [`.env.example`](.env.example) documents every setting. Copy it to `.env` and fill in what you use. Optional integrations (Sentry, LLM, geocoding, reverse image search, IMAP) stay off until configured.

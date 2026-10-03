@@ -6,7 +6,7 @@ Production runs the same container image with a different command:
 * ``furnest worker``  runs scheduled source scrapes and drains the job queue.
 * ``furnest migrate`` applies Alembic migrations once and exits.
 
-Each command is a stub until its owning issue lands. A stub exits non-zero so
+``web`` and ``worker`` are stubs until their owning issues land. A stub exits non-zero so
 that a container started on an unfinished command fails loudly instead of
 looking healthy.
 """
@@ -66,4 +66,14 @@ def worker() -> None:
 @app.command()
 def migrate() -> None:
     """Apply database migrations and exit."""
-    _not_implemented("migrate", 4)
+    from furnest.config import get_settings
+    from furnest.db.engine import create_engine_from_settings
+    from furnest.db.migrate import migration_status, upgrade
+
+    engine = create_engine_from_settings(get_settings())
+    try:
+        upgrade(engine)
+        status = migration_status(engine)
+    finally:
+        engine.dispose()
+    typer.echo(f"furnest migrate: database at revision {status.current} (head {status.head}).")
