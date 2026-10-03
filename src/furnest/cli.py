@@ -6,9 +6,8 @@ Production runs the same container image with a different command:
 * ``furnest worker``  runs scheduled source scrapes and drains the job queue.
 * ``furnest migrate`` applies Alembic migrations once and exits.
 
-``web`` and ``worker`` are stubs until their owning issues land. A stub exits non-zero so
-that a container started on an unfinished command fails loudly instead of
-looking healthy.
+``worker`` is a stub until #8 lands. A stub exits non-zero so that a container
+started on an unfinished command fails loudly instead of looking healthy.
 """
 
 from typing import TYPE_CHECKING, Annotated
@@ -36,8 +35,8 @@ def _not_implemented(command: str, issue: int) -> None:
 def _bootstrap(component: str) -> "Settings":
     """Load settings, configure redacted logging and (if configured) Sentry.
 
-    Every long-running command calls this first; ``web`` (#6) and ``worker`` (#8)
-    will when they stop being stubs.
+    Every long-running command calls this first; ``worker`` (#8) will when it stops
+    being a stub.
     """
     from furnest.config import get_settings
     from furnest.logging import bind_context, configure_logging, secret_values
@@ -74,7 +73,20 @@ def main(
 @app.command()
 def web() -> None:
     """Serve the dashboard, JSON API and Discord interactions endpoint."""
-    _not_implemented("web", 6)
+    import uvicorn
+
+    from furnest.web.app import create_app
+
+    settings = _bootstrap("web")
+    uvicorn.run(
+        create_app(settings),
+        host=settings.web.host,
+        port=settings.web.port,
+        # No uvicorn logging config: its loggers propagate to the root handler set up
+        # by _bootstrap, so access and error logs are redacted JSON like everything else.
+        log_config=None,
+        server_header=False,
+    )
 
 
 @app.command()

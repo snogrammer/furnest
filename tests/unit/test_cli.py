@@ -1,6 +1,10 @@
 """Smoke tests for the ``furnest`` CLI surface."""
 
+from typing import Any
+
 import pytest
+import uvicorn
+from fastapi import FastAPI
 from typer.testing import CliRunner
 
 import furnest
@@ -32,15 +36,28 @@ def test_version_flag_prints_package_version() -> None:
     assert result.output.strip() == f"furnest {furnest.__version__}"
 
 
-@pytest.mark.parametrize(
-    ("command", "issue"),
-    [("web", 6), ("worker", 8)],
-)
-def test_stub_commands_fail_loudly(command: str, issue: int) -> None:
-    result = runner.invoke(app, [command])
+def test_worker_stub_fails_loudly() -> None:
+    result = runner.invoke(app, ["worker"])
 
     assert result.exit_code == 1
-    assert f"not implemented yet (see #{issue})" in result.output
+    assert "not implemented yet (see #8)" in result.output
+
+
+def test_web_serves_app_on_configured_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, dict[str, Any]]] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))
+    monkeypatch.setenv("WEB_HOST", "0.0.0.0")  # noqa: S104 - the container setting
+    monkeypatch.setenv("WEB_PORT", "8123")
+
+    result = runner.invoke(app, ["web"])
+
+    assert result.exit_code == 0, result.output
+    [(served, kwargs)] = calls
+    assert isinstance(served, FastAPI)
+    assert kwargs["host"] == "0.0.0.0"  # noqa: S104
+    assert kwargs["port"] == 8123
+    assert kwargs["log_config"] is None
+    assert kwargs["server_header"] is False
 
 
 def test_migrate_upgrades_database_to_head(monkeypatch: pytest.MonkeyPatch, db_url: str) -> None:

@@ -146,6 +146,21 @@ class AuthSettings(_Group):
     cookie_secure: bool = True
 
 
+class WebSettings(_Group):
+    model_config = SettingsConfigDict(env_prefix="WEB_")
+
+    # Loopback by default; containers set WEB_HOST=0.0.0.0 behind the reverse proxy.
+    host: str = "127.0.0.1"
+    port: Port = 8000
+
+
+class WorkerSettings(_Group):
+    model_config = SettingsConfigDict(env_prefix="WORKER_")
+
+    # /readyz fails when the newest worker heartbeat is older than this.
+    heartbeat_max_age_seconds: PositiveInt = 120
+
+
 class SentrySettings(_Group):
     model_config = SettingsConfigDict(env_prefix="SENTRY_")
 
@@ -234,6 +249,8 @@ class Settings(BaseModel):
 
     app: AppSettings = Field(default_factory=AppSettings)
     db: DbSettings = Field(default_factory=DbSettings)
+    web: WebSettings = Field(default_factory=WebSettings)
+    worker: WorkerSettings = Field(default_factory=WorkerSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     sentry: SentrySettings = Field(default_factory=SentrySettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)

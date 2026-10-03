@@ -1,0 +1,134 @@
+/* furnest base styles: small, hand-written, no build step. Mobile first. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fdfdfc;
+  --fg: #1d1f21;
+  --muted: #5f6368;
+  --border: #dcdcd8;
+  --surface: #f3f3f0;
+  --accent: #2f6f5e;
+  --space: 1rem;
+  --radius: 6px;
+  --max-width: 64rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141615;
+    --fg: #e6e6e3;
+    --muted: #a0a4a8;
+    --border: #2e3230;
+    --surface: #1d201f;
+    --accent: #7cc4ad;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 var(--space);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space) / 2) var(--space);
+  padding: calc(var(--space) * 0.75) var(--space);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.site-header nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space) / 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-header nav a {
+  display: block;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.site-header nav a[aria-current="page"] {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space);
+}
+
+.site-footer {
+  padding: var(--space);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* htmx request indicators; htmx's own inline styles are disabled for the CSP. */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+@media (min-width: 40rem) {
+  main {
+    padding: calc(var(--space) * 1.5) var(--space);
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+}

@@ -107,7 +107,7 @@ any active state → unavailable (listing disappeared)
 
 **Configuration.** Infrastructure and secrets come from environment variables (pydantic-settings, documented in `.env.example`). User preferences edited in the dashboard (criteria, templates, toggles) live in the DB. Env vars always win for anything defined in both places.
 
-**Safety.** Scraped HTML is never rendered raw: it is sanitized with nh3 or reduced to text. Pages send a strict self-only CSP. Logs redact secrets. The container runs as a non-root user. The dashboard is protected by a single token (signed HttpOnly SameSite cookie or `Authorization: Bearer`, constant-time comparison, CSRF on forms, rate-limited login).
+**Safety.** Scraped HTML is never rendered raw: it is sanitized with nh3 or reduced to text. Pages send a strict self-only CSP. htmx is vendored and configured not to inject inline styles or `eval` code, so the CSP needs no `unsafe-*` exceptions. Logs redact secrets. The container runs as a non-root user. The dashboard is protected by a single token (signed HttpOnly SameSite cookie or `Authorization: Bearer`, constant-time comparison, CSRF on forms, rate-limited login).
 
 ## Conventions
 

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Keep htmx inside the self-only CSP: no injected <style>, no eval. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <title>{% block title %}furnest{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css').path }}">
+  <script src="{{ url_for('static', path='vendor/htmx.min.js').path }}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">furnest</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">furnest {{ version }}</footer>
+</body>
+</html>

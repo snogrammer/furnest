@@ -10,11 +10,11 @@ from dataclasses import dataclass
 
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine
+from sqlalchemy import Engine, inspect, text
 
 SCRIPT_LOCATION = "furnest.db:migrations"
+VERSION_TABLE = "alembic_version"
 
 
 def alembic_config() -> Config:
@@ -42,8 +42,16 @@ def head_revision() -> str | None:
 
 
 def current_revision(engine: Engine) -> str | None:
+    # Read alembic_version directly: MigrationContext.configure logs two INFO lines
+    # per call, which would flood the logs from a polled /readyz. The history is
+    # linear, so the table holds at most one row.
     with engine.connect() as connection:
-        return MigrationContext.configure(connection).get_current_revision()
+        if not inspect(connection).has_table(VERSION_TABLE):
+            return None
+        revision: str | None = connection.execute(
+            text(f"SELECT version_num FROM {VERSION_TABLE}")  # noqa: S608 - constant
+        ).scalar_one_or_none()
+        return revision
 
 
 @dataclass(frozen=True)
