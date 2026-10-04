@@ -1,4 +1,4 @@
-"""Pure domain types: NormalizedListing, Criteria, money, rent periods, geo and addresses.
+"""Pure domain types: NormalizedListing, Criteria, money, rent periods, geo, addresses, amenities.
 
 Nothing here imports from the rest of furnest or does I/O; everything else depends on it.
 """
@@ -9,6 +9,7 @@ from furnest.domain.address import (
     PassthroughAddressParser,
     normalize_zip,
 )
+from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult
 from furnest.domain.criteria import Area, Criteria, CriteriaChange, diff_criteria
 from furnest.domain.geo import EARTH_RADIUS, DistanceUnit, haversine
 from furnest.domain.listing import Address, Contact, NormalizedListing
@@ -31,6 +32,9 @@ __all__ = [
     "USD",
     "Address",
     "AddressParser",
+    "Amenity",
+    "AmenityExtractor",
+    "AmenityResult",
     "Area",
     "Contact",
     "Criteria",
