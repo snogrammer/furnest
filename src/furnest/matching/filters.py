@@ -274,7 +274,7 @@ _RULES: tuple[tuple[FilterRule, Callable[[_Context], Verdict | None]], ...] = (
 )
 
 
-def _listing_amenities(listing: NormalizedListing) -> AmenityResult:
+def listing_amenities(listing: NormalizedListing) -> AmenityResult:
     # Without an extractor result, trust the adapter's tags; nothing is known to be absent.
     return AmenityResult(
         present=frozenset(_VOCABULARY[tag] for tag in listing.amenities if tag in _VOCABULARY)
@@ -294,7 +294,7 @@ def evaluate_hard_filters(
     listing's own amenity tags count as present. ``parser`` is passed to location matching.
     """
     if amenities is None:
-        amenities = _listing_amenities(listing)
+        amenities = listing_amenities(listing)
     ctx = _Context(listing, criteria, amenities, parser)
     results: list[RuleResult] = []
     for rule, check in _RULES:

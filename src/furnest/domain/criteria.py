@@ -110,6 +110,10 @@ class Criteria(BaseModel):
     must_have_amenities: TagList = ()
     # Tag → weight, for scoring (#17).
     nice_to_have_amenities: dict[str, Weight] = Field(default_factory=dict)
+    # Optional fit components for scoring, weighted like amenities. Price fit rewards a
+    # lower price within the range and needs price_max; extra beds need min_beds.
+    price_fit_weight: Weight | None = None
+    extra_beds_weight: Weight | None = None
 
     # Matched case-insensitively against title + description.
     keywords_allow: TagList = ()

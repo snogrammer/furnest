@@ -89,6 +89,8 @@ def test_equal_profiles_serialize_identically() -> None:
         ({"must_have_amenities": ["ac"], "nice_to_have_amenities": {"AC": 1}}, "required and nice"),
         ({"keywords_allow": ["quiet"], "keywords_deny": ["Quiet"]}, "keywords both"),
         ({"nice_to_have_amenities": {"ac": 0}}, "greater than 0"),
+        ({"price_fit_weight": 0}, "greater than 0"),
+        ({"extra_beds_weight": 101}, "less than or equal to 100"),
         ({"min_baths": 1.2}, "multiple of 0.5"),
         ({"areas": [{"name": "x", "lat": 0, "lng": 0, "radius": 0}]}, "greater than 0"),
         ({"areas": [{"name": " ", "lat": 0, "lng": 0, "radius": 1}]}, "at least 1 character"),
@@ -130,3 +132,11 @@ def test_versions_saved_before_unknown_fails_still_load() -> None:
     stored = Criteria(min_beds=1).model_dump(mode="json")
     del stored["unknown_fails"]
     assert Criteria.model_validate(stored).unknown_fails == ()
+
+
+def test_versions_saved_before_fit_weights_still_load() -> None:
+    stored = Criteria(min_beds=1).model_dump(mode="json")
+    del stored["price_fit_weight"], stored["extra_beds_weight"]
+    loaded = Criteria.model_validate(stored)
+    assert loaded.price_fit_weight is None
+    assert loaded.extra_beds_weight is None
