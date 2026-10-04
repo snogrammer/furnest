@@ -56,6 +56,40 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     assert str(settings.app.base_url) == "https://furnest.example.com/"
 
 
+def test_sources_adapters_json_is_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "SOURCES_ADAPTERS",
+        '{"example_source": {"enabled": true, "interval_minutes": 30, "api_key": "k"}}',
+    )
+
+    adapters = Settings().sources.adapters
+
+    assert set(adapters) == {"example_source"}
+    overrides = adapters["example_source"]
+    assert overrides.enabled is True
+    assert overrides.interval_minutes == 30
+    assert overrides.api_key is not None
+    assert overrides.api_key.get_secret_value() == "k"
+    assert overrides.jitter_seconds is None
+    assert overrides.model_fields_set == {"enabled", "interval_minutes", "api_key"}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '{"example_source": {"enabeld": true}}',
+        '{"Example-Source": {"enabled": true}}',
+        '{"example_source": {"interval_minutes": 0}}',
+        "not json",
+    ],
+)
+def test_invalid_sources_adapters_are_rejected(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("SOURCES_ADAPTERS", value)
+
+    with pytest.raises(ValueError, match=r"SOURCES_ADAPTERS|adapters|error"):
+        Settings()
+
+
 def test_dotenv_file_in_working_directory_is_read() -> None:
     Path(".env").write_text("DISCORD_CHANNEL_ID=123\n")
 

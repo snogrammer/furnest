@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Annotated, Any, Protocol
 
 from pydantic import (
+    AnyUrl,
     BaseModel,
     ConfigDict,
     EmailStr,
@@ -38,6 +39,7 @@ from pydantic import (
     JsonValue,
     PositiveFloat,
     SecretStr,
+    StringConstraints,
     TypeAdapter,
     ValidationError,
     field_validator,
@@ -284,6 +286,29 @@ class ReverseImageSettings(_Group):
     api_key: SecretStr | None = None
 
 
+# Adapter names: lower-case identifiers, also used as keys in SOURCES_ADAPTERS.
+ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
+
+
+class AdapterOverrides(BaseModel):
+    """One adapter's entry in ``SOURCES_ADAPTERS``. Unset fields use the ``SOURCES_*`` default.
+
+    ``enabled`` is special: when present it pins the adapter on or off, overriding
+    the dashboard toggle (see ``furnest.sources.config``).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool | None = None
+    interval_minutes: PositiveInt | None = None
+    jitter_seconds: Annotated[int, Field(ge=0)] | None = None
+    requests_per_minute: PositiveFloat | None = None
+    user_agent: Annotated[str, Field(min_length=1)] | None = None
+    proxy_url: AnyUrl | None = None
+    api_key: SecretStr | None = None
+    request_timeout_seconds: PositiveInt | None = None
+
+
 class SourcesSettings(_Group):
     model_config = SettingsConfigDict(env_prefix="SOURCES_")
 
@@ -291,7 +316,14 @@ class SourcesSettings(_Group):
     default_interval_minutes: PositiveInt = 60
     jitter_seconds: Annotated[int, Field(ge=0)] = 300
     request_timeout_seconds: PositiveInt = 30
+    # Polite default request budget per adapter; the limiter itself is #20.
+    requests_per_minute: PositiveFloat = 6.0
+    proxy_url: AnyUrl | None = None
     browser_enabled: bool = False
+    # Per-adapter overrides as JSON, keyed by adapter name.
+    adapters: dict[
+        Annotated[str, StringConstraints(pattern=ADAPTER_NAME_PATTERN)], AdapterOverrides
+    ] = Field(default_factory=dict)
 
 
 class Settings(BaseModel):
