@@ -92,3 +92,22 @@ def test_long_errors_are_truncated(store: SqlSourceStore) -> None:
     state = store.get("alpha")
     assert state is not None
     assert state.last_error == "x" * MAX_ERROR_LENGTH
+
+
+def test_set_disabled_reasons_sets_and_clears(store: SqlSourceStore) -> None:
+    store.set_disabled_reasons({"alpha": "needs a browser: Playwright is not installed"})
+
+    alpha = store.get("alpha")
+    assert alpha is not None
+    assert alpha.disabled_reason == "needs a browser: Playwright is not installed"
+    assert alpha.enabled is None
+    assert alpha.consecutive_failures == 0
+
+    store.set_disabled_reasons({"alpha": None, "beta": None})
+
+    assert [s.disabled_reason for s in store.all()] == [None, None]
+
+
+def test_set_disabled_reasons_unknown_source_raises(store: SqlSourceStore) -> None:
+    with pytest.raises(SourceNotFoundError):
+        store.set_disabled_reasons({"missing": "reason"})

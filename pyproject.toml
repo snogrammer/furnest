@@ -69,6 +69,11 @@ module = "apscheduler.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Playwright is the optional `browser` extra; CI type-checks without it installed.
+module = "playwright.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # usaddress ships an __init__.pyi but no py.typed marker; use its stub anyway.
 module = "usaddress.*"
 follow_untyped_imports = true

@@ -2,10 +2,12 @@
 
 Rows are created for every registered adapter with :meth:`SqlSourceStore.ensure`,
 so the dashboard can list a source before it has ever run. The scheduler (#23)
-records each run's outcome; the health page (#26) reads it back.
+records each run's outcome and, from the resolved adapter configs, why a source
+can't run (:meth:`SqlSourceStore.set_disabled_reasons`); the health page (#26)
+reads it back.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -35,6 +37,7 @@ class SourceState:
     consecutive_failures: int
     last_error: str | None
     listings_found: int
+    disabled_reason: str | None = None
 
 
 def _state(row: Source) -> SourceState:
@@ -46,6 +49,7 @@ def _state(row: Source) -> SourceState:
         consecutive_failures=row.consecutive_failures,
         last_error=row.last_error,
         listings_found=row.listings_found,
+        disabled_reason=row.disabled_reason,
     )
 
 
@@ -80,6 +84,11 @@ class SqlSourceStore:
     def set_enabled(self, name: str, enabled: bool | None) -> None:
         """Set the dashboard toggle; ``None`` clears it so config defaults apply again."""
         self._update(name, enabled=enabled)
+
+    def set_disabled_reasons(self, reasons: Mapping[str, str | None]) -> None:
+        """Store why each named source can't run; ``None`` clears a stale reason."""
+        for name, reason in sorted(reasons.items()):
+            self._update(name, disabled_reason=reason)
 
     def record_success(self, name: str, *, listings_found: int, at: datetime) -> None:
         self._update(

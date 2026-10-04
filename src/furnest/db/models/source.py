@@ -2,7 +2,8 @@
 
 One row per registered adapter, keyed by its name. ``enabled`` is the dashboard
 toggle: NULL means "never toggled", so the env config or the adapter's default
-decides (see ``furnest.sources.config``).
+decides (see ``furnest.sources.config``). ``disabled_reason`` says why the worker
+can't run the adapter at all, e.g. it needs a browser that isn't installed.
 """
 
 from datetime import datetime
@@ -23,5 +24,6 @@ class Source(Base):
     consecutive_failures: Mapped[int] = mapped_column(default=0)
     last_error: Mapped[str | None] = mapped_column(Text)
     listings_found: Mapped[int] = mapped_column(default=0)
+    disabled_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)

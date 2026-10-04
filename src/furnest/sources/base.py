@@ -45,7 +45,9 @@ class AdapterConfig:
     dashboard toggle are applied (see :func:`furnest.sources.config.resolve_config`).
 
     ``enabled_pinned`` is true when ``SOURCES_ADAPTERS`` sets ``enabled``, so the
-    dashboard toggle has no effect. ``api_key`` stays a ``SecretStr`` so it never
+    dashboard toggle has no effect. ``disabled_reason`` is set when the adapter
+    can't run whatever the toggles say, e.g. it needs a browser and none is
+    available; ``enabled`` is then false. ``api_key`` stays a ``SecretStr`` so it never
     shows up in a repr or a log line.
     """
 
@@ -61,6 +63,7 @@ class AdapterConfig:
     max_retries: int = 3
     proxy_url: str | None = None
     api_key: SecretStr | None = None
+    disabled_reason: str | None = None
 
 
 class SourceAdapter(ABC):

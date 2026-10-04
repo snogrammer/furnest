@@ -5,7 +5,7 @@ from pydantic import SecretStr
 
 from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.domain import Criteria, NormalizedListing
-from furnest.sources import SourceAdapter, resolve_config
+from furnest.sources import Capabilities, SourceAdapter, resolve_config
 
 
 class OffByDefault(SourceAdapter):
@@ -19,6 +19,11 @@ class OffByDefault(SourceAdapter):
 class OnByDefault(OffByDefault):
     name = "on_by_default"
     default_enabled = True
+
+
+class NeedsBrowser(OnByDefault):
+    name = "needs_browser"
+    capabilities = Capabilities(needs_browser=True)
 
 
 def test_global_defaults_flow_through() -> None:
@@ -114,3 +119,36 @@ def test_api_key_is_not_in_the_repr() -> None:
     config = resolve_config(OffByDefault, settings)
 
     assert "super-secret" not in repr(config)
+
+
+@pytest.mark.parametrize("stored", [None, True])
+def test_needs_browser_without_browser_is_disabled_with_reason(stored: bool | None) -> None:
+    config = resolve_config(
+        NeedsBrowser, SourcesSettings(), stored, browser_unavailable="no Playwright"
+    )
+
+    assert config.enabled is False
+    assert config.disabled_reason == "needs a browser: no Playwright"
+
+
+def test_needs_browser_disable_beats_an_env_pin() -> None:
+    settings = SourcesSettings(adapters={"needs_browser": AdapterOverrides(enabled=True)})
+
+    config = resolve_config(NeedsBrowser, settings, browser_unavailable="no Playwright")
+
+    assert (config.enabled, config.enabled_pinned) == (False, True)
+    assert config.disabled_reason == "needs a browser: no Playwright"
+
+
+def test_needs_browser_with_browser_follows_normal_precedence() -> None:
+    config = resolve_config(NeedsBrowser, SourcesSettings(), browser_unavailable=None)
+
+    assert config.enabled is True
+    assert config.disabled_reason is None
+
+
+def test_adapters_without_needs_browser_ignore_browser_unavailable() -> None:
+    config = resolve_config(OnByDefault, SourcesSettings(), browser_unavailable="no Playwright")
+
+    assert config.enabled is True
+    assert config.disabled_reason is None

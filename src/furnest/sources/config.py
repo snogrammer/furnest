@@ -7,6 +7,10 @@ Every field falls back from the adapter's ``SOURCES_ADAPTERS`` entry to the glob
 1. ``enabled`` set in the adapter's ``SOURCES_ADAPTERS`` entry pins it;
 2. otherwise the dashboard toggle stored in ``sources.enabled``, if any;
 3. otherwise the adapter's ``default_enabled``.
+
+An adapter that can't run is disabled whatever the above says, with the reason in
+``disabled_reason``. Today that means one with ``needs_browser`` while the browser
+layer is unavailable (see :func:`furnest.sources.browser.browser_unavailable_reason`).
 """
 
 from __future__ import annotations
@@ -23,7 +27,10 @@ def resolve_config(
     adapter: type[SourceAdapter],
     settings: SourcesSettings,
     stored_enabled: bool | None = None,
+    *,
+    browser_unavailable: str | None = None,
 ) -> AdapterConfig:
+    """``browser_unavailable`` is why no browser can be used, or ``None`` if one can."""
     overrides = settings.adapters.get(adapter.name, AdapterOverrides())
 
     if overrides.enabled is not None:
@@ -32,6 +39,10 @@ def resolve_config(
         enabled, pinned = stored_enabled, False
     else:
         enabled, pinned = adapter.default_enabled, False
+
+    disabled_reason = None
+    if adapter.capabilities.needs_browser and browser_unavailable is not None:
+        enabled, disabled_reason = False, f"needs a browser: {browser_unavailable}"
 
     proxy = overrides.proxy_url or settings.proxy_url
     return AdapterConfig(
@@ -49,6 +60,7 @@ def resolve_config(
         max_retries=_pick(overrides.max_retries, settings.max_retries),
         proxy_url=str(proxy) if proxy is not None else None,
         api_key=overrides.api_key,
+        disabled_reason=disabled_reason,
     )
 
 

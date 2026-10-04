@@ -99,16 +99,23 @@ class SourceHttpClient:
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx2.Response:  # noqa: ANN401
         """Send with robots check, rate limit and retries; raise on block or failure."""
-        if self.config.respect_robots and not self.robots.allowed(url, self.config.user_agent):
-            log.warning("source.robots_disallowed", adapter=self.config.name, url=url)
-            msg = f"robots.txt disallows {url}"
-            raise SourceBlockedError(msg, url=url, reason="robots.txt")
+        self.check_robots(url)
         response = self._send(method, url, **kwargs)
         self._check_blocked(response, url)
         if response.is_error:
             msg = f"HTTP {response.status_code} from {url}"
             raise SourceError(msg, url=url, status=response.status_code)
         return response
+
+    def check_robots(self, url: str) -> None:
+        """Raise :class:`SourceBlockedError` if robots.txt applies and disallows ``url``.
+
+        The browser layer calls this too, so a rendered page obeys the same rules.
+        """
+        if self.config.respect_robots and not self.robots.allowed(url, self.config.user_agent):
+            log.warning("source.robots_disallowed", adapter=self.config.name, url=url)
+            msg = f"robots.txt disallows {url}"
+            raise SourceBlockedError(msg, url=url, reason="robots.txt")
 
     def close(self) -> None:
         self._http.close()
@@ -171,8 +178,7 @@ class SourceHttpClient:
         if response.status_code == 403:
             reason = "HTTP 403"
         elif response.is_success and "html" in response.headers.get("content-type", ""):
-            head = response.text[:_MARKER_SCAN_CHARS].lower()
-            marker = next((m for m in self._markers if m in head), None)
+            marker = find_block_marker(response.text, self._markers)
             if marker is not None:
                 reason = f"captcha marker {marker!r}"
         if reason is not None:
@@ -188,6 +194,12 @@ class SourceHttpClient:
                 raise
             return exc.status, ""
         return response.status_code, response.text
+
+
+def find_block_marker(text: str, markers: Iterable[str]) -> str | None:
+    """The first lower-case ``markers`` entry found in the start of ``text``, if any."""
+    head = text[:_MARKER_SCAN_CHARS].lower()
+    return next((m for m in markers if m in head), None)
 
 
 def _retry_after_seconds(response: httpx2.Response) -> float | None:

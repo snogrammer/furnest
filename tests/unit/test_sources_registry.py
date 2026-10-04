@@ -48,9 +48,13 @@ class BrowserAdapter(SourceAdapter):
         return []
 
 
+def _browser_available(settings: SourcesSettings) -> str | None:
+    return None
+
+
 @pytest.fixture
 def registry() -> SourceRegistry:
-    registry = SourceRegistry()
+    registry = SourceRegistry(browser_check=_browser_available)
     registry.register(FakeAdapter)
     registry.register(BrowserAdapter)
     return registry
@@ -170,6 +174,50 @@ def test_dashboard_toggle_flows_through_enabled(registry: SourceRegistry) -> Non
     assert [type(a) for a in adapters] == [BrowserAdapter]
 
 
+def test_needs_browser_adapter_is_disabled_with_reason_when_browser_unavailable() -> None:
+    checked: list[SourcesSettings] = []
+
+    def unavailable(settings: SourcesSettings) -> str | None:
+        checked.append(settings)
+        return "Playwright is not installed"
+
+    registry = SourceRegistry(browser_check=unavailable)
+    registry.register(FakeAdapter)
+    registry.register(BrowserAdapter)
+    settings = SourcesSettings(adapters={"browser_only": AdapterOverrides(enabled=True)})
+
+    browser, fake = registry.configured(settings, {"browser_only": True})
+
+    assert checked == [settings]
+    assert browser.config.enabled is False
+    assert browser.config.enabled_pinned is True
+    assert browser.config.disabled_reason == "needs a browser: Playwright is not installed"
+    assert fake.config.enabled is True
+    assert fake.config.disabled_reason is None
+    assert [type(a) for a in registry.enabled(settings)] == [FakeAdapter]
+
+
+def test_default_browser_check_uses_sources_browser_enabled() -> None:
+    registry = SourceRegistry()
+    registry.register(BrowserAdapter)
+
+    (configured,) = registry.configured(SourcesSettings(browser_enabled=False))
+
+    assert configured.config.disabled_reason == "needs a browser: SOURCES_BROWSER_ENABLED is false"
+
+
+def test_browser_check_skipped_when_no_adapter_needs_a_browser() -> None:
+    def explode(settings: SourcesSettings) -> str | None:
+        raise AssertionError("browser check should not run")
+
+    registry = SourceRegistry(browser_check=explode)
+    registry.register(FakeAdapter)
+
+    (configured,) = registry.configured(SourcesSettings())
+
+    assert configured.config.enabled is True
+
+
 def test_fake_adapter_search_and_detail(registry: SourceRegistry) -> None:
     (adapter,) = registry.enabled(SourcesSettings())
 
@@ -183,7 +231,7 @@ def test_fake_adapter_search_and_detail(registry: SourceRegistry) -> None:
 
 
 def test_default_fetch_detail_returns_the_listing() -> None:
-    registry = SourceRegistry()
+    registry = SourceRegistry(browser_check=_browser_available)
     registry.register(BrowserAdapter)
     (configured,) = registry.configured(SourcesSettings())
     listing = _listing("9")

@@ -4,6 +4,11 @@ Built-in adapters live one module (or package) each under
 ``furnest.sources.adapters``. :func:`discover` imports them all and registers every
 concrete :class:`SourceAdapter` subclass it finds, so adding a source means adding a
 module, nothing else. Tests build their own :class:`SourceRegistry` with fakes.
+
+Adapters whose capabilities say ``needs_browser`` are disabled, with a
+``disabled_reason``, when the browser layer is unavailable. The worker stores
+those reasons with :meth:`furnest.db.source_store.SqlSourceStore.set_disabled_reasons`
+so the dashboard can say why a source isn't running.
 """
 
 from __future__ import annotations
@@ -12,12 +17,16 @@ import importlib
 import inspect
 import pkgutil
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from furnest.config import ADAPTER_NAME_PATTERN, SourcesSettings
+from furnest.logging import get_logger
 from furnest.sources.base import AdapterConfig, SourceAdapter
+from furnest.sources.browser import browser_unavailable_reason
 from furnest.sources.config import SourceConfigError, resolve_config
+
+log = get_logger(__name__)
 
 ADAPTERS_PACKAGE = "furnest.sources.adapters"
 
@@ -32,8 +41,13 @@ class ConfiguredSource:
 
 
 class SourceRegistry:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        browser_check: Callable[[SourcesSettings], str | None] = browser_unavailable_reason,
+    ) -> None:
         self._adapters: dict[str, type[SourceAdapter]] = {}
+        self._browser_check = browser_check
 
     def register[A: type[SourceAdapter]](self, adapter: A) -> A:
         """Add ``adapter``; returns it, so this also works as a class decorator."""
@@ -81,10 +95,25 @@ class SourceRegistry:
             )
             raise SourceConfigError(msg)
         stored = stored_enabled or {}
-        return [
-            ConfiguredSource(adapter, resolve_config(adapter, settings, stored.get(name)))
+        needs_browser = any(a.capabilities.needs_browser for a in self._adapters.values())
+        browser_unavailable = self._browser_check(settings) if needs_browser else None
+        sources = [
+            ConfiguredSource(
+                adapter,
+                resolve_config(
+                    adapter, settings, stored.get(name), browser_unavailable=browser_unavailable
+                ),
+            )
             for name, adapter in sorted(self._adapters.items())
         ]
+        for source in sources:
+            if source.config.disabled_reason is not None:
+                log.warning(
+                    "source.unavailable",
+                    adapter=source.config.name,
+                    reason=source.config.disabled_reason,
+                )
+        return sources
 
     def enabled(
         self,
