@@ -250,6 +250,22 @@ class LlmSettings(_Group):
     api_key: SecretStr | None = None
     model: str | None = None
     base_url: HttpUrl | None = None
+    timeout_seconds: PositiveFloat = 30.0
+
+    @model_validator(mode="after")
+    def _openai_compatible_needs_endpoint(self) -> LlmSettings:
+        if self.provider is LlmProvider.OPENAI_COMPATIBLE and (
+            self.base_url is None or not self.model
+        ):
+            msg = "LLM_PROVIDER=openai_compatible requires LLM_BASE_URL and LLM_MODEL"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def openai_compatible_enabled(self) -> bool:
+        """True when the OpenAI-compatible extractor is configured (the validator
+        guarantees ``base_url`` and ``model`` are then set)."""
+        return self.provider is LlmProvider.OPENAI_COMPATIBLE
 
 
 class GeocodingSettings(_Group):

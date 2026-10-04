@@ -12,6 +12,7 @@ from furnest.config import (
     Environment,
     InMemorySettingsStore,
     InquiryMode,
+    LlmProvider,
     LogLevel,
     RuntimeSettings,
     Settings,
@@ -102,6 +103,48 @@ def test_database_url_prefers_db_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DB_URL", "sqlite:///other.db")
 
     assert Settings().database_url == "sqlite:///other.db"
+
+
+def test_llm_extractor_is_off_by_default() -> None:
+    llm = Settings().llm
+
+    assert llm.provider is LlmProvider.NONE
+    assert llm.openai_compatible_enabled is False
+    assert llm.timeout_seconds == 30
+
+
+def test_openai_compatible_llm_is_enabled_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_MODEL", "llama3.1")
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "12.5")
+
+    llm = Settings().llm
+
+    assert llm.openai_compatible_enabled is True
+    assert llm.timeout_seconds == 12.5
+
+
+@pytest.mark.parametrize("missing", ["LLM_BASE_URL", "LLM_MODEL"])
+def test_openai_compatible_llm_requires_base_url_and_model(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.com/v1")
+    monkeypatch.setenv("LLM_MODEL", "model-name")
+    monkeypatch.delenv(missing)
+
+    with pytest.raises(ValidationError, match="requires LLM_BASE_URL and LLM_MODEL"):
+        Settings()
+
+
+def test_llm_timeout_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ValidationError):
+        Settings()
 
 
 def test_get_settings_is_cached() -> None:

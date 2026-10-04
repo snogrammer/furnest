@@ -86,7 +86,8 @@ def _scan_labels(labels: Iterable[str]) -> tuple[Verdicts, frozenset[str]]:
     return verdicts, frozenset(unrecognized)
 
 
-def _reconcile_pets(verdicts: Verdicts) -> None:
+def reconcile_pets(verdicts: Verdicts) -> None:
+    """ "Cats ok" implies pets are allowed; "no pets" rules out unstated cats and dogs."""
     if verdicts.get(Amenity.PETS_ALLOWED) is False:
         for kind in PET_KINDS:
             verdicts.setdefault(kind, False)
@@ -99,7 +100,7 @@ class KeywordAmenityExtractor:
         verdicts = _scan(f"{listing.title}\n{listing.description}")
         from_labels, unrecognized = _scan_labels(sorted(listing.amenities))
         verdicts.update(from_labels)
-        _reconcile_pets(verdicts)
+        reconcile_pets(verdicts)
         return AmenityResult(
             present=frozenset(tag for tag, present in verdicts.items() if present),
             absent=frozenset(tag for tag, present in verdicts.items() if not present),
