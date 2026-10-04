@@ -10,7 +10,7 @@ from furnest.domain.address import (
     normalize_zip,
 )
 from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult
-from furnest.domain.criteria import Area, Criteria, CriteriaChange, diff_criteria
+from furnest.domain.criteria import Area, Criteria, CriteriaChange, FilterRule, diff_criteria
 from furnest.domain.geo import EARTH_RADIUS, DistanceUnit, haversine
 from furnest.domain.listing import Address, Contact, NormalizedListing
 from furnest.domain.money import (
@@ -41,6 +41,7 @@ __all__ = [
     "CriteriaChange",
     "Currency",
     "DistanceUnit",
+    "FilterRule",
     "Money",
     "NormalizedListing",
     "ParsedAddress",

@@ -12,6 +12,7 @@ from furnest.domain import (
     CriteriaChange,
     Currency,
     DistanceUnit,
+    FilterRule,
     Money,
     PropertyType,
     diff_criteria,
@@ -29,6 +30,7 @@ def test_empty_criteria_is_valid_and_requires_furnished() -> None:
     assert empty.areas == ()
     assert empty.price_min is None
     assert empty.nice_to_have_amenities == {}
+    assert empty.unknown_fails == ()
 
 
 def test_full_profile_round_trips_through_json() -> None:
@@ -52,6 +54,7 @@ def test_full_profile_round_trips_through_json() -> None:
         nice_to_have_amenities={"King_Bed": 3, "deck_patio": 1.5},
         keywords_allow=["Quiet"],
         keywords_deny=["NO PETS", "basement"],
+        unknown_fails=["furnished", "location", "furnished"],
         my_move_in_date=date(2026, 11, 15),
         my_lease_months=3,
     )
@@ -63,6 +66,7 @@ def test_full_profile_round_trips_through_json() -> None:
     assert profile.must_have_amenities == ("ac", "in_unit_laundry")
     assert profile.nice_to_have_amenities == {"deck_patio": 1.5, "king_bed": 3}
     assert profile.keywords_deny == ("basement", "no pets")
+    assert profile.unknown_fails == (FilterRule.FURNISHED, FilterRule.LOCATION)
     assert Criteria.model_validate_json(profile.model_dump_json()) == profile
 
 
@@ -89,6 +93,7 @@ def test_equal_profiles_serialize_identically() -> None:
         ({"areas": [{"name": "x", "lat": 0, "lng": 0, "radius": 0}]}, "greater than 0"),
         ({"areas": [{"name": " ", "lat": 0, "lng": 0, "radius": 1}]}, "at least 1 character"),
         ({"property_types_allow": ["castle"]}, "enum"),
+        ({"unknown_fails": ["vibes"]}, "enum"),
         ({"surprise": True}, "Extra inputs"),
     ],
 )
@@ -105,10 +110,23 @@ def test_price_range_must_share_currency() -> None:
 
 def test_diff_lists_changed_fields_in_order() -> None:
     old = criteria(min_beds=1, neighborhoods=["a"], furnished_required=True)
-    new = criteria(min_beds=2, neighborhoods=["a"], furnished_required=False, keywords_deny=["x"])
+    new = criteria(
+        min_beds=2,
+        neighborhoods=["a"],
+        furnished_required=False,
+        keywords_deny=["x"],
+        unknown_fails=["price"],
+    )
     assert diff_criteria(old, new) == [
         CriteriaChange(field="min_beds", old=1, new=2),
         CriteriaChange(field="furnished_required", old=True, new=False),
         CriteriaChange(field="keywords_deny", old=[], new=["x"]),
+        CriteriaChange(field="unknown_fails", old=[], new=["price"]),
     ]
     assert diff_criteria(new, new) == []
+
+
+def test_versions_saved_before_unknown_fails_still_load() -> None:
+    stored = Criteria(min_beds=1).model_dump(mode="json")
+    del stored["unknown_fails"]
+    assert Criteria.model_validate(stored).unknown_fails == ()

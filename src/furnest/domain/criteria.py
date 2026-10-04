@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from typing import Annotated, Self
 
 from pydantic import (
@@ -39,13 +40,31 @@ def _sorted_unique(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(sorted({v.strip() for v in values if v.strip()}))
 
 
-def _sorted_types(values: tuple[PropertyType, ...]) -> tuple[PropertyType, ...]:
+def _sorted_members[E: StrEnum](values: tuple[E, ...]) -> tuple[E, ...]:
     return tuple(sorted(set(values)))
+
+
+class FilterRule(StrEnum):
+    """The hard-filter rules (#16), named so criteria can set per-rule behaviour."""
+
+    LOCATION = "location"
+    PRICE = "price"
+    PROPERTY_TYPE = "property_type"
+    MIN_BEDS = "min_beds"
+    MIN_BATHS = "min_baths"
+    MIN_SQFT = "min_sqft"
+    FURNISHED = "furnished"
+    MOVE_IN = "move_in"
+    LEASE = "lease"
+    MUST_HAVE_AMENITIES = "must_have_amenities"
+    KEYWORDS_ALLOW = "keywords_allow"
+    KEYWORDS_DENY = "keywords_deny"
 
 
 TagList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique_lower)]
 TextList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique)]
-TypeList = Annotated[tuple[PropertyType, ...], AfterValidator(_sorted_types)]
+TypeList = Annotated[tuple[PropertyType, ...], AfterValidator(_sorted_members)]
+RuleList = Annotated[tuple[FilterRule, ...], AfterValidator(_sorted_members)]
 Weight = Annotated[float, Field(gt=0, le=100)]
 
 
@@ -95,6 +114,10 @@ class Criteria(BaseModel):
     # Matched case-insensitively against title + description.
     keywords_allow: TagList = ()
     keywords_deny: TagList = ()
+
+    # Rules where missing listing data counts as a fail. Elsewhere unknown passes,
+    # flagged in the match reasons.
+    unknown_fails: RuleList = ()
 
     # The searcher's own plans, quoted in inquiry emails (P6).
     my_move_in_date: date | None = None
