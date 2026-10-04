@@ -45,6 +45,8 @@ def resolve_config(
         request_timeout_seconds=_pick(
             overrides.request_timeout_seconds, settings.request_timeout_seconds
         ),
+        respect_robots=_pick(overrides.respect_robots, settings.respect_robots),
+        max_retries=_pick(overrides.max_retries, settings.max_retries),
         proxy_url=str(proxy) if proxy is not None else None,
         api_key=overrides.api_key,
     )

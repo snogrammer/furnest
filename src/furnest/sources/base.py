@@ -12,8 +12,9 @@ An adapter is a class with some static metadata (``name``, ``display_name``,
 Adapters are synchronous: they run in worker threads (see ``furnest.worker``).
 The registry reads the class metadata before anything is instantiated, which is
 why this is an abstract base class rather than a ``typing.Protocol``. Each
-instance gets its resolved :class:`AdapterConfig`; the HTTP layer (#20) builds its
-client, rate limiter and proxy from it.
+instance gets its resolved :class:`AdapterConfig`, and
+:class:`furnest.sources.http.SourceHttpClient` builds its client, rate limiter and
+proxy from it.
 """
 
 from __future__ import annotations
@@ -56,6 +57,8 @@ class AdapterConfig:
     requests_per_minute: float
     user_agent: str
     request_timeout_seconds: int
+    respect_robots: bool = True
+    max_retries: int = 3
     proxy_url: str | None = None
     api_key: SecretStr | None = None
 

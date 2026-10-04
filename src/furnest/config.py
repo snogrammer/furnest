@@ -307,6 +307,8 @@ class AdapterOverrides(BaseModel):
     proxy_url: AnyUrl | None = None
     api_key: SecretStr | None = None
     request_timeout_seconds: PositiveInt | None = None
+    respect_robots: bool | None = None
+    max_retries: Annotated[int, Field(ge=0)] | None = None
 
 
 class SourcesSettings(_Group):
@@ -316,9 +318,12 @@ class SourcesSettings(_Group):
     default_interval_minutes: PositiveInt = 60
     jitter_seconds: Annotated[int, Field(ge=0)] = 300
     request_timeout_seconds: PositiveInt = 30
-    # Polite default request budget per adapter; the limiter itself is #20.
+    # Polite default request budget per adapter, enforced by a token bucket.
     requests_per_minute: PositiveFloat = 6.0
     proxy_url: AnyUrl | None = None
+    respect_robots: bool = True
+    # Retries after the first attempt for 429s, 5xx responses and transport errors.
+    max_retries: Annotated[int, Field(ge=0)] = 3
     browser_enabled: bool = False
     # Per-adapter overrides as JSON, keyed by adapter name.
     adapters: dict[

@@ -34,6 +34,8 @@ def test_global_defaults_flow_through() -> None:
     assert config.request_timeout_seconds == settings.request_timeout_seconds
     assert config.proxy_url == "http://proxy.example.com:8080/"
     assert config.api_key is None
+    assert config.respect_robots is True
+    assert config.max_retries == 3
 
 
 def test_overrides_win_field_by_field() -> None:
@@ -48,6 +50,8 @@ def test_overrides_win_field_by_field() -> None:
                 proxy_url="socks5://socks.example.com:1080",  # type: ignore[arg-type]
                 api_key=SecretStr("key-123"),
                 request_timeout_seconds=5,
+                respect_robots=False,
+                max_retries=0,
             )
         },
     )
@@ -62,6 +66,8 @@ def test_overrides_win_field_by_field() -> None:
     assert config.api_key is not None
     assert config.api_key.get_secret_value() == "key-123"
     assert config.request_timeout_seconds == 5
+    assert config.respect_robots is False
+    assert config.max_retries == 0
 
 
 def test_overrides_for_one_adapter_do_not_leak_to_another() -> None:

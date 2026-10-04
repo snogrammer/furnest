@@ -44,6 +44,8 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SMTP_PORT", "2525")
     monkeypatch.setenv("SMTP_SECURITY", "ssl")
     monkeypatch.setenv("SOURCES_BROWSER_ENABLED", "true")
+    monkeypatch.setenv("SOURCES_RESPECT_ROBOTS", "false")
+    monkeypatch.setenv("SOURCES_MAX_RETRIES", "5")
     monkeypatch.setenv("BASE_URL", "https://furnest.example.com")
 
     settings = Settings()
@@ -53,6 +55,8 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.smtp.port == 2525
     assert settings.smtp.security is SmtpSecurity.SSL
     assert settings.sources.browser_enabled is True
+    assert settings.sources.respect_robots is False
+    assert settings.sources.max_retries == 5
     assert str(settings.app.base_url) == "https://furnest.example.com/"
 
 
