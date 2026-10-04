@@ -97,6 +97,7 @@ def worker() -> None:
     """Run scheduled source scrapes and background jobs."""
     from furnest.db.engine import create_engine_from_settings
     from furnest.db.migrate import migration_status
+    from furnest.db.session import make_session_factory
     from furnest.worker.execution import default_registry
     from furnest.worker.runtime import Worker
 
@@ -111,7 +112,7 @@ def worker() -> None:
                 err=True,
             )
             raise typer.Exit(code=1)
-        Worker(settings, engine, default_registry()).run()
+        Worker(settings, engine, default_registry(make_session_factory(engine))).run()
     finally:
         engine.dispose()
 

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Criteria history · furnest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Criteria history</h1>
+  <a href="/criteria">Edit criteria</a>
+</div>
+{% if not versions %}
+<p class="muted">No versions yet. <a href="/criteria">Save your criteria</a> to start the history.</p>
+{% endif %}
+<ol class="versions">
+  {% for item in versions %}{% set record = item.record %}
+  <li class="version{% if record.is_active %} is-active{% endif %}">
+    <div class="version-head">
+      <h2>Version {{ record.version }}</h2>
+      {% if record.is_active %}<span class="badge">Active</span>{% endif %}
+      <span class="muted">{{ record.created_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ record.created_by }}</span>
+      {% if not record.is_active %}
+      <form method="post" action="/criteria/history/{{ record.version }}/activate">
+        {{ csrf_field(request) }}
+        <button type="submit" class="secondary">Activate</button>
+      </form>
+      {% endif %}
+    </div>
+    {% if item.changes is none %}
+    <p class="muted">First version.</p>
+    {% elif not item.changes %}
+    <p class="muted">Same as version {{ record.version - 1 }}.</p>
+    {% else %}
+    <table class="diff">
+      <thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+      <tbody>
+        {% for change in item.changes %}
+        <tr>
+          <th scope="row">{{ change.field | replace("_", " ") }}</th>
+          <td><code>{{ change.old | tojson }}</code></td>
+          <td><code>{{ change.new | tojson }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endblock %}

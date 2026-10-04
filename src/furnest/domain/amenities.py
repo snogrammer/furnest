@@ -53,6 +53,20 @@ class Amenity(StrEnum):
     SMOKE_FREE = "smoke_free"
 
 
+_LABELS: dict[str, str] = {
+    Amenity.AC: "AC",
+    Amenity.WIFI: "Wi-Fi",
+    Amenity.IN_UNIT_LAUNDRY: "In-unit laundry",
+    Amenity.EV_CHARGING: "EV charging",
+    Amenity.DECK_PATIO: "Deck/patio",
+}
+
+
+def amenity_label(tag: str) -> str:
+    """A human-readable name for a tag, e.g. ``in_unit_laundry`` → "In-unit laundry"."""
+    return _LABELS.get(tag) or tag.replace("_", " ").capitalize()
+
+
 @dataclass(frozen=True, slots=True)
 class AmenityResult:
     present: frozenset[Amenity] = frozenset()

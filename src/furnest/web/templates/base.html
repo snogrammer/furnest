@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {# Keep htmx inside the self-only CSP: no injected <style>, no eval. #}
-  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  {# Swap 409/422 too, so conflicts and validation errors render in place. #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "409|422", "swap": true, "error": false}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": false}]}'>
   <title>{% block title %}furnest{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='css/app.css').path }}">
   <script src="{{ url_for('static', path='vendor/htmx.min.js').path }}" defer></script>
@@ -16,6 +17,7 @@
     <nav aria-label="Main">
       <ul>
         <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a></li>
+        <li><a href="/criteria" {% if request.url.path.startswith("/criteria") %}aria-current="page"{% endif %}>Criteria</a></li>
       </ul>
     </nav>
     {% endif %}

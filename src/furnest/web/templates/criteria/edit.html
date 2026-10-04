@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Criteria · furnest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Search criteria</h1>
+  <a href="/criteria/history">Version history</a>
+</div>
+<form class="rerun" method="post" action="/criteria/rerun" hx-post="/criteria/rerun" hx-target="#rerun-status" hx-swap="innerHTML">
+  {{ csrf_field(request) }}
+  <button type="submit" class="secondary">Re-run criteria</button>
+  <span class="muted">Re-score stored listings against the active version.</span>
+  <div id="rerun-status" aria-live="polite"></div>
+</form>
+{% include "criteria/_form.html" %}
+{% endblock %}

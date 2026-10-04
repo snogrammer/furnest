@@ -169,6 +169,231 @@ main {
   }
 }
 
+/* Criteria editor and history. */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(var(--space) / 2);
+}
+
+.criteria-form,
+.rerun {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.rerun {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: var(--space);
+}
+
+.rerun #rerun-status {
+  flex-basis: 100%;
+}
+
+.criteria-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.criteria-form legend {
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+.criteria-form fieldset.checks {
+  padding: 0;
+  border: 0;
+  margin-top: calc(var(--space) / 2);
+}
+
+.criteria-form fieldset > p {
+  margin-top: 0;
+}
+
+.grid,
+.row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: calc(var(--space) / 2) var(--space);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-bottom: calc(var(--space) / 2);
+}
+
+.row {
+  padding-bottom: var(--space);
+  border-bottom: 1px dashed var(--border);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.field [aria-invalid="true"] {
+  border-color: #b3261e;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.25rem var(--space);
+}
+
+.check,
+.remove,
+.check-grid label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.criteria-form button,
+.rerun button,
+.version button {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  align-self: flex-start;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.field-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 0.875rem;
+}
+
+.flash {
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+}
+
+.versions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.version {
+  padding: var(--space) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.version-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space) / 2) var(--space);
+}
+
+.version-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.version-head form {
+  margin-left: auto;
+}
+
+.badge {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.diff {
+  display: block;
+  overflow-x: auto;
+  margin-top: calc(var(--space) / 2);
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.diff th,
+.diff td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.diff code {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  .field-error {
+    color: #f2b8b5;
+  }
+
+  .field [aria-invalid="true"] {
+    border-color: #f2b8b5;
+  }
+}
+
+@media (min-width: 40rem) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+
+  .area-row {
+    grid-template-columns: 2fr 1fr 1fr 1fr auto auto;
+    align-items: end;
+  }
+
+  .amenity-row {
+    grid-template-columns: 2fr 1fr auto;
+    align-items: end;
+  }
+}
+
 /* htmx request indicators; htmx's own inline styles are disabled for the CSP. */
 .htmx-indicator {
   opacity: 0;

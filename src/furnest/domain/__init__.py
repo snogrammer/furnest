@@ -9,7 +9,7 @@ from furnest.domain.address import (
     PassthroughAddressParser,
     normalize_zip,
 )
-from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult
+from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult, amenity_label
 from furnest.domain.criteria import Area, Criteria, CriteriaChange, FilterRule, diff_criteria
 from furnest.domain.geo import EARTH_RADIUS, DistanceUnit, haversine
 from furnest.domain.listing import Address, Contact, NormalizedListing
@@ -49,6 +49,7 @@ __all__ = [
     "Price",
     "PropertyType",
     "RentPeriod",
+    "amenity_label",
     "diff_criteria",
     "get_currency",
     "haversine",

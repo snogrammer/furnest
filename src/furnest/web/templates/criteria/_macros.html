@@ -1,0 +1,45 @@
+{# Form building blocks for the criteria editor. Every input gets a label and, when
+   the last save failed on it, an error linked through aria-describedby. #}
+{% macro error(errors, name) -%}
+  {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro described(errors, name) -%}
+  {% if errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}
+{%- endmacro %}
+
+{% macro input(state, errors, name, label, type="text", hint=None, attrs="") -%}
+<div class="field">
+  <label for="{{ name }}">{{ label }}</label>
+  <input id="{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ state.value(name) }}" {{ attrs }}{{ described(errors, name) }}>
+  {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+  {{ error(errors, name) }}
+</div>
+{%- endmacro %}
+
+{% macro textarea(state, errors, name, label, hint=None) -%}
+<div class="field">
+  <label for="{{ name }}">{{ label }}</label>
+  <textarea id="{{ name }}" name="{{ name }}" rows="3"{{ described(errors, name) }}>{{ state.value(name) }}</textarea>
+  {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+  {{ error(errors, name) }}
+</div>
+{%- endmacro %}
+
+{% macro checkboxes(state, errors, name, legend, options) -%}
+<fieldset class="checks">
+  <legend>{{ legend }}</legend>
+  <div class="check-grid">
+    {% for value, text in options %}
+    <label><input type="checkbox" name="{{ name }}" value="{{ value }}"{% if state.is_checked(name, value) %} checked{% endif %}> {{ text }}</label>
+    {% endfor %}
+  </div>
+  {{ error(errors, name) }}
+</fieldset>
+{%- endmacro %}
+
+{% macro add_button(kind, label, index, oob=False) -%}
+<button type="button" class="secondary" id="add-{{ kind }}"
+  hx-get="/criteria/rows/{{ kind }}?index={{ index }}"
+  hx-target="#{{ kind }}-rows" hx-swap="beforeend"{% if oob %} hx-swap-oob="true"{% endif %}>{{ label }}</button>
+{%- endmacro %}

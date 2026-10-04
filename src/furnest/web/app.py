@@ -36,7 +36,7 @@ from furnest.web.csrf import CsrfMiddleware, CsrfSigner
 from furnest.web.errors import register_error_handlers
 from furnest.web.headers import SecurityHeadersMiddleware
 from furnest.web.ratelimit import SlidingWindowLimiter
-from furnest.web.routes import auth, health, pages
+from furnest.web.routes import auth, criteria, health, pages
 from furnest.web.templating import STATIC_DIR
 
 log = get_logger(__name__)
@@ -86,4 +86,5 @@ def create_app(settings: Settings | None = None, *, engine: Engine | None = None
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(pages.router)
+    app.include_router(criteria.router)
     return app

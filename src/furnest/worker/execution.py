@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy.orm import Session, sessionmaker
+
 from furnest.db.base import utcnow
 
 
@@ -124,6 +126,10 @@ class JobRegistry:
         return max([default, *(r.timeout for r in self._handlers.values() if r.timeout)])
 
 
-def default_registry() -> JobRegistry:
+def default_registry(session_factory: sessionmaker[Session]) -> JobRegistry:
     """Handlers the worker ships with. Later issues register theirs here."""
-    return JobRegistry()
+    from furnest.pipeline.rerun import RERUN_CRITERIA, RerunCriteria
+
+    registry = JobRegistry()
+    registry.register(RERUN_CRITERIA, RerunCriteria(session_factory))
+    return registry

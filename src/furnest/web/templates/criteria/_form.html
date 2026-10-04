@@ -1,0 +1,116 @@
+{% import "criteria/_macros.html" as m %}
+<form id="criteria-form" class="criteria-form" method="post" action="/criteria"
+  hx-post="/criteria" hx-target="this" hx-swap="outerHTML">
+  {{ csrf_field(request) }}
+  <p class="muted">
+    {% if active %}Editing version {{ active.version }} (active). Saving creates a new version.
+    {% else %}Not saved yet. Saving creates version 1.{% endif %}
+  </p>
+  {% if flash %}<p class="{{ 'form-error' if flash_error else 'flash' }}" role="status">{{ flash }}</p>{% endif %}
+  {% if errors %}
+  <div class="form-error" role="alert">
+    <p>Not saved. Fix the highlighted fields.</p>
+    {% if errors.get("__all__") %}<p>{{ errors["__all__"] }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <fieldset>
+    <legend>Location</legend>
+    <p class="muted">A listing qualifies if it is in any area, ZIP code or neighborhood.</p>
+    <div id="area-rows" class="rows">
+      {% for row in state.areas %}
+        {% with index=loop.index0, add_next=False %}{% include "criteria/_area_row.html" %}{% endwith %}
+      {% endfor %}
+      {% with index=state.areas|length, row={"unit": choices.units[0]}, add_next=False %}{% include "criteria/_area_row.html" %}{% endwith %}
+    </div>
+    {{ m.add_button("area", "Add area", state.areas|length + 1) }}
+    {{ m.error(errors, "areas") }}
+    <div class="grid">
+      {{ m.textarea(state, errors, "zip_codes", "ZIP codes", "One per line or comma-separated.") }}
+      {{ m.textarea(state, errors, "neighborhoods", "Neighborhoods", "One per line or comma-separated.") }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Price (monthly)</legend>
+    <div class="grid">
+      {{ m.input(state, errors, "price_min", "Minimum", attrs='inputmode="decimal"') }}
+      {{ m.input(state, errors, "price_max", "Maximum", attrs='inputmode="decimal"') }}
+      {{ m.input(state, errors, "currency", "Currency", attrs='maxlength="3" autocapitalize="characters"') }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Property</legend>
+    {{ m.checkboxes(state, errors, "property_types_allow", "Allowed types (none ticked means any)", choices.property_type_options) }}
+    {{ m.checkboxes(state, errors, "property_types_deny", "Denied types", choices.property_type_options) }}
+    <div class="grid">
+      {{ m.input(state, errors, "min_beds", "Minimum beds", "number", "0 means a studio is fine.", 'min="0" step="1"') }}
+      {{ m.input(state, errors, "min_baths", "Minimum baths", "number", None, 'min="0" step="0.5"') }}
+      {{ m.input(state, errors, "min_sqft", "Minimum sqft", "number", None, 'min="1" step="1"') }}
+    </div>
+    <label class="check"><input type="checkbox" name="furnished_required"{% if state.is_checked("furnished_required", "on") %} checked{% endif %}> Furnished required</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Dates and lease</legend>
+    <div class="grid">
+      {{ m.input(state, errors, "move_in_earliest", "Move in from", "date") }}
+      {{ m.input(state, errors, "move_in_latest", "Move in by", "date") }}
+      {{ m.input(state, errors, "lease_min_months", "Lease at least (months)", "number", None, 'min="1" step="1"') }}
+      {{ m.input(state, errors, "lease_max_months", "Lease at most (months)", "number", None, 'min="1" step="1"') }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Amenities</legend>
+    {{ m.checkboxes(state, errors, "must_have_amenities", "Must have", choices.amenities) }}
+    <fieldset class="checks">
+      <legend>Nice to have (weighted in the score)</legend>
+      <div id="amenity-rows" class="rows">
+        {% for row in state.nice %}
+          {% with index=loop.index0, add_next=False %}{% include "criteria/_amenity_row.html" %}{% endwith %}
+        {% endfor %}
+        {% with index=state.nice|length, row=("", ""), add_next=False %}{% include "criteria/_amenity_row.html" %}{% endwith %}
+      </div>
+      {{ m.add_button("amenity", "Add amenity", state.nice|length + 1) }}
+      {{ m.error(errors, "nice_to_have_amenities") }}
+    </fieldset>
+  </fieldset>
+
+  <fieldset>
+    <legend>Keywords</legend>
+    <p class="muted">Matched against the title and description, ignoring case.</p>
+    <div class="grid">
+      {{ m.textarea(state, errors, "keywords_allow", "Must mention one of") }}
+      {{ m.textarea(state, errors, "keywords_deny", "Must not mention") }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Scoring</legend>
+    <p class="muted">Optional extras, weighted like the nice-to-have amenities.</p>
+    <div class="grid">
+      {{ m.input(state, errors, "price_fit_weight", "Lower price weight", hint="Needs a maximum price.", attrs='inputmode="decimal"') }}
+      {{ m.input(state, errors, "extra_beds_weight", "Extra beds weight", hint="Needs minimum beds.", attrs='inputmode="decimal"') }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Missing data</legend>
+    {{ m.checkboxes(state, errors, "unknown_fails", "Reject a listing when it doesn't say", choices.rule_options) }}
+  </fieldset>
+
+  <fieldset>
+    <legend>About me (quoted in inquiry emails)</legend>
+    <div class="grid">
+      {{ m.input(state, errors, "my_move_in_date", "My move-in date", "date") }}
+      {{ m.input(state, errors, "my_lease_months", "My lease length (months)", "number", None, 'min="1" step="1"') }}
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit">Save criteria</button>
+    <span class="htmx-indicator muted">Saving…</span>
+  </div>
+</form>

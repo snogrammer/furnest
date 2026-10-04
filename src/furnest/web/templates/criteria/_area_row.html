@@ -1,0 +1,32 @@
+{% from "criteria/_macros.html" import error, described, add_button %}
+{% set p = "areas-" ~ index %}
+<div class="row area-row">
+  <div class="field">
+    <label for="{{ p }}-name">Name</label>
+    <input id="{{ p }}-name" name="{{ p }}-name" value="{{ row.get('name', '') }}"{{ described(errors, p ~ '-name') }}>
+    {{ error(errors, p ~ "-name") }}
+  </div>
+  <div class="field">
+    <label for="{{ p }}-lat">Latitude</label>
+    <input id="{{ p }}-lat" name="{{ p }}-lat" inputmode="decimal" value="{{ row.get('lat', '') }}"{{ described(errors, p ~ '-lat') }}>
+    {{ error(errors, p ~ "-lat") }}
+  </div>
+  <div class="field">
+    <label for="{{ p }}-lng">Longitude</label>
+    <input id="{{ p }}-lng" name="{{ p }}-lng" inputmode="decimal" value="{{ row.get('lng', '') }}"{{ described(errors, p ~ '-lng') }}>
+    {{ error(errors, p ~ "-lng") }}
+  </div>
+  <div class="field">
+    <label for="{{ p }}-radius">Radius</label>
+    <input id="{{ p }}-radius" name="{{ p }}-radius" inputmode="decimal" value="{{ row.get('radius', '') }}"{{ described(errors, p ~ '-radius') }}>
+    {{ error(errors, p ~ "-radius") }}
+  </div>
+  <div class="field">
+    <label for="{{ p }}-unit">Unit</label>
+    <select id="{{ p }}-unit" name="{{ p }}-unit">
+      {% for unit in choices.units %}<option value="{{ unit }}"{% if row.get('unit') == unit %} selected{% endif %}>{{ unit }}</option>{% endfor %}
+    </select>
+  </div>
+  <label class="remove"><input type="checkbox" name="{{ p }}-remove"> Remove</label>
+</div>
+{% if add_next %}{{ add_button("area", "Add area", index + 1, oob=True) }}{% endif %}

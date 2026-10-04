@@ -1,0 +1,19 @@
+{% from "criteria/_macros.html" import error, described, add_button %}
+{% set p = "nice-" ~ index %}
+<div class="row amenity-row">
+  <div class="field">
+    <label for="{{ p }}-tag">Amenity</label>
+    <select id="{{ p }}-tag" name="{{ p }}-tag"{{ described(errors, p ~ '-tag') }}>
+      <option value="">Choose…</option>
+      {% for value, text in choices.amenities %}<option value="{{ value }}"{% if row[0] == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select>
+    {{ error(errors, p ~ "-tag") }}
+  </div>
+  <div class="field">
+    <label for="{{ p }}-weight">Weight (0–100)</label>
+    <input id="{{ p }}-weight" name="{{ p }}-weight" inputmode="decimal" value="{{ row[1] }}"{{ described(errors, p ~ '-weight') }}>
+    {{ error(errors, p ~ "-weight") }}
+  </div>
+  <label class="remove"><input type="checkbox" name="{{ p }}-remove"> Remove</label>
+</div>
+{% if add_next %}{{ add_button("amenity", "Add amenity", index + 1, oob=True) }}{% endif %}

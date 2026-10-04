@@ -38,6 +38,7 @@ from furnest.domain import (
     Money,
     NormalizedListing,
     RentPeriod,
+    amenity_label,
 )
 from furnest.matching.filters import RuleResult, evaluate_hard_filters, listing_amenities
 
@@ -45,13 +46,6 @@ from furnest.matching.filters import RuleResult, evaluate_hard_filters, listing_
 EXTRA_BEDS_FOR_FULL = 2
 
 _VOCABULARY = {tag.value for tag in Amenity}
-_LABELS: dict[str, str] = {
-    Amenity.AC: "AC",
-    Amenity.WIFI: "Wi-Fi",
-    Amenity.IN_UNIT_LAUNDRY: "In-unit laundry",
-    Amenity.EV_CHARGING: "EV charging",
-    Amenity.DECK_PATIO: "Deck/patio",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,18 +82,14 @@ class _Component:
     reason: str
 
 
-def _label(tag: str) -> str:
-    return _LABELS.get(tag) or tag.replace("_", " ").capitalize()
-
-
 def _amenity(tag: str, weight: float, amenities: AmenityResult) -> _Component:
     status = amenities.status(tag)
     if status is True:
-        return _Component(_label(tag), weight, 1.0, "stated")
+        return _Component(amenity_label(tag), weight, 1.0, "stated")
     if status is False:
-        return _Component(_label(tag), weight, 0.0, "ruled out")
+        return _Component(amenity_label(tag), weight, 0.0, "ruled out")
     reason = "not mentioned" if tag in _VOCABULARY else "not a known amenity tag"
-    return _Component(_label(tag), weight, 0.0, reason)
+    return _Component(amenity_label(tag), weight, 0.0, reason)
 
 
 def _price_fit(listing: NormalizedListing, criteria: Criteria, weight: float) -> _Component:

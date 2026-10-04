@@ -4,6 +4,7 @@ import threading
 from datetime import timedelta
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
 from furnest.db.base import utcnow
 from furnest.worker.execution import (
@@ -118,5 +119,7 @@ def test_registering_a_kind_twice_is_an_error() -> None:
         registry.register("send", lambda _ctx: None)
 
 
-def test_default_registry_is_empty_for_now() -> None:
-    assert default_registry().get("anything") is None
+def test_default_registry_runs_criteria_reruns() -> None:
+    registry = default_registry(sessionmaker())
+    assert registry.get("rerun_criteria") is not None
+    assert registry.get("anything") is None
