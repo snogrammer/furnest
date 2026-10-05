@@ -15,3 +15,5 @@ from a live run. Every place, coordinate, id and name is a placeholder
 (`Exampleville, XX`, `Jane Example`), and the review is there to check that reviewer
 names are dropped from `raw`. If a live run shows a field mapped wrongly, replace the
 item with a sanitized copy of the real one and keep the placeholders.
+`scripts/capture_fixture.py furnished_finder <dataset items URL>` records and
+sanitizes a dataset (see CONTRIBUTING.md, "Refreshing fixtures").

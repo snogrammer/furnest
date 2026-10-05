@@ -104,7 +104,9 @@ comes to about $0.85 a day, while 100 listings hourly would be about $8 a day.
 
 The fixtures in `tests/fixtures/furnished_finder/` were written from the actor's
 published schema and example, not captured from a live run. The first live run
-should be checked against the mapping above.
+should be checked against the mapping above. To replace them with a real run's
+dataset, use `scripts/capture_fixture.py` with the dataset URL
+([CONTRIBUTING.md](../CONTRIBUTING.md#refreshing-fixtures)).
 
 ## Candidates
 

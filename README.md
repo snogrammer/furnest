@@ -16,6 +16,8 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pre-commit install     # optional: run the same checks on every commit
 ```
 
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow and how to refresh adapter fixtures from a live page (`scripts/capture_fixture.py`).
+
 Schema changes ship as Alembic migrations in `src/furnest/db/migrations/versions/`:
 
 ```sh

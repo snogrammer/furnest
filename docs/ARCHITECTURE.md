@@ -60,6 +60,8 @@ tests/
   integration/    API routes, auth, Discord signatures + interactions, email
   migrations/     upgrade/downgrade round-trips against an empty DB
   fixtures/<adapter>/  recorded HTML/JSON per adapter (sanitized)
+scripts/capture_fixture.py  records a fixture (manual only; sources/capture.py,
+                  sources/sanitize.py; see CONTRIBUTING.md)                  (#25)
 Dockerfile, docker-compose.yml   one image, Portainer-ready stack        (#9)
 deploy/Caddyfile.example
 docs/
@@ -140,7 +142,7 @@ any active state → unavailable (listing disappeared)
 ## Conventions
 
 - `uv` for dependencies, with `uv.lock` committed. `ruff` for lint and format, `mypy --strict`, `pytest` with coverage. All four must pass before merge.
-- Tests make no live network calls. Adapters are tested against recorded fixtures.
+- Tests make no live network calls. Adapters are tested against recorded fixtures, which are sanitized of personal data and refreshed by hand with `scripts/capture_fixture.py` (see [CONTRIBUTING.md](../CONTRIBUTING.md#refreshing-fixtures)).
 - Every schema change ships with an Alembic migration and a migration test.
 - Every new setting is documented in `.env.example`.
 - Optional integrations (Sentry, LLM extractor, reverse image search, IMAP, Prometheus, Playwright) do nothing when unconfigured.
