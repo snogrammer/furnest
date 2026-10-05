@@ -9,7 +9,9 @@ The connection is resolved in this order:
    ``uv run alembic ...`` uses.
 
 ``render_as_batch`` is required on SQLite, which can't ALTER most things in place.
-Alembic rebuilds the table instead.
+Alembic rebuilds the table instead. Migrations therefore run with foreign keys off
+and a ``foreign_key_check`` before commit (see :func:`furnest.db.engine.foreign_keys_off`),
+so a connection handed in must not have begun a transaction yet.
 """
 
 from alembic import context
@@ -18,7 +20,7 @@ from sqlalchemy import Connection
 import furnest.db.models  # noqa: F401  (registers every table on Base.metadata)
 from furnest.config import get_settings
 from furnest.db.base import Base
-from furnest.db.engine import create_sqlite_engine
+from furnest.db.engine import check_foreign_keys, create_sqlite_engine, foreign_keys_off
 
 config = context.config
 target_metadata = Base.metadata
@@ -34,9 +36,14 @@ def _run(connection: Connection) -> None:
         target_metadata=target_metadata,
         render_as_batch=True,
         compare_type=True,
+        # SQLite does run DDL inside transactions, though Alembic's SQLite impl
+        # says otherwise. Saying so makes the whole upgrade one transaction, so the
+        # foreign key check below runs before anything commits.
+        transactional_ddl=True,
     )
-    with context.begin_transaction():
+    with foreign_keys_off(connection), context.begin_transaction():
         context.run_migrations()
+        check_foreign_keys(connection)
 
 
 def run_migrations_offline() -> None:

@@ -10,12 +10,14 @@ from furnest.db.models.listing import (
     SourceRun,
     SourceRunStatus,
 )
+from furnest.db.models.property import AuditEvent, Property
 from furnest.db.models.settings import Setting
 from furnest.db.models.source import Source
 from furnest.db.models.worker import WorkerHeartbeat
 
 __all__ = [
     "AmenityExtraction",
+    "AuditEvent",
     "CriteriaVersion",
     "Job",
     "JobLock",
@@ -23,6 +25,7 @@ __all__ = [
     "Listing",
     "ListingImage",
     "PriceHistory",
+    "Property",
     "Setting",
     "Source",
     "SourceRun",

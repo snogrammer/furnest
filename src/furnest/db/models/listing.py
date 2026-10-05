@@ -5,7 +5,8 @@ one source, unique on ``(source, source_id)`` (exact dedup). ``data`` holds the
 whole :class:`~furnest.domain.NormalizedListing` as JSON, so it reads back exactly
 as the adapter produced it. The other data columns are copies kept for querying.
 ``content_hash`` decides whether a re-seen listing changed. ``property_id`` groups
-listings under a property; the ``properties`` table and its foreign key come with #27.
+listings under a property (``furnest.db.models.property``); it is NULL until the
+listing gets one, and goes back to NULL if the property is deleted.
 
 ``missed_runs`` counts successful runs of the source that didn't return the
 listing, and ``removed_at`` is set once it has been gone long enough. Seeing it
@@ -29,7 +30,9 @@ class Listing(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[str] = mapped_column(String(64))
     source_id: Mapped[str] = mapped_column(String(255))
-    property_id: Mapped[int | None] = mapped_column(index=True)
+    property_id: Mapped[int | None] = mapped_column(
+        ForeignKey("properties.id", ondelete="SET NULL"), index=True
+    )
     url: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     monthly_price_minor: Mapped[int | None]

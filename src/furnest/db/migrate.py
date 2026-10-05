@@ -23,16 +23,18 @@ def alembic_config() -> Config:
     return config
 
 
+# The connection is handed over before it begins a transaction: env.py turns foreign
+# keys off first (SQLite ignores that inside a transaction), then begins and commits.
 def upgrade(engine: Engine, revision: str = "head") -> None:
     config = alembic_config()
-    with engine.begin() as connection:
+    with engine.connect() as connection:
         config.attributes["connection"] = connection
         command.upgrade(config, revision)
 
 
 def downgrade(engine: Engine, revision: str) -> None:
     config = alembic_config()
-    with engine.begin() as connection:
+    with engine.connect() as connection:
         config.attributes["connection"] = connection
         command.downgrade(config, revision)
 
