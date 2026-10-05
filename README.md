@@ -1,4 +1,10 @@
-# furnest
+<p align="center">
+  <img src="docs/brand/furnest-icon-256.png" width="96" height="96" alt="furnest icon">
+</p>
+
+<h1 align="center">furnest</h1>
+
+<p align="center">self-hosted furnished-rental monitor</p>
 
 A self-hosted monitor for furnished rental listings. furnest watches several listing sources, filters and scores what it finds against your criteria, posts matches to Discord with action buttons, drafts inquiry emails, and tracks every property through a review pipeline in a small web dashboard.
 
@@ -16,7 +22,7 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy
 uv run pre-commit install     # optional: run the same checks on every commit
 ```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow and how to refresh adapter fixtures from a live page (`scripts/capture_fixture.py`).
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the workflow and how to refresh adapter fixtures from a live page (`scripts/capture_fixture.py`). [docs/BRAND.md](docs/BRAND.md) has the logo, palette and asset files.
 
 Schema changes ship as Alembic migrations in `src/furnest/db/migrations/versions/`:
 

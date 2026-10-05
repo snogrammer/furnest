@@ -54,7 +54,7 @@ src/furnest/
   enrichment/     geocoding, reverse_image, alternatives, risk              (P8)
   worker/         scheduler, jobs, locks, heartbeat, queue                  (#8)
   web/            app, auth, csrf, ratelimit, headers, routes/,
-                  templates/, static/ (vendored htmx)                        (#6, #7)
+                  templates/, static/ (vendored htmx, brand/ icons)         (#6, #7, #78)
 tests/
   unit/           parsers, matching, scoring, dedup, state machine
   integration/    API routes, auth, Discord signatures + interactions, email
@@ -64,7 +64,7 @@ scripts/capture_fixture.py  records a fixture (manual only; sources/capture.py,
                   sources/sanitize.py; see CONTRIBUTING.md)                  (#25)
 Dockerfile, docker-compose.yml   one image, Portainer-ready stack        (#9)
 deploy/Caddyfile.example
-docs/
+docs/             ARCHITECTURE, adapters, BRAND (+ brand/ source artwork)
 .github/workflows/ci.yml   (GitHub Actions syntax, portable to Gitea Actions)
 ```
 
@@ -139,7 +139,7 @@ any active state → unavailable (listing disappeared)
 
 **Configuration.** Infrastructure and secrets come from environment variables (pydantic-settings, documented in `.env.example`). User preferences edited in the dashboard (criteria, templates, toggles) live in the DB. Env vars always win for anything defined in both places.
 
-**Safety.** Scraped HTML is never rendered raw: it is sanitized with nh3 or reduced to text. Pages send a strict self-only CSP. htmx is vendored and configured not to inject inline styles or `eval` code, so the CSP needs no `unsafe-*` exceptions. Logs redact secrets. The container runs as a non-root user. The dashboard is protected by a single token (signed HttpOnly SameSite cookie or `Authorization: Bearer`, constant-time comparison, CSRF on forms, rate-limited login).
+**Safety.** Scraped HTML is never rendered raw: it is sanitized with nh3 or reduced to text. Pages send a strict self-only CSP, so the brand icons (`web/static/brand/`, see [BRAND.md](BRAND.md)) are served locally and fonts are the system stack. `/favicon.ico` is a public route at the root, because browsers request it there before anyone signs in. htmx is vendored and configured not to inject inline styles or `eval` code, so the CSP needs no `unsafe-*` exceptions. Logs redact secrets. The container runs as a non-root user. The dashboard is protected by a single token (signed HttpOnly SameSite cookie or `Authorization: Bearer`, constant-time comparison, CSRF on forms, rate-limited login).
 
 ## Conventions
 

@@ -2,12 +2,21 @@
 
 :root {
   color-scheme: light dark;
-  --bg: #fdfdfc;
-  --fg: #1d1f21;
-  --muted: #5f6368;
-  --border: #dcdcd8;
-  --surface: #f3f3f0;
-  --accent: #2f6f5e;
+  /* Brand palette (docs/BRAND.md). Components use the semantic tokens below. */
+  --furnest-teal: #34d399;
+  --furnest-cyan: #06b6d4;
+  --furnest-blue: #2563eb;
+  --furnest-charcoal: #0f172a;
+  --furnest-slate: #64748b;
+  --furnest-gradient: linear-gradient(135deg, #34d399 0%, #06b6d4 52%, #2563eb 100%);
+  --bg: #ffffff;
+  --fg: var(--furnest-charcoal);
+  --muted: var(--furnest-slate);
+  --border: #e2e8f0;
+  --surface: #f8fafc;
+  /* Teal and cyan are too light for text on white, so light mode links in blue. */
+  --accent: var(--furnest-blue);
+  --ok: #047857;
   --space: 1rem;
   --radius: 6px;
   --max-width: 64rem;
@@ -15,12 +24,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141615;
-    --fg: #e6e6e3;
-    --muted: #a0a4a8;
-    --border: #2e3230;
-    --surface: #1d201f;
-    --accent: #7cc4ad;
+    --bg: var(--furnest-charcoal);
+    --fg: #f1f5f9;
+    --muted: #94a3b8;
+    --border: #334155;
+    --surface: #1e293b;
+    --accent: var(--furnest-cyan);
+    --ok: var(--furnest-teal);
   }
 }
 
@@ -65,14 +75,26 @@ h1 {
   align-items: center;
   gap: calc(var(--space) / 2) var(--space);
   padding: calc(var(--space) * 0.75) var(--space);
+  border-top: 3px solid transparent;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--furnest-gradient) border-box;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
   color: var(--fg);
   text-decoration: none;
+}
+
+.brand img {
+  border-radius: 6px;
 }
 
 .site-header nav ul {
@@ -128,6 +150,28 @@ main {
 .login {
   max-width: 24rem;
   margin: calc(var(--space) * 2) auto;
+}
+
+.login-brand {
+  margin-bottom: calc(var(--space) * 1.5);
+  text-align: center;
+}
+
+.login-brand img {
+  border-radius: 14px;
+}
+
+.login-brand .wordmark {
+  margin: 0.25rem 0 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.login-brand .tagline {
+  margin: 0;
+  color: var(--muted);
 }
 
 .login form {
@@ -457,7 +501,7 @@ button.secondary {
 
 .health-ok,
 .health-run-success {
-  color: var(--accent);
+  color: var(--ok);
 }
 
 .health-failing,

@@ -7,6 +7,7 @@ and disposes it on shutdown. Routes reach the engine, settings and the source
 adapter registry (injectable, for tests) through ``request.app.state``.
 
 Every route needs auth (``furnest.web.auth``) except health probes, static files,
+``/favicon.ico`` (browsers fetch it from the root, even on the login page),
 login/logout and, later, the Discord interactions endpoint. ``create_app`` refuses to
 build an app without usable ``AUTH_TOKEN``/``AUTH_SESSION_SECRET``.
 
@@ -22,6 +23,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -90,9 +92,15 @@ def create_app(
     register_error_handlers(app)
     register_auth_handlers(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.add_api_route("/favicon.ico", favicon, include_in_schema=False)
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(pages.router)
     app.include_router(criteria.router)
     app.include_router(sources.router)
     return app
+
+
+def favicon() -> FileResponse:
+    """The brand icon at the root path, where browsers look for it by default."""
+    return FileResponse(STATIC_DIR / "brand" / "favicon.ico", media_type="image/x-icon")

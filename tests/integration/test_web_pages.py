@@ -37,6 +37,8 @@ def test_index_renders_layout_with_security_headers(authed_client: TestClient) -
     assert "/static/css/app.css" in response.text
     assert '"allowEval": false' in response.text
     assert 'aria-current="page"' in response.text
+    assert '<link rel="icon" href="/favicon.ico"' in response.text
+    assert "/static/brand/icon-64.png" in response.text
 
 
 def test_index_answers_head(authed_client: TestClient) -> None:
@@ -56,7 +58,13 @@ def test_pages_load_no_external_resources(authed_client: TestClient) -> None:
 
 @pytest.mark.parametrize(
     ("path", "content_type"),
-    [("/static/vendor/htmx.min.js", "javascript"), ("/static/css/app.css", "text/css")],
+    [
+        ("/static/vendor/htmx.min.js", "javascript"),
+        ("/static/css/app.css", "text/css"),
+        ("/static/brand/icon-32.png", "image/png"),
+        ("/static/brand/icon-64.png", "image/png"),
+        ("/static/brand/icon-180.png", "image/png"),
+    ],
 )
 def test_static_assets_are_served(client: TestClient, path: str, content_type: str) -> None:
     response = client.get(path)
@@ -64,6 +72,22 @@ def test_static_assets_are_served(client: TestClient, path: str, content_type: s
     assert response.status_code == 200
     assert content_type in response.headers["content-type"]
     assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_favicon_is_served_from_the_root_without_auth(client: TestClient) -> None:
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/x-icon"
+    assert response.content.startswith(b"\x00\x00\x01\x00")  # ICO header
+    _assert_security_headers(response.headers)
+
+
+def test_login_page_shows_the_brand(client: TestClient) -> None:
+    text = client.get("/login", headers=HTML).text
+
+    assert "/static/brand/icon-180.png" in text
+    assert "self-hosted furnished-rental monitor" in text
 
 
 def test_health_json_also_gets_security_headers(client: TestClient) -> None:

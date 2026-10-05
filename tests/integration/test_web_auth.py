@@ -24,7 +24,7 @@ LoginFn = Callable[..., Response]
 HTML = {"Accept": "text/html,application/xhtml+xml"}
 
 # Routes reachable without auth. Anything else must depend on require_auth.
-PUBLIC_PATHS = {"/healthz", "/readyz", "/login", "/logout"}
+PUBLIC_PATHS = {"/healthz", "/readyz", "/login", "/logout", "/favicon.ico"}
 
 
 def _set_cookie_headers(response: object) -> list[str]:
