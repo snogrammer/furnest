@@ -69,6 +69,24 @@ def test_worker_runs_until_stopped(monkeypatch: pytest.MonkeyPatch, db_url: str)
     assert len(runs) == 1
 
 
+def test_worker_refuses_to_start_with_an_unknown_adapter(
+    monkeypatch: pytest.MonkeyPatch, db_url: str
+) -> None:
+    from furnest.worker.runtime import Worker
+
+    runs: list[Worker] = []
+    monkeypatch.setattr(Worker, "run", lambda self: runs.append(self))
+    monkeypatch.setenv("DB_URL", db_url)
+    monkeypatch.setenv("SOURCES_ADAPTERS", '{"no_such_source": {"enabled": true}}')
+    assert runner.invoke(app, ["migrate"]).exit_code == 0
+
+    result = runner.invoke(app, ["worker"])
+
+    assert result.exit_code == 1
+    assert "unknown adapter(s): no_such_source" in result.output
+    assert runs == []
+
+
 def test_web_serves_app_on_configured_address(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[object, dict[str, Any]]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))

@@ -1,10 +1,10 @@
 """SqlSourceStore: the ``sources`` table, i.e. per-adapter toggles and health.
 
 Rows are created for every registered adapter with :meth:`SqlSourceStore.ensure`,
-so the dashboard can list a source before it has ever run. The scheduler (#23)
-records each run's outcome and, from the resolved adapter configs, why a source
-can't run (:meth:`SqlSourceStore.set_disabled_reasons`); the health page (#26)
-reads it back.
+so the dashboard can list a source before it has ever run. The scheduler
+(:mod:`furnest.pipeline.schedule`) records each run's outcome and, from the
+resolved adapter configs, why a source can't run
+(:meth:`SqlSourceStore.set_disabled_reasons`); the health page (#26) reads it back.
 """
 
 from collections.abc import Iterable, Mapping

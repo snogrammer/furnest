@@ -307,6 +307,7 @@ class AdapterOverrides(BaseModel):
     proxy_url: AnyUrl | None = None
     api_key: SecretStr | None = None
     request_timeout_seconds: PositiveInt | None = None
+    run_timeout_seconds: PositiveInt | None = None
     respect_robots: bool | None = None
     max_retries: Annotated[int, Field(ge=0)] | None = None
 
@@ -318,6 +319,8 @@ class SourcesSettings(_Group):
     default_interval_minutes: PositiveInt = 60
     jitter_seconds: Annotated[int, Field(ge=0)] = 300
     request_timeout_seconds: PositiveInt = 30
+    # A whole run of one source (search, store, match) is abandoned after this long.
+    run_timeout_seconds: PositiveInt = 900
     # Polite default request budget per adapter, enforced by a token bucket.
     requests_per_minute: PositiveFloat = 6.0
     proxy_url: AnyUrl | None = None

@@ -424,6 +424,69 @@ def _until_cancelled(ctx: JobContext) -> None:
     ctx.cancelled.wait(5)
 
 
+def test_scheduled_job_failure_carries_the_source_tag_and_calls_on_failure(
+    start_worker: StartWorker, failures: Failures
+) -> None:
+    seen: list[BaseException] = []
+
+    def broken(_ctx: JobContext) -> None:
+        raise ValueError("bad page")
+
+    start_worker(
+        setup=lambda w: w.schedule(
+            "scrape",
+            broken,
+            interval=timedelta(milliseconds=50),
+            source="example_source",
+            on_failure=seen.append,
+        )
+    )
+
+    wait_for(lambda: len(seen) >= 1)
+    assert isinstance(seen[0], ValueError)
+    assert failures[0][1] == {
+        "job_id": "scrape",
+        "job_type": "scheduled",
+        "source": "example_source",
+    }
+
+
+def test_on_failure_is_called_for_a_timeout(start_worker: StartWorker, failures: Failures) -> None:
+    seen: list[BaseException] = []
+    start_worker(
+        setup=lambda w: w.schedule(
+            "slow",
+            _until_cancelled,
+            interval=timedelta(milliseconds=50),
+            timeout=timedelta(milliseconds=200),
+            on_failure=seen.append,
+        )
+    )
+
+    wait_for(lambda: len(seen) >= 1)
+    assert isinstance(seen[0], JobTimeoutError)
+
+
+def test_a_raising_on_failure_is_contained(start_worker: StartWorker, failures: Failures) -> None:
+    calls: list[BaseException] = []
+
+    def broken(_ctx: JobContext) -> None:
+        raise ValueError("bad page")
+
+    def on_failure(exc: BaseException) -> None:
+        calls.append(exc)
+        raise RuntimeError("database is locked")
+
+    _, thread = start_worker(
+        setup=lambda w: w.schedule(
+            "scrape", broken, interval=timedelta(milliseconds=50), on_failure=on_failure
+        )
+    )
+
+    wait_for(lambda: len(calls) >= 2)
+    assert thread.is_alive()
+
+
 def test_scheduled_job_timeout_is_reported(start_worker: StartWorker, failures: Failures) -> None:
     start_worker(
         setup=lambda w: w.schedule(
@@ -496,6 +559,8 @@ def test_nothing_new_starts_once_stopping(
     worker.request_stop()
 
     assert not worker._run_next()
-    worker._run_scheduled("tick", runs.append, timedelta(seconds=1))
+    worker._run_scheduled(
+        runtime._ScheduledRun("tick", runs.append, timedelta(seconds=1), None, None)
+    )
     assert runs == []
     assert _status(session_factory, job_id) is JobStatus.QUEUED

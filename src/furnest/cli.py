@@ -95,9 +95,15 @@ def web() -> None:
 @app.command()
 def worker() -> None:
     """Run scheduled source scrapes and background jobs."""
+    from furnest.db.amenity_cache import SqlAmenityCache
     from furnest.db.engine import create_engine_from_settings
     from furnest.db.migrate import migration_status
     from furnest.db.session import make_session_factory
+    from furnest.matching.amenities.llm import build_amenity_extractor
+    from furnest.pipeline.ingest import ListingIngestor
+    from furnest.pipeline.schedule import schedule_sources
+    from furnest.sources.config import SourceConfigError
+    from furnest.sources.registry import discover
     from furnest.worker.execution import default_registry
     from furnest.worker.runtime import Worker
 
@@ -112,7 +118,19 @@ def worker() -> None:
                 err=True,
             )
             raise typer.Exit(code=1)
-        Worker(settings, engine, default_registry(make_session_factory(engine))).run()
+        factory = make_session_factory(engine)
+        worker = Worker(settings, engine, default_registry(factory))
+        ingestor = ListingIngestor(
+            factory,
+            extractor=build_amenity_extractor(settings.llm, SqlAmenityCache(factory)),
+            settings=settings.sources,
+        )
+        try:
+            schedule_sources(worker, discover(), settings.sources, factory, ingestor)
+        except SourceConfigError as exc:
+            typer.echo(f"furnest worker: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        worker.run()
     finally:
         engine.dispose()
 

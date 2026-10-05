@@ -1,6 +1,7 @@
 """Listing ingestion: run one adapter, store what it found, match what changed.
 
-:class:`ListingIngestor` is what the scheduler (#23) calls for each source run.
+:class:`ListingIngestor` is what :class:`furnest.pipeline.schedule.SourceRun` calls for
+each source run.
 One run:
 
 1. records a ``source_runs`` row as ``running``;
@@ -21,12 +22,17 @@ error and the exception propagates, so the scheduler can update the ``sources``
 counters and report it. Nothing is marked missing for a failed run. Without an
 active criteria profile there is nothing to search for, so no run happens.
 
+``cancelled`` is set by the worker when the run times out. A search that returns
+after that is thrown away (the run fails with :class:`RunCancelledError`) rather than
+stored late, and step 5 stops at the next listing.
+
 ``record`` defaults to discarding results. #28 plugs in the property store, which
 moves passing listings to ``suggested`` and removed ones to ``unavailable``.
 """
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -45,6 +51,10 @@ from furnest.pipeline.rerun import ResultSink, discard
 from furnest.sources.base import SourceAdapter
 
 log = get_logger(__name__)
+
+
+class RunCancelledError(Exception):
+    """The run was cancelled (it timed out) before its results were stored."""
 
 
 @dataclass(frozen=True)
@@ -73,7 +83,9 @@ class ListingIngestor:
         self._record = record
         self._clock = clock
 
-    def run(self, adapter: SourceAdapter) -> RunSummary | None:
+    def run(
+        self, adapter: SourceAdapter, *, cancelled: threading.Event | None = None
+    ) -> RunSummary | None:
         """Run ``adapter`` once; ``None`` if there is no active criteria profile."""
         source = adapter.name
         active = self._criteria.active()
@@ -84,6 +96,9 @@ class ListingIngestor:
         run_id = self._listings.start_run(source, at=self._clock())
         try:
             found = adapter.search(active.criteria)
+            if cancelled is not None and cancelled.is_set():
+                msg = f"run of {source!r} was cancelled before its results were stored"
+                raise RunCancelledError(msg)
             seen_at = self._clock()
             upserted = self._listings.upsert_batch(source, found, seen_at=seen_at)
             removed = self._listings.mark_missing(
@@ -111,7 +126,7 @@ class ListingIngestor:
         self._listings.finish_run(
             run_id, status=SourceRunStatus.SUCCESS, at=self._clock(), counts=counts
         )
-        matched = self._match_changed(source, upserted, active)
+        matched = self._match_changed(source, upserted, active, cancelled)
         log.info(
             "ingest_run",
             source=source,
@@ -124,9 +139,18 @@ class ListingIngestor:
         )
         return RunSummary(run_id=run_id, counts=counts, matched=matched, removed_ids=tuple(removed))
 
-    def _match_changed(self, source: str, upserted: UpsertResult, active: CriteriaRecord) -> int:
+    def _match_changed(
+        self,
+        source: str,
+        upserted: UpsertResult,
+        active: CriteriaRecord,
+        cancelled: threading.Event | None,
+    ) -> int:
         matched = 0
         for listing_id in upserted.changed_ids:
+            if cancelled is not None and cancelled.is_set():
+                log.info("ingest_match_cancelled", source=source, matched=matched)
+                break
             stored = self._listings.get(listing_id)
             if stored is None:  # deleted since the upsert; nothing to match
                 continue

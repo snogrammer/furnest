@@ -1,5 +1,6 @@
 """ListingIngestor: one source run from search through storage to matching."""
 
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
@@ -14,7 +15,7 @@ from furnest.db.models import SourceRunStatus
 from furnest.domain import Amenity, AmenityResult, Criteria, NormalizedListing
 from furnest.matching import MatchResult
 from furnest.matching.amenities import KeywordAmenityExtractor
-from furnest.pipeline.ingest import ListingIngestor
+from furnest.pipeline.ingest import ListingIngestor, RunCancelledError
 from furnest.sources.base import AdapterConfig, SourceAdapter
 
 pytestmark = pytest.mark.integration
@@ -206,6 +207,50 @@ def test_failed_search_records_the_error_and_removes_nothing(
     stored = store.find("fake", "a")
     assert stored is not None
     assert (stored.missed_runs, stored.removed_at) == (0, None)
+
+
+def test_a_run_cancelled_during_search_stores_nothing(
+    ingestor: ListingIngestor, adapter: FakeAdapter, session_factory: sessionmaker[Session]
+) -> None:
+    adapter.results = [listing("a")]
+    cancelled = threading.Event()
+    cancelled.set()
+
+    with pytest.raises(RunCancelledError):
+        ingestor.run(adapter, cancelled=cancelled)
+
+    store = SqlListingStore(session_factory)
+    assert store.find("fake", "a") is None
+    run = store.runs("fake")[0]
+    assert run.status is SourceRunStatus.FAILED
+    assert run.error is not None
+    assert run.error.startswith("RunCancelledError:")
+
+
+def test_matching_stops_once_cancelled(
+    session_factory: sessionmaker[Session], adapter: FakeAdapter, recorder: Recorder
+) -> None:
+    CriteriaStore(session_factory).save(Criteria(furnished_required=False), created_by="cli")
+    cancelled = threading.Event()
+
+    def cancel_after_first(listing: NormalizedListing, result: MatchResult) -> None:
+        recorder(listing, result)
+        cancelled.set()
+
+    ingestor = ListingIngestor(
+        session_factory,
+        extractor=KeywordAmenityExtractor(),
+        settings=SourcesSettings(),
+        record=cancel_after_first,
+    )
+    adapter.results = [listing("a"), listing("b")]
+
+    summary = ingestor.run(adapter, cancelled=cancelled)
+
+    assert summary is not None
+    assert summary.counts.new == 2
+    assert summary.matched == 1
+    assert len(recorder.results) == 1
 
 
 class ExplodingExtractor:

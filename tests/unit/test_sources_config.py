@@ -37,6 +37,7 @@ def test_global_defaults_flow_through() -> None:
     assert config.requests_per_minute == settings.requests_per_minute
     assert config.user_agent == settings.user_agent
     assert config.request_timeout_seconds == settings.request_timeout_seconds
+    assert config.run_timeout_seconds == settings.run_timeout_seconds == 900
     assert config.proxy_url == "http://proxy.example.com:8080/"
     assert config.api_key is None
     assert config.respect_robots is True
@@ -57,6 +58,7 @@ def test_overrides_win_field_by_field() -> None:
                 request_timeout_seconds=5,
                 respect_robots=False,
                 max_retries=0,
+                run_timeout_seconds=120,
             )
         },
     )
@@ -73,6 +75,7 @@ def test_overrides_win_field_by_field() -> None:
     assert config.request_timeout_seconds == 5
     assert config.respect_robots is False
     assert config.max_retries == 0
+    assert config.run_timeout_seconds == 120
 
 
 def test_overrides_for_one_adapter_do_not_leak_to_another() -> None:

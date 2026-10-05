@@ -24,6 +24,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, timedelta
 from types import FrameType
 
@@ -62,6 +63,20 @@ _ABANDON_SETTLE_SECONDS = 5.0
 # APScheduler logs every run at INFO; with a heartbeat every few seconds that drowns
 # the useful lines. Its warnings and errors (missed runs, crashes) still come through.
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+
+FailureCallback = Callable[[BaseException], None]
+
+
+@dataclass(frozen=True)
+class _ScheduledRun:
+    """Everything one scheduled job needs, as ``Worker.schedule`` was given it."""
+
+    name: str
+    handler: Handler
+    timeout: timedelta
+    source: str | None
+    on_failure: FailureCallback | None
 
 
 class Worker:
@@ -108,15 +123,23 @@ class Worker:
         interval: timedelta,
         jitter: timedelta = timedelta(0),
         timeout: timedelta | None = None,
+        source: str | None = None,
+        on_failure: FailureCallback | None = None,
     ) -> None:
         """Run ``handler`` every ``interval`` (plus up to ``jitter``), one run at a time
-        across every worker sharing the database."""
+        across every worker sharing the database.
+
+        ``source`` tags failure reports with the listing source the job runs.
+        ``on_failure`` is called with the error after a run fails or times out, on the
+        scheduler's thread, so it runs even while a timed-out handler is still stuck.
+        """
+        run = _ScheduledRun(name, handler, timeout or self._default_timeout, source, on_failure)
         self._scheduler.add_job(
             self._run_scheduled,
             IntervalTrigger(
                 seconds=interval.total_seconds(), jitter=jitter.total_seconds() or None
             ),
-            args=(name, handler, timeout or self._default_timeout),
+            args=(run,),
             id=name,
             max_instances=1,
             coalesce=True,
@@ -209,16 +232,17 @@ class Worker:
 
     # --- Scheduled jobs ---------------------------------------------------------------
 
-    def _run_scheduled(self, name: str, handler: Handler, timeout: timedelta) -> None:
-        with self._tracked(f"scheduled {name}") as started:
+    def _run_scheduled(self, run: _ScheduledRun) -> None:
+        with self._tracked(f"scheduled {run.name}") as started:
             if not started:
                 return
             try:
-                self._run_scheduled_locked(name, handler, timeout)
+                self._run_scheduled_locked(run)
             except Exception:
-                log.exception("scheduled_job_error", job=name)
+                log.exception("scheduled_job_error", job=run.name)
 
-    def _run_scheduled_locked(self, name: str, handler: Handler, timeout: timedelta) -> None:
+    def _run_scheduled_locked(self, run: _ScheduledRun) -> None:
+        name, timeout = run.name, run.timeout
         lease, owner = f"scheduled:{name}", self.identity.worker_id
         if not locks.acquire(self._factory, lease, owner, timeout + LEASE_GRACE):
             log.info("scheduled_job_skipped", job=name, reason="running elsewhere")
@@ -231,10 +255,16 @@ class Worker:
                 log.exception("lease_release_failed", lease=lease)
 
         ctx = JobContext(job_id=name, kind=name, payload={}, attempt=1, deadline=utcnow() + timeout)
-        outcome = run_with_timeout(handler, ctx, abandon=self._abandon, on_finish=release)
+        outcome = run_with_timeout(run.handler, ctx, abandon=self._abandon, on_finish=release)
         error = _failure(outcome, f"scheduled job {name!r}", timeout)
         if error is not None:
-            capture_job_failure(error, job_id=name, job_type="scheduled")
+            tags = {"source": run.source} if run.source is not None else {}
+            capture_job_failure(error, job_id=name, job_type="scheduled", **tags)
+            if run.on_failure is not None:
+                try:
+                    run.on_failure(error)
+                except Exception:
+                    log.exception("scheduled_job_on_failure_error", job=name)
         elif outcome.kind is OutcomeKind.OK:
             log.info("scheduled_job_succeeded", job=name)
 

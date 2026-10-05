@@ -61,6 +61,7 @@ class AdapterConfig:
     request_timeout_seconds: int
     respect_robots: bool = True
     max_retries: int = 3
+    run_timeout_seconds: int = 900
     proxy_url: str | None = None
     api_key: SecretStr | None = None
     disabled_reason: str | None = None
