@@ -62,6 +62,8 @@ class AdapterConfig:
     respect_robots: bool = True
     max_retries: int = 3
     run_timeout_seconds: int = 900
+    search_locations: tuple[str, ...] = ()
+    max_results: int = 100
     proxy_url: str | None = None
     api_key: SecretStr | None = None
     disabled_reason: str | None = None

@@ -156,3 +156,19 @@ def test_secret_values_collects_set_secrets_only() -> None:
     )
 
     assert sorted(secret_values(settings)) == ["dashboard-token", "smtp-password"]
+
+
+def test_secret_values_include_per_adapter_api_keys() -> None:
+    settings = Settings.model_validate(
+        {
+            "sources": {
+                "adapters": {
+                    "with_key": {"api_key": "adapter-key"},
+                    "empty_key": {"api_key": ""},
+                    "no_key": {"enabled": True},
+                }
+            }
+        }
+    )
+
+    assert secret_values(settings) == ["adapter-key"]

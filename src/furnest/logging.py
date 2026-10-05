@@ -109,7 +109,8 @@ class Redactor:
 
 
 def secret_values(settings: Settings) -> list[str]:
-    """The plaintext of every ``SecretStr`` setting that is set."""
+    """The plaintext of every ``SecretStr`` setting that is set, per-adapter
+    ``SOURCES_ADAPTERS`` API keys included."""
     values: list[str] = []
     for group_name in type(settings).model_fields:
         group = getattr(settings, group_name)
@@ -117,6 +118,9 @@ def secret_values(settings: Settings) -> list[str]:
             value = getattr(group, field_name)
             if isinstance(value, SecretStr) and value.get_secret_value():
                 values.append(value.get_secret_value())
+    for overrides in settings.sources.adapters.values():
+        if overrides.api_key is not None and overrides.api_key.get_secret_value():
+            values.append(overrides.api_key.get_secret_value())
     return values
 
 

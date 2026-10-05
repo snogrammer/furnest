@@ -9,8 +9,9 @@ Every field falls back from the adapter's ``SOURCES_ADAPTERS`` entry to the glob
 3. otherwise the adapter's ``default_enabled``.
 
 An adapter that can't run is disabled whatever the above says, with the reason in
-``disabled_reason``. Today that means one with ``needs_browser`` while the browser
-layer is unavailable (see :func:`furnest.sources.browser.browser_unavailable_reason`).
+``disabled_reason``: one with ``needs_browser`` while the browser layer is unavailable
+(see :func:`furnest.sources.browser.browser_unavailable_reason`), or one with
+``requires_api_key`` and no ``api_key`` in its ``SOURCES_ADAPTERS`` entry.
 """
 
 from __future__ import annotations
@@ -43,6 +44,9 @@ def resolve_config(
     disabled_reason = None
     if adapter.capabilities.needs_browser and browser_unavailable is not None:
         enabled, disabled_reason = False, f"needs a browser: {browser_unavailable}"
+    elif adapter.capabilities.requires_api_key and overrides.api_key is None:
+        enabled = False
+        disabled_reason = f'needs an API key: set "api_key" for {adapter.name} in SOURCES_ADAPTERS'
 
     proxy = overrides.proxy_url or settings.proxy_url
     return AdapterConfig(
@@ -59,6 +63,8 @@ def resolve_config(
         respect_robots=_pick(overrides.respect_robots, settings.respect_robots),
         max_retries=_pick(overrides.max_retries, settings.max_retries),
         run_timeout_seconds=_pick(overrides.run_timeout_seconds, settings.run_timeout_seconds),
+        search_locations=overrides.search_locations or (),
+        max_results=_pick(overrides.max_results, settings.max_results),
         proxy_url=str(proxy) if proxy is not None else None,
         api_key=overrides.api_key,
         disabled_reason=disabled_reason,

@@ -1,4 +1,5 @@
 """Built-in source adapters, one module or package each. ``discover()`` finds them.
 
-The first real adapters arrive in P3 (#24 onwards).
+``furnished_finder`` is the first. ``docs/adapters.md`` covers each source's access
+options and field mapping.
 """

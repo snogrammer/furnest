@@ -38,6 +38,8 @@ def test_global_defaults_flow_through() -> None:
     assert config.user_agent == settings.user_agent
     assert config.request_timeout_seconds == settings.request_timeout_seconds
     assert config.run_timeout_seconds == settings.run_timeout_seconds == 900
+    assert config.max_results == settings.max_results == 100
+    assert config.search_locations == ()
     assert config.proxy_url == "http://proxy.example.com:8080/"
     assert config.api_key is None
     assert config.respect_robots is True
@@ -59,6 +61,8 @@ def test_overrides_win_field_by_field() -> None:
                 respect_robots=False,
                 max_retries=0,
                 run_timeout_seconds=120,
+                search_locations=("Exampleville, XX", " Othertown, YY "),
+                max_results=25,
             )
         },
     )
@@ -76,6 +80,8 @@ def test_overrides_win_field_by_field() -> None:
     assert config.respect_robots is False
     assert config.max_retries == 0
     assert config.run_timeout_seconds == 120
+    assert config.search_locations == ("Exampleville, XX", "Othertown, YY")
+    assert config.max_results == 25
 
 
 def test_overrides_for_one_adapter_do_not_leak_to_another() -> None:
@@ -155,3 +161,40 @@ def test_adapters_without_needs_browser_ignore_browser_unavailable() -> None:
 
     assert config.enabled is True
     assert config.disabled_reason is None
+
+
+class NeedsKey(OnByDefault):
+    name = "needs_key"
+    capabilities = Capabilities(has_api=True, requires_api_key=True)
+
+
+@pytest.mark.parametrize("stored", [None, True])
+def test_requires_api_key_without_a_key_is_disabled_with_reason(stored: bool | None) -> None:
+    config = resolve_config(NeedsKey, SourcesSettings(), stored)
+
+    assert config.enabled is False
+    assert config.disabled_reason == (
+        'needs an API key: set "api_key" for needs_key in SOURCES_ADAPTERS'
+    )
+
+
+def test_requires_api_key_disable_beats_an_env_pin() -> None:
+    settings = SourcesSettings(adapters={"needs_key": AdapterOverrides(enabled=True)})
+
+    config = resolve_config(NeedsKey, settings)
+
+    assert (config.enabled, config.enabled_pinned) == (False, True)
+    assert config.disabled_reason is not None
+
+
+def test_requires_api_key_with_a_key_follows_normal_precedence() -> None:
+    settings = SourcesSettings(adapters={"needs_key": AdapterOverrides(api_key=SecretStr("k"))})
+
+    assert resolve_config(NeedsKey, settings, False).enabled is False
+    config = resolve_config(NeedsKey, settings)
+    assert (config.enabled, config.disabled_reason) == (True, None)
+
+
+def test_blank_search_locations_are_rejected() -> None:
+    with pytest.raises(ValueError, match="at least 1 character"):
+        AdapterOverrides(search_locations=("  ",))

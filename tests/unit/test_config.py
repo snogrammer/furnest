@@ -49,6 +49,7 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SOURCES_REMOVE_AFTER_MISSED_RUNS", "4")
     monkeypatch.setenv("SOURCES_REMOVE_AFTER_HOURS", "72")
     monkeypatch.setenv("SOURCES_RUN_TIMEOUT_SECONDS", "600")
+    monkeypatch.setenv("SOURCES_MAX_RESULTS", "40")
     monkeypatch.setenv("BASE_URL", "https://furnest.example.com")
 
     settings = Settings()
@@ -63,6 +64,7 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.sources.remove_after_missed_runs == 4
     assert settings.sources.remove_after_hours == 72
     assert settings.sources.run_timeout_seconds == 600
+    assert settings.sources.max_results == 40
     assert str(settings.app.base_url) == "https://furnest.example.com/"
 
 

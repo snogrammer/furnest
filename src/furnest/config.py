@@ -310,6 +310,12 @@ class AdapterOverrides(BaseModel):
     run_timeout_seconds: PositiveInt | None = None
     respect_robots: bool | None = None
     max_retries: Annotated[int, Field(ge=0)] | None = None
+    # Where to search, in the source's own terms (e.g. "Springfield, IL"). Only for
+    # sources that search by place name rather than by the criteria's areas.
+    search_locations: (
+        tuple[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)], ...] | None
+    ) = None
+    max_results: PositiveInt | None = None
 
 
 class SourcesSettings(_Group):
@@ -327,6 +333,8 @@ class SourcesSettings(_Group):
     respect_robots: bool = True
     # Retries after the first attempt for 429s, 5xx responses and transport errors.
     max_retries: Annotated[int, Field(ge=0)] = 3
+    # Upper bound on listings one run asks for, for sources that page or bill per result.
+    max_results: PositiveInt = 100
     browser_enabled: bool = False
     # A listing is marked removed once it has been missing from this many successful
     # runs of its source *and* unseen for this many hours.

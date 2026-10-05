@@ -1,0 +1,12 @@
+{
+  "data": {
+    "id": "RUN0000000000001",
+    "actId": "ACT0000000000001",
+    "status": "SUCCEEDED",
+    "statusMessage": "Finished: 3 listings.",
+    "startedAt": "2026-10-05T12:00:00.000Z",
+    "finishedAt": "2026-10-05T12:03:00.000Z",
+    "defaultDatasetId": "DATASET000000001",
+    "defaultKeyValueStoreId": "KVS0000000000001"
+  }
+}
