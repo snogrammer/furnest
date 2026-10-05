@@ -29,6 +29,7 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
   :meth:`SqlPropertyStore.unsnooze_expired` clears expired snoozes and queues the
   notification again for a property still waiting on a decision.
 
+The detail page reads one property whole through :meth:`SqlPropertyStore.detail`.
 The dashboard reads through :meth:`SqlPropertyStore.search`, one page at a time,
 and :meth:`SqlPropertyStore.status_counts`. Each row carries a summary of the
 property's primary listing: its lowest-id active listing, or its lowest-id listing
@@ -41,15 +42,18 @@ the audit trail as an event whose ``from_status`` and ``to_status`` are the same
 
 from __future__ import annotations
 
+import builtins
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from furnest.db.listing_store import PricePoint, price_points, stored_listing
 from furnest.db.models import AuditEvent, CriteriaVersion, Listing, Property
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
@@ -137,6 +141,40 @@ class PropertyPage:
     total: int
 
 
+@dataclass(frozen=True)
+class ListingDetail:
+    """One of a property's listings, whole, for the detail page."""
+
+    summary: ListingSummary
+    # As the adapter produced it: description, photos, sqft, first and last seen.
+    listing: NormalizedListing
+    price_history: list[PricePoint]
+
+
+@dataclass(frozen=True)
+class PropertyDetail:
+    property: PropertyState
+    # None until the property's listing has been matched, or if the stored result
+    # no longer reads as a MatchResult.
+    match: MatchResult | None
+    # In _LISTING_ORDER, so the primary listing comes first.
+    listings: list[ListingDetail]
+    # Oldest first.
+    audit: list[AuditEntry]
+
+    # ``property`` above shadows the builtin in this class body.
+    @builtins.property
+    def primary(self) -> ListingDetail | None:
+        return self.listings[0] if self.listings else None
+
+    @builtins.property
+    def images(self) -> list[str]:
+        """Every listing's photos, primary listing's first, each URL once."""
+        return list(
+            dict.fromkeys(str(url) for detail in self.listings for url in detail.listing.images)
+        )
+
+
 class PropertySort(StrEnum):
     SCORE = "score"  # best first; unscored last
     PRICE = "price"  # cheapest monthly price first; unknown last
@@ -159,9 +197,7 @@ def _state(row: Property) -> PropertyState:
     )
 
 
-def _summary(row: Listing | None) -> ListingSummary | None:
-    if row is None:
-        return None
+def _summary(row: Listing) -> ListingSummary:
     price = None
     if row.monthly_price_minor is not None and row.currency is not None:
         price = Money(amount_minor=row.monthly_price_minor, currency=row.currency)
@@ -182,11 +218,15 @@ def _visible(now: datetime) -> ColumnElement[bool]:
     return Property.snoozed_until.is_(None) | (Property.snoozed_until <= now)
 
 
+# Active listings first, then by id; the first one is the property's primary listing.
+_LISTING_ORDER = (Listing.removed_at.is_not(None), Listing.id)
+
+
 def _primary_listing_id() -> ScalarSelect[int]:
     return (
         select(Listing.id)
         .where(Listing.property_id == Property.id)
-        .order_by(Listing.removed_at.is_not(None), Listing.id)
+        .order_by(*_LISTING_ORDER)
         .limit(1)
         .correlate(Property)
         .scalar_subquery()
@@ -237,6 +277,25 @@ def _entry(row: AuditEvent) -> AuditEntry:
         payload=row.payload,
         created_at=row.created_at,
     )
+
+
+def _audit(session: Session, property_id: int) -> list[AuditEntry]:
+    """The property's audit trail, oldest first."""
+    rows = session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.property_id == property_id)
+        .order_by(AuditEvent.created_at, AuditEvent.id)
+    )
+    return [_entry(row) for row in rows]
+
+
+def _match(data: dict[str, Any] | None) -> MatchResult | None:
+    if data is None:
+        return None
+    try:
+        return MatchResult.model_validate(data)
+    except ValidationError:
+        return None
 
 
 def _status_before_unavailable(session: Session, property_id: int) -> PropertyStatus | None:
@@ -555,7 +614,9 @@ class SqlPropertyStore:
         with session_scope(self._session_factory) as session:
             total = session.scalar(filtered(select(func.count(Property.id)))) or 0
             rows = [
-                PropertyRow(property=_state(prop), listing=_summary(listing))
+                PropertyRow(
+                    property=_state(prop), listing=None if listing is None else _summary(listing)
+                )
                 for prop, listing in session.execute(statement)
             ]
             return PropertyPage(rows=rows, total=total)
@@ -579,6 +640,30 @@ class SqlPropertyStore:
             row = session.get(Property, property_id)
             return None if row is None else _state(row)
 
+    def detail(self, property_id: int) -> PropertyDetail | None:
+        """Everything stored about one property, read in one transaction."""
+        with session_scope(self._session_factory) as session:
+            row = session.get(Property, property_id)
+            if row is None:
+                return None
+            listing_rows = session.scalars(
+                select(Listing).where(Listing.property_id == property_id).order_by(*_LISTING_ORDER)
+            )
+            listings = [
+                ListingDetail(
+                    summary=_summary(listing),
+                    listing=stored_listing(listing).listing,
+                    price_history=price_points(session, listing.id),
+                )
+                for listing in listing_rows
+            ]
+            return PropertyDetail(
+                property=_state(row),
+                match=_match(row.match_result),
+                listings=listings,
+                audit=_audit(session, property_id),
+            )
+
     def for_listing(self, listing_id: int) -> PropertyState | None:
         with session_scope(self._session_factory) as session:
             row = session.scalars(
@@ -591,12 +676,7 @@ class SqlPropertyStore:
     def audit_events(self, property_id: int) -> list[AuditEntry]:
         """The property's audit trail, oldest first."""
         with session_scope(self._session_factory) as session:
-            rows = session.scalars(
-                select(AuditEvent)
-                .where(AuditEvent.property_id == property_id)
-                .order_by(AuditEvent.created_at, AuditEvent.id)
-            )
-            return [_entry(row) for row in rows]
+            return _audit(session, property_id)
 
     def _canonical_address(self, listing: NormalizedListing) -> str | None:
         address = listing.address

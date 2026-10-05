@@ -1,7 +1,7 @@
 {% macro card(row) %}{% set p = row.property %}{% set l = row.listing %}
 <article class="property-card" id="property-{{ p.id }}">
   <header>
-    <h3>{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</h3>
+    <h3><a href="/properties/{{ p.id }}">{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</a></h3>
     <span class="status status-{{ p.status.value }}">{{ status_label(p.status) }}</span>
   </header>
   <dl class="facts">

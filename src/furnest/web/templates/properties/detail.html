@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% macro when(at) %}<time datetime="{{ at.isoformat() }}">{{ at.strftime("%Y-%m-%d %H:%M UTC") }}</time>{% endmacro %}
+{% macro day(at) %}<time datetime="{{ at.isoformat() }}">{{ at.strftime("%Y-%m-%d") }}</time>{% endmacro %}
+{% set primary = d.primary %}
+{% set title = primary.summary.title if primary else "Property #" ~ p.id %}
+{% block title %}{{ title }} · furnest{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← Dashboard</a></p>
+<article class="property-detail" id="property-{{ p.id }}">
+  <header class="detail-head">
+    <h1>{{ title }}</h1>
+    <span class="status status-{{ p.status.value }}">{{ status_label(p.status) }}</span>
+  </header>
+  <dl class="detail-facts">
+    <div><dt>Score</dt><dd>{% if p.score is not none %}{{ p.score }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Price</dt><dd>{% if primary and primary.summary.monthly_price %}{{ primary.summary.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}</dd></div>
+    {% set bb = beds_baths(primary.summary.beds, primary.summary.baths) if primary else none %}
+    {% if bb %}<div><dt>Size</dt><dd>{{ bb }}{% if primary.listing.sqft %} · {{ primary.listing.sqft }} sqft{% endif %}</dd></div>{% endif %}
+    {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
+  </dl>
+  {% if p.snoozed_until %}<p class="muted">Snoozed until {{ when(p.snoozed_until) }}</p>{% endif %}
+  {% if p.manual_contact_required %}<p class="muted">Manual contact required: reach out through the source's own messaging.</p>{% endif %}
+
+  <section aria-labelledby="photos">
+    <h2 id="photos">Photos</h2>
+    {% if d.images %}
+    <ul class="gallery">
+      {% for url in d.images %}
+      <li><a href="{{ url }}" rel="noopener noreferrer" target="_blank"><img src="{{ url }}" alt="Photo {{ loop.index }}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No photos.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="listings">
+    <h2 id="listings">Listings</h2>
+    {% if d.listings %}
+    <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th scope="col">Source</th>
+          <th scope="col">Price</th>
+          <th scope="col">Size</th>
+          <th scope="col">First seen</th>
+          <th scope="col">Last seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in d.listings %}{% set s = l.summary %}
+        <tr id="listing-{{ s.id }}">
+          <th scope="row">
+            <a href="{{ s.url }}" rel="noopener noreferrer" target="_blank">{{ source_name(s.source) }}</a>
+            {% if s.removed_at %}<span class="status">removed {{ day(s.removed_at) }}</span>{% endif %}
+            <br><small class="muted">{{ s.title }}</small>
+          </th>
+          <td>
+            {% if s.monthly_price %}{{ s.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}
+            {% if l.price_history | length > 1 %}
+            <details class="price-history">
+              <summary>{{ l.price_history | length }} prices</summary>
+              <ol>
+                {% for point in l.price_history | reverse %}
+                <li>{{ point.price.monthly.format() }}/mo <small class="muted">{{ day(point.observed_at) }}</small></li>
+                {% endfor %}
+              </ol>
+            </details>
+            {% endif %}
+          </td>
+          <td>{{ beds_baths(s.beds, s.baths) or "–" }}</td>
+          <td>{{ day(l.listing.first_seen) }}</td>
+          <td>{{ day(l.listing.last_seen) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No listings are attached to this property.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="score">
+    <h2 id="score">Score breakdown</h2>
+    {% set m = d.match %}
+    {% if m %}
+    <p>{{ m.score }} / 100 · {% if m.passed %}passes the hard filters{% else %}fails the hard filters{% endif %}{% if m.criteria_version is not none %} <small class="muted">(criteria v{{ m.criteria_version }})</small>{% endif %}</p>
+    {% if m.breakdown %}
+    <div class="table-scroll">
+    <table class="data-table breakdown">
+      <thead><tr><th scope="col">Component</th><th scope="col">Points</th><th scope="col">Why</th></tr></thead>
+      <tbody>
+        {% for item in m.breakdown %}
+        <tr><th scope="row">{{ item.label }}</th><td>{{ "%g" | format(item.points) }} / {{ "%g" | format(item.max_points) }}</td><td>{{ item.reason }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+    {% if m.rules %}
+    <h3>Hard filters</h3>
+    <ul class="rules">
+      {% for r in m.rules %}
+      <li class="rule rule-{{ r.status.value }}{% if r.blocking %} rule-blocking{% endif %}"><strong>{{ r.rule.value | replace("_", " ") }}</strong> <span class="status">{{ r.status.value }}</span> {{ r.reason }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}
+    <p class="muted">Not matched against the criteria yet.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="description">
+    <h2 id="description">Description</h2>
+    {% if primary and primary.listing.description.strip() %}
+    <div class="description">{{ primary.listing.description | description_html }}</div>
+    {% else %}
+    <p class="muted">No description.</p>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="emails">
+    <h2 id="emails">Email log</h2>
+    <p class="muted">Inquiries and replies will show here once email is set up (P6).</p>
+  </section>
+
+  <section aria-labelledby="enrichment">
+    <h2 id="enrichment">Enrichment</h2>
+    <p class="muted">Price comparisons and alternative listings will show here (P8).</p>
+  </section>
+
+  <section aria-labelledby="risk">
+    <h2 id="risk">Risk flags</h2>
+    <p class="muted">Scam and risk signals will show here (P8).</p>
+  </section>
+
+  <section aria-labelledby="timeline">
+    <h2 id="timeline">Timeline</h2>
+    <ol class="timeline" reversed>
+      {% for e in d.audit | reverse %}
+      <li>
+        <strong>{{ audit_label(e) }}</strong>
+        <small class="muted">by {{ e.actor.value }}{% if e.actor_detail %} ({{ e.actor_detail }}){% endif %} · {{ when(e.created_at) }}</small>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</article>
+{% endblock %}

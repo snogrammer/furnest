@@ -1,5 +1,8 @@
 """The shared Jinja2 environment. Autoescaping is on for every ``.html`` template.
 
+Filters: ``description_html`` (a scraped description as safe HTML; see
+``furnest.web.html``).
+
 Globals: ``version``, ``csrf_token(request)`` and ``csrf_field(request)`` (the hidden
 form input every POST form must include; see ``furnest.web.csrf``).
 """
@@ -12,6 +15,7 @@ from starlette.templating import Jinja2Templates
 
 from furnest import __version__
 from furnest.web.csrf import CSRF_FIELD, csrf_token
+from furnest.web.html import render_description
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -28,3 +32,4 @@ def csrf_field(request: Request) -> Markup:
 
 templates.env.globals["csrf_token"] = csrf_token
 templates.env.globals["csrf_field"] = csrf_field
+templates.env.filters["description_html"] = render_description

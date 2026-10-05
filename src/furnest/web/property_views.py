@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.db.property_store import PropertyRow, PropertySort, SqlPropertyStore
+from furnest.db.property_store import AuditEntry, PropertyRow, PropertySort, SqlPropertyStore
 from furnest.domain import PropertyStatus
 
 S = PropertyStatus
@@ -179,3 +179,17 @@ def beds_baths(beds: int | None, baths: float | None) -> str | None:
 
 def status_label(status: PropertyStatus) -> str:
     return status.value.replace("_", " ")
+
+
+def audit_label(entry: AuditEntry) -> str:
+    """One line for the detail page's timeline."""
+    if entry.from_status is None:
+        return f"Created as {status_label(entry.to_status)}"
+    if entry.from_status == entry.to_status:
+        payload = entry.payload or {}
+        if payload.get("unsnoozed"):
+            return "Snooze ended"
+        if "snoozed_until" in payload:
+            return f"Snoozed until {str(payload['snoozed_until'])[:10]}"
+        return f"Updated while {status_label(entry.to_status)}"
+    return f"{status_label(entry.from_status)} → {status_label(entry.to_status)}"

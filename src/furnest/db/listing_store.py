@@ -110,7 +110,7 @@ class SourceRunState:
     error: str | None = None
 
 
-def _stored(row: Listing) -> StoredListing:
+def stored_listing(row: Listing) -> StoredListing:
     listing = NormalizedListing.model_validate(
         {**row.data, "first_seen": row.first_seen, "last_seen": row.last_seen}
     )
@@ -128,6 +128,30 @@ def _stored(row: Listing) -> StoredListing:
         removed_at=row.removed_at,
         amenities=amenities,
     )
+
+
+def price_points(session: Session, listing_id: int) -> list[PricePoint]:
+    """Every recorded price for the listing, oldest first."""
+    rows = session.scalars(
+        select(PriceHistory)
+        .where(PriceHistory.listing_id == listing_id)
+        .order_by(PriceHistory.observed_at, PriceHistory.id)
+    )
+    return [
+        PricePoint(
+            price=Price.model_validate(
+                {
+                    "amount": {"amount_minor": row.amount_minor, "currency": row.currency},
+                    "amount_max": None
+                    if row.amount_max_minor is None
+                    else {"amount_minor": row.amount_max_minor, "currency": row.currency},
+                    "period": row.period,
+                }
+            ),
+            observed_at=row.observed_at,
+        )
+        for row in rows
+    ]
 
 
 def _run_state(row: SourceRun) -> SourceRunState:
@@ -316,14 +340,14 @@ class SqlListingStore:
     def get(self, listing_id: int) -> StoredListing | None:
         with session_scope(self._session_factory) as session:
             row = session.get(Listing, listing_id)
-            return None if row is None else _stored(row)
+            return None if row is None else stored_listing(row)
 
     def find(self, source: str, source_id: str) -> StoredListing | None:
         with session_scope(self._session_factory) as session:
             row = session.scalars(
                 select(Listing).where(Listing.source == source, Listing.source_id == source_id)
             ).first()
-            return None if row is None else _stored(row)
+            return None if row is None else stored_listing(row)
 
     def active(self, source: str | None = None) -> list[StoredListing]:
         """Listings not marked removed, oldest first, optionally for one source."""
@@ -331,7 +355,7 @@ class SqlListingStore:
         if source is not None:
             statement = statement.where(Listing.source == source)
         with session_scope(self._session_factory) as session:
-            return [_stored(row) for row in session.scalars(statement)]
+            return [stored_listing(row) for row in session.scalars(statement)]
 
     def images(self, listing_id: int) -> list[str]:
         with session_scope(self._session_factory) as session:
@@ -346,26 +370,7 @@ class SqlListingStore:
     def price_history(self, listing_id: int) -> list[PricePoint]:
         """Every recorded price for the listing, oldest first."""
         with session_scope(self._session_factory) as session:
-            rows = session.scalars(
-                select(PriceHistory)
-                .where(PriceHistory.listing_id == listing_id)
-                .order_by(PriceHistory.observed_at, PriceHistory.id)
-            )
-            return [
-                PricePoint(
-                    price=Price.model_validate(
-                        {
-                            "amount": {"amount_minor": row.amount_minor, "currency": row.currency},
-                            "amount_max": None
-                            if row.amount_max_minor is None
-                            else {"amount_minor": row.amount_max_minor, "currency": row.currency},
-                            "period": row.period,
-                        }
-                    ),
-                    observed_at=row.observed_at,
-                )
-                for row in rows
-            ]
+            return price_points(session, listing_id)
 
     def start_run(self, source: str, *, at: datetime) -> int:
         with session_scope(self._session_factory) as session:

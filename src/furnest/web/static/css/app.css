@@ -444,14 +444,17 @@ button.secondary {
   overflow-x: auto;
 }
 
-.sources {
+.sources,
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
 .sources th,
-.sources td {
+.sources td,
+.data-table th,
+.data-table td {
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border);
   text-align: left;
@@ -772,4 +775,130 @@ button.secondary {
   h1 {
     font-size: 1.75rem;
   }
+}
+
+/* Property detail page */
+
+.back {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--space) / 2);
+}
+
+.detail-head h1 {
+  margin-bottom: 0;
+}
+
+.detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space) calc(var(--space) * 2);
+  margin: var(--space) 0;
+}
+
+.detail-facts dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-facts dd {
+  margin: 0;
+}
+
+.property-detail section {
+  margin-top: calc(var(--space) * 2);
+}
+
+.property-detail h2 {
+  font-size: 1.125rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.property-card h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.property-card h3 a:hover,
+.property-card h3 a:focus-visible {
+  text-decoration: underline;
+}
+
+/* A horizontal strip on phones, a grid from 40rem up. */
+.gallery {
+  display: flex;
+  gap: calc(var(--space) / 2);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  margin: 0;
+  padding: 0 0 calc(var(--space) / 2);
+  list-style: none;
+}
+
+.gallery li {
+  flex: 0 0 80%;
+  scroll-snap-align: start;
+}
+
+.gallery img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+@media (min-width: 40rem) {
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    overflow-x: visible;
+  }
+}
+
+.price-history ol,
+.rules,
+.timeline {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.price-history summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.8125rem;
+}
+
+.rules li,
+.timeline li {
+  margin-bottom: 0.35rem;
+}
+
+.rule-blocking strong {
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rule-blocking strong {
+    color: #f2b8b5;
+  }
+}
+
+.timeline small {
+  display: block;
+}
+
+.description {
+  max-width: 42rem;
+  overflow-wrap: anywhere;
 }

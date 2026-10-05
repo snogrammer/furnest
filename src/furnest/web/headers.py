@@ -1,10 +1,13 @@
 """Security headers added to every response.
 
-The CSP allows only same-origin scripts, styles, images and form targets, and
-forbids framing. That is why htmx is vendored instead of loaded from a CDN, and
-why ``base.html`` tells htmx not to inject inline indicator styles or ``eval``
-code. HSTS is the reverse proxy's job (``deploy/Caddyfile.example``, #9), since
-only it knows whether the site is served over HTTPS.
+The CSP allows only same-origin scripts, styles and form targets, and forbids
+framing. That is why htmx is vendored instead of loaded from a CDN, and why
+``base.html`` tells htmx not to inject inline indicator styles or ``eval`` code.
+Images may also come from any ``https:`` origin, because listing photos live on
+the sources' CDNs (the detail page, #30); pages load them with
+``referrerpolicy="no-referrer"``, and #49 may serve local copies instead. HSTS is
+the reverse proxy's job (``deploy/Caddyfile.example``, #9), since only it knows
+whether the site is served over HTTPS.
 """
 
 from starlette.datastructures import MutableHeaders
@@ -15,7 +18,7 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "default-src 'self'",
         "script-src 'self'",
         "style-src 'self'",
-        "img-src 'self' data:",
+        "img-src 'self' data: https:",
         "object-src 'none'",
         "base-uri 'self'",
         "form-action 'self'",
