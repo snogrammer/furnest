@@ -101,7 +101,7 @@ def worker() -> None:
     from furnest.db.session import make_session_factory
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.pipeline.ingest import ListingIngestor
-    from furnest.pipeline.schedule import schedule_sources
+    from furnest.pipeline.schedule import register_run_now, schedule_sources
     from furnest.sources.config import SourceConfigError
     from furnest.sources.registry import discover
     from furnest.worker.execution import default_registry
@@ -119,14 +119,17 @@ def worker() -> None:
             )
             raise typer.Exit(code=1)
         factory = make_session_factory(engine)
-        worker = Worker(settings, engine, default_registry(factory))
+        jobs = default_registry(factory)
+        worker = Worker(settings, engine, jobs)
         ingestor = ListingIngestor(
             factory,
             extractor=build_amenity_extractor(settings.llm, SqlAmenityCache(factory)),
             settings=settings.sources,
         )
         try:
-            schedule_sources(worker, discover(), settings.sources, factory, ingestor)
+            sources = discover()
+            schedule_sources(worker, sources, settings.sources, factory, ingestor)
+            register_run_now(jobs, sources, settings.sources, factory, ingestor)
         except SourceConfigError as exc:
             typer.echo(f"furnest worker: {exc}", err=True)
             raise typer.Exit(code=1) from exc

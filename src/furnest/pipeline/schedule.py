@@ -27,6 +27,14 @@ Failures aren't caught here. The worker reports them to Sentry with the ``source
 tag and calls :meth:`SourceRun.on_failure`, which bumps the failure counter and
 stores ``last_error``. It does the same for a timeout, so a stuck source shows up
 as failing even while its thread is still stuck.
+
+"Run now" on the source health page queues a ``run_source`` job instead
+(:class:`RunSourceNow`, registered by :func:`register_run_now`). It takes the same
+lease as the scheduled job, so it never overlaps a scheduled run; if the source is
+already running, that run is the one the user asked for and the job does nothing.
+It runs once (``max_attempts=1``): a manual run against a blocked site shouldn't
+keep retrying. A run that times out stores nothing, because the ingestor checks
+``cancelled``, and the ``sources`` row records the failure once ``search`` returns.
 """
 
 from __future__ import annotations
@@ -43,11 +51,13 @@ from furnest.db.source_store import SqlSourceStore
 from furnest.logging import get_logger
 from furnest.sources.base import SourceAdapter
 from furnest.sources.config import resolve_config
+from furnest.worker import locks
+from furnest.worker.runtime import LEASE_GRACE
 
 if TYPE_CHECKING:
     from furnest.pipeline.ingest import ListingIngestor
     from furnest.sources.registry import SourceRegistry
-    from furnest.worker.execution import Handler, JobContext
+    from furnest.worker.execution import Handler, JobContext, JobRegistry
 
 log = get_logger(__name__)
 
@@ -68,8 +78,17 @@ class Scheduler(Protocol):
     ) -> None: ...
 
 
+# Queue job kind for "run now"; its payload is ``{"source": <name>}``.
+RUN_SOURCE = "run_source"
+
+
 def job_name(source: str) -> str:
     return f"source:{source}"
+
+
+def lease_name(source: str) -> str:
+    """The lease held while a source runs, scheduled or on demand."""
+    return f"scheduled:{job_name(source)}"
 
 
 class SourceRun:
@@ -153,3 +172,68 @@ def schedule_sources(
         scheduled.append(config.name)
     log.info("sources_scheduled", sources=scheduled)
     return scheduled
+
+
+class RunSourceNow:
+    """The ``run_source`` queue job: run one source now, outside its schedule."""
+
+    def __init__(
+        self,
+        registry: SourceRegistry,
+        *,
+        settings: SourcesSettings,
+        session_factory: sessionmaker[Session],
+        ingestor: ListingIngestor,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
+        self._registry = registry
+        self._settings = settings
+        self._factory = session_factory
+        self._store = SqlSourceStore(session_factory)
+        self._ingestor = ingestor
+        self._clock = clock
+
+    def __call__(self, ctx: JobContext) -> None:
+        name = str(ctx.payload["source"])
+        adapter = self._registry.get(name)
+        if adapter is None:
+            msg = f"no source named {name!r}"
+            raise LookupError(msg)
+        lease, owner = lease_name(name), f"run-now:{ctx.job_id}"
+        ttl = max(ctx.deadline - self._clock(), timedelta(0)) + LEASE_GRACE
+        if not locks.acquire(self._factory, lease, owner, ttl):
+            log.info("source_run_now_skipped", source=name, reason="already running")
+            return
+        run = SourceRun(
+            adapter,
+            settings=self._settings,
+            store=self._store,
+            ingestor=self._ingestor,
+            clock=self._clock,
+        )
+        try:
+            run(ctx)
+        except Exception as exc:
+            run.on_failure(exc)
+            raise
+        finally:
+            locks.release(self._factory, lease, owner)
+
+
+def register_run_now(
+    jobs: JobRegistry,
+    registry: SourceRegistry,
+    settings: SourcesSettings,
+    session_factory: sessionmaker[Session],
+    ingestor: ListingIngestor,
+) -> None:
+    """Register :class:`RunSourceNow` with a timeout that fits the slowest source."""
+    adapters = (registry.get(name) for name in registry.names())
+    timeouts = [resolve_config(a, settings).run_timeout_seconds for a in adapters if a is not None]
+    jobs.register(
+        RUN_SOURCE,
+        RunSourceNow(
+            registry, settings=settings, session_factory=session_factory, ingestor=ingestor
+        ),
+        timeout=timedelta(seconds=max(timeouts, default=settings.run_timeout_seconds)),
+    )

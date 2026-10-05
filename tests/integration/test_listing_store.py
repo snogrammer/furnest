@@ -302,3 +302,17 @@ def test_source_runs_start_and_finish(store: SqlListingStore) -> None:
     assert newest.error == "x" * MAX_ERROR_LENGTH
     assert len(store.runs()) == 3
     assert len(store.runs(limit=1)) == 1
+
+
+def test_failure_counts_count_failed_runs_per_source(store: SqlListingStore) -> None:
+    for source, status in [
+        ("a", SourceRunStatus.FAILED),
+        ("a", SourceRunStatus.FAILED),
+        ("a", SourceRunStatus.SUCCESS),
+        ("b", SourceRunStatus.SUCCESS),
+        ("c", SourceRunStatus.FAILED),
+    ]:
+        store.finish_run(store.start_run(source, at=T0), status=status, at=T0)
+    store.start_run("d", at=T0)  # still running
+
+    assert store.failure_counts() == {"a": 2, "c": 1}

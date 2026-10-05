@@ -14,15 +14,23 @@ from sqlalchemy.orm import Session, sessionmaker
 from furnest.config import AdapterOverrides, Settings, SourcesSettings, WorkerSettings
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SqlListingStore
-from furnest.db.models import SourceRunStatus
+from furnest.db.models import Job, JobLock, JobStatus, SourceRunStatus
+from furnest.db.session import session_scope
 from furnest.db.source_store import SourceState, SqlSourceStore
 from furnest.domain import Criteria, NormalizedListing
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.pipeline.ingest import ListingIngestor
-from furnest.pipeline.schedule import SourceRun, job_name, schedule_sources
+from furnest.pipeline.schedule import (
+    RUN_SOURCE,
+    RunSourceNow,
+    SourceRun,
+    job_name,
+    register_run_now,
+    schedule_sources,
+)
 from furnest.sources import Capabilities, SourceAdapter
 from furnest.sources.registry import SourceRegistry
-from furnest.worker import locks, runtime
+from furnest.worker import locks, queue, runtime
 from furnest.worker.execution import Handler, JobContext, JobRegistry, JobTimeoutError
 from furnest.worker.runtime import Worker
 
@@ -133,7 +141,7 @@ class Stuck(Good):
 
 @pytest.fixture(autouse=True)
 def reset_adapters() -> None:
-    Good.searches = Broken.searches = Slow.searches = 0
+    Good.searches = Broken.searches = Slow.searches = OffByDefault.searches = 0
     Slow.running = Slow.peak = 0
     Stuck.release = threading.Event()
 
@@ -469,3 +477,146 @@ def test_a_timed_out_run_is_recorded_as_failed_and_stores_nothing_late(
     assert run.error.startswith("RunCancelledError:")
     assert listings.find("stuck", "1") is None
     assert (state().consecutive_failures, state().last_success_at) == (1, None)
+
+
+# --- Run now (the run_source queue job) -----------------------------------------------
+
+
+@pytest.fixture
+def run_now(
+    session_factory: sessionmaker[Session], store: SqlSourceStore, ingestor: ListingIngestor
+) -> RunSourceNow:
+    registry = SourceRegistry()
+    for adapter in (Good, Broken, OffByDefault):
+        registry.register(adapter)
+    store.ensure(registry.names())
+    return RunSourceNow(
+        registry,
+        settings=SourcesSettings(),
+        session_factory=session_factory,
+        ingestor=ingestor,
+        clock=lambda: T0,
+    )
+
+
+def run_now_context(source: str, job_id: int = 7) -> JobContext:
+    return JobContext(
+        job_id=job_id,
+        kind=RUN_SOURCE,
+        payload={"source": source},
+        attempt=1,
+        deadline=T0 + timedelta(hours=1),
+    )
+
+
+def lease_holder(session_factory: sessionmaker[Session], source: str) -> str | None:
+    with session_scope(session_factory) as session:
+        lock = session.get(JobLock, f"scheduled:{job_name(source)}")
+        return None if lock is None else lock.owner
+
+
+@pytest.mark.usefixtures("criteria")
+def test_run_now_runs_the_source_and_records_success(
+    run_now: RunSourceNow, store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    run_now(run_now_context("good"))
+
+    assert Good.searches == 1
+    state = store.get("good")
+    assert state is not None
+    assert (state.listings_found, state.last_success_at) == (2, T0)
+    assert lease_holder(session_factory, "good") is None
+
+
+@pytest.mark.usefixtures("criteria")
+def test_run_now_records_a_failure_and_reraises(
+    run_now: RunSourceNow, store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    with pytest.raises(RuntimeError, match="captcha"):
+        run_now(run_now_context("broken"))
+
+    state = store.get("broken")
+    assert state is not None
+    assert state.consecutive_failures == 1
+    assert state.last_error == "RuntimeError: blocked by captcha"
+    assert lease_holder(session_factory, "broken") is None
+
+
+@pytest.mark.usefixtures("criteria")
+def test_run_now_skips_a_source_that_is_already_running(
+    run_now: RunSourceNow, store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    locks.acquire(session_factory, "scheduled:source:good", "worker-1", timedelta(hours=2))
+
+    run_now(run_now_context("good"))
+
+    assert Good.searches == 0
+    assert lease_holder(session_factory, "good") == "worker-1"
+
+
+@pytest.mark.usefixtures("criteria")
+def test_run_now_skips_a_disabled_source(run_now: RunSourceNow) -> None:
+    run_now(run_now_context("off_by_default"))
+
+    assert OffByDefault.searches == 0
+
+
+def test_run_now_fails_for_an_unknown_source(run_now: RunSourceNow) -> None:
+    with pytest.raises(LookupError, match="nope"):
+        run_now(run_now_context("nope"))
+
+
+def test_register_run_now_uses_the_longest_source_timeout(
+    session_factory: sessionmaker[Session], ingestor: ListingIngestor
+) -> None:
+    registry = SourceRegistry()
+    for adapter in (Good, Broken):
+        registry.register(adapter)
+    settings = SourcesSettings(
+        run_timeout_seconds=600, adapters={"broken": AdapterOverrides(run_timeout_seconds=1200)}
+    )
+    jobs = JobRegistry()
+
+    register_run_now(jobs, registry, settings, session_factory, ingestor)
+
+    registration = jobs.get(RUN_SOURCE)
+    assert registration is not None
+    assert isinstance(registration.handler, RunSourceNow)
+    assert registration.timeout == timedelta(seconds=1200)
+
+
+@pytest.mark.usefixtures("criteria")
+def test_a_queued_run_now_job_runs_in_the_worker(
+    migrated_engine: Engine,
+    session_factory: sessionmaker[Session],
+    store: SqlSourceStore,
+    ingestor: ListingIngestor,
+) -> None:
+    registry = SourceRegistry()
+    registry.register(Good)
+    store.ensure(["good"])
+    jobs = JobRegistry()
+    register_run_now(jobs, registry, SourcesSettings(), session_factory, ingestor)
+    with session_scope(session_factory) as session:
+        job_id = queue.enqueue(session, RUN_SOURCE, {"source": "good"}, max_attempts=1).id
+    worker = Worker(Settings(worker=WorkerSettings.model_validate(FAST)), migrated_engine, jobs)
+    thread = threading.Thread(
+        target=worker.run, kwargs={"install_signal_handlers": False}, daemon=True
+    )
+    thread.start()
+    try:
+
+        def succeeded() -> bool:
+            with session_scope(session_factory) as session:
+                job = session.get(Job, job_id)
+                return job is not None and job.status is JobStatus.SUCCEEDED
+
+        wait_for(succeeded)
+    finally:
+        worker.request_stop()
+        thread.join(timeout=15)
+
+    assert Good.searches == 1
+    state = store.get("good")
+    assert state is not None
+    assert state.listings_found == 2

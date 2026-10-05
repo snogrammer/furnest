@@ -394,6 +394,100 @@ button.secondary {
   }
 }
 
+/* Source health page. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.sources {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.sources th,
+.sources td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.sources .error-cell {
+  max-width: 24rem;
+}
+
+.sources code,
+.sources pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.source-actions button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.source-actions button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+.health {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.health-ok,
+.health-run-success {
+  color: var(--accent);
+}
+
+.health-failing,
+.health-run-failed {
+  color: #b3261e;
+}
+
+.health-disabled,
+.health-unavailable,
+.health-never-run,
+.health-run-running {
+  color: var(--muted);
+}
+
+.runs {
+  margin-bottom: var(--space);
+}
+
+.runs summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .health-failing,
+  .health-run-failed {
+    color: #f2b8b5;
+  }
+}
+
 /* htmx request indicators; htmx's own inline styles are disabled for the CSP. */
 .htmx-indicator {
   opacity: 0;

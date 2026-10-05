@@ -220,3 +220,28 @@ def test_backoff_jitter_reduces_by_at_most_half() -> None:
     assert queue.backoff(2, base=30, cap=3600, rng=lambda: 0.5) == timedelta(seconds=45)
     for _ in range(100):
         assert timedelta(seconds=30) <= queue.backoff(2, base=30, cap=3600) <= timedelta(seconds=60)
+
+
+def test_pending_finds_unfinished_jobs_by_kind_and_payload(
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_scope(session_factory) as session:
+        done = queue.enqueue(session, "run", {"source": "a"})
+        done.status = JobStatus.SUCCEEDED
+        dead = queue.enqueue(session, "run", {"source": "a"})
+        dead.status = JobStatus.DEAD
+        queue.enqueue(session, "other", {"source": "a"})
+        queue.enqueue(session, "run", {"source": "b"})
+        wanted = queue.enqueue(session, "run", {"source": "a"}).id
+
+    for status in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.FAILED):
+        with session_scope(session_factory) as session:
+            job = session.get(Job, wanted)
+            assert job is not None
+            job.status = status
+        with session_scope(session_factory) as session:
+            found = queue.pending(session, "run", source="a")
+            assert found is not None
+            assert found.id == wanted
+    with session_scope(session_factory) as session:
+        assert queue.pending(session, "run", source="c") is None

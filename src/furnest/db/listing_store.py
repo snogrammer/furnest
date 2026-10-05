@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.models import Listing, ListingImage, PriceHistory, SourceRun, SourceRunStatus
@@ -398,6 +398,16 @@ class SqlListingStore:
                     error=None if error is None else error[:MAX_ERROR_LENGTH],
                 )
             )
+
+    def failure_counts(self) -> dict[str, int]:
+        """How many stored runs failed, per source; sources with none are left out."""
+        statement = (
+            select(SourceRun.source, func.count())
+            .where(SourceRun.status == SourceRunStatus.FAILED)
+            .group_by(SourceRun.source)
+        )
+        with session_scope(self._session_factory) as session:
+            return {source: count for source, count in session.execute(statement)}
 
     def runs(self, source: str | None = None, *, limit: int = 50) -> Sequence[SourceRunState]:
         """The most recent runs, newest first, optionally for one source."""

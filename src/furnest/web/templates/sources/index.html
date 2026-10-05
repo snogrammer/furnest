@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% macro when(at) %}{% if at %}<time datetime="{{ at.isoformat() }}">{{ at.strftime("%Y-%m-%d %H:%M UTC") }}</time>{% else %}<span class="muted">never</span>{% endif %}{% endmacro %}
+{% block title %}Sources · furnest{% endblock %}
+{% block content %}
+<h1>Sources</h1>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+{% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
+{% if not rows %}
+<p class="muted">No source adapters are installed.</p>
+{% else %}
+<div class="table-scroll">
+<table class="sources">
+  <thead>
+    <tr>
+      <th scope="col">Source</th>
+      <th scope="col">Status</th>
+      <th scope="col">Last run</th>
+      <th scope="col">Last success</th>
+      <th scope="col">Listings found</th>
+      <th scope="col">Consecutive failures</th>
+      <th scope="col">Failed runs</th>
+      <th scope="col">Last error</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}{% set s = row.state %}
+    <tr id="source-{{ row.name }}">
+      <th scope="row">{{ row.display_name }}<br><code class="muted">{{ row.name }}</code></th>
+      <td>
+        <span class="health health-{{ row.health.value | replace(' ', '-') }}">{{ row.health.value }}</span>
+        {% if row.disabled_reason %}<br><small class="muted">{{ row.disabled_reason }}</small>{% endif %}
+        {% if row.pinned %}<br><small class="muted">set in SOURCES_ADAPTERS</small>{% endif %}
+      </td>
+      <td>{{ when(s.last_run_at) }}</td>
+      <td>{{ when(s.last_success_at) }}</td>
+      <td>{{ s.listings_found }}</td>
+      <td>{{ s.consecutive_failures }}</td>
+      <td>{{ row.failed_runs }}</td>
+      <td class="error-cell">
+        {% if s.last_error %}
+        {% if s.last_error | length > 160 %}
+        <details><summary><code>{{ s.last_error | truncate(160, killwords=True) }}</code></summary><pre>{{ s.last_error }}</pre></details>
+        {% else %}<code>{{ s.last_error }}</code>{% endif %}
+        {% else %}<span class="muted">none</span>{% endif %}
+      </td>
+      <td class="source-actions">
+        {% if row.can_toggle %}
+        <form method="post" action="/sources/{{ row.name }}/enabled">
+          {{ csrf_field(request) }}
+          <input type="hidden" name="enabled" value="{{ 'false' if row.enabled else 'true' }}">
+          <button type="submit" class="secondary">{{ 'Disable' if row.enabled else 'Enable' }}</button>
+        </form>
+        {% endif %}
+        {% if row.runnable %}
+        {% if row.pending_job_id %}
+        <span class="muted">Run queued (job #{{ row.pending_job_id }})</span>
+        {% else %}
+        <form method="post" action="/sources/{{ row.name }}/run">
+          {{ csrf_field(request) }}
+          <button type="submit">Run now</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Recent runs</h2>
+{% for row in rows %}
+<details class="runs" {% if loop.first %}open{% endif %}>
+  <summary>{{ row.display_name }} <span class="muted">({{ row.runs | length }} shown)</span></summary>
+  {% if not row.runs %}
+  <p class="muted">No runs yet.</p>
+  {% else %}
+  <div class="table-scroll">
+  <table class="sources">
+    <thead>
+      <tr>
+        <th scope="col">Started</th>
+        <th scope="col">Finished</th>
+        <th scope="col">Status</th>
+        <th scope="col">Found</th>
+        <th scope="col">New</th>
+        <th scope="col">Updated</th>
+        <th scope="col">Removed</th>
+        <th scope="col">Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in row.runs %}
+      <tr>
+        <td>{{ when(run.started_at) }}</td>
+        <td>{% if run.finished_at %}{{ when(run.finished_at) }}{% else %}<span class="muted">-</span>{% endif %}</td>
+        <td><span class="health health-run-{{ run.status.value }}">{{ run.status.value }}</span></td>
+        <td>{{ run.counts.found }}</td>
+        <td>{{ run.counts.new }}</td>
+        <td>{{ run.counts.updated }}</td>
+        <td>{{ run.counts.removed }}</td>
+        <td class="error-cell">{% if run.error %}<code title="{{ run.error }}">{{ run.error | truncate(160, killwords=True) }}</code>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</details>
+{% endfor %}
+{% endif %}
+{% endblock %}
