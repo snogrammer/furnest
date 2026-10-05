@@ -6,8 +6,8 @@ saw, even if another version is activated while the job waits in the queue.
 
 The handler is deliberately thin. It loads the version, runs
 :func:`~furnest.matching.match_listing` on every listing that ``listings`` yields and
-hands each result to ``record``. Until listings and properties are stored (#22, #27)
-the default source yields nothing and the default sink discards. #28 plugs in the
+hands each result to ``record``. The default source yields nothing and the default
+sink discards. #28 plugs in stored listings (``SqlListingStore.active``) and the
 property store, which also keeps human-decided states from regressing. The handler
 checks ``ctx.cancelled`` between listings, and re-running it is harmless because
 every result is recomputed from scratch.

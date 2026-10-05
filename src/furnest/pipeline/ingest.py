@@ -1,0 +1,147 @@
+"""Listing ingestion: run one adapter, store what it found, match what changed.
+
+:class:`ListingIngestor` is what the scheduler (#23) calls for each source run.
+One run:
+
+1. records a ``source_runs`` row as ``running``;
+2. calls ``adapter.search`` with the active criteria;
+3. upserts the results (:meth:`SqlListingStore.upsert_batch`) and counts a missed
+   run for the source's listings it didn't return, marking some removed
+   (:meth:`SqlListingStore.mark_missing`);
+4. finishes the run row as ``success`` with its counts;
+5. extracts amenities and runs :func:`~furnest.matching.match_listing` for every
+   new, changed or relisted listing, and hands each result to ``record``.
+
+Step 5 runs after the write transaction has committed, because an LLM extractor can
+take seconds per listing and SQLite has a single writer. A listing whose
+extraction or matching raises is logged and skipped; the run still succeeds.
+
+If the search or the store raises, the run row is finished as ``failed`` with the
+error and the exception propagates, so the scheduler can update the ``sources``
+counters and report it. Nothing is marked missing for a failed run. Without an
+active criteria profile there is nothing to search for, so no run happens.
+
+``record`` defaults to discarding results. #28 plugs in the property store, which
+moves passing listings to ``suggested`` and removed ones to ``unavailable``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy.orm import Session, sessionmaker
+
+from furnest.config import SourcesSettings
+from furnest.db.base import utcnow
+from furnest.db.criteria_store import CriteriaRecord, CriteriaStore
+from furnest.db.listing_store import RunCounts, SqlListingStore, UpsertResult
+from furnest.db.models import SourceRunStatus
+from furnest.domain import AmenityExtractor
+from furnest.logging import get_logger
+from furnest.matching import match_listing
+from furnest.pipeline.rerun import ResultSink, discard
+from furnest.sources.base import SourceAdapter
+
+log = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class RunSummary:
+    run_id: int
+    counts: RunCounts
+    # Listings matched in step 5; less than the changed count if some failed.
+    matched: int
+    removed_ids: tuple[int, ...] = ()
+
+
+class ListingIngestor:
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session],
+        *,
+        extractor: AmenityExtractor,
+        settings: SourcesSettings,
+        record: ResultSink = discard,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> None:
+        self._listings = SqlListingStore(session_factory)
+        self._criteria = CriteriaStore(session_factory)
+        self._extractor = extractor
+        self._settings = settings
+        self._record = record
+        self._clock = clock
+
+    def run(self, adapter: SourceAdapter) -> RunSummary | None:
+        """Run ``adapter`` once; ``None`` if there is no active criteria profile."""
+        source = adapter.name
+        active = self._criteria.active()
+        if active is None:
+            log.info("ingest_skipped_no_criteria", source=source)
+            return None
+
+        run_id = self._listings.start_run(source, at=self._clock())
+        try:
+            found = adapter.search(active.criteria)
+            seen_at = self._clock()
+            upserted = self._listings.upsert_batch(source, found, seen_at=seen_at)
+            removed = self._listings.mark_missing(
+                source,
+                upserted.seen_ids,
+                at=seen_at,
+                after_runs=self._settings.remove_after_missed_runs,
+                after_hours=self._settings.remove_after_hours,
+            )
+        except Exception as exc:
+            self._listings.finish_run(
+                run_id,
+                status=SourceRunStatus.FAILED,
+                at=self._clock(),
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+
+        counts = RunCounts(
+            found=len(upserted.seen_ids),
+            new=len(upserted.new_ids),
+            updated=len(upserted.updated_ids) + len(upserted.relisted_ids),
+            removed=len(removed),
+        )
+        self._listings.finish_run(
+            run_id, status=SourceRunStatus.SUCCESS, at=self._clock(), counts=counts
+        )
+        matched = self._match_changed(source, upserted, active)
+        log.info(
+            "ingest_run",
+            source=source,
+            found=counts.found,
+            new=counts.new,
+            updated=counts.updated,
+            removed=counts.removed,
+            price_changes=upserted.price_changes,
+            matched=matched,
+        )
+        return RunSummary(run_id=run_id, counts=counts, matched=matched, removed_ids=tuple(removed))
+
+    def _match_changed(self, source: str, upserted: UpsertResult, active: CriteriaRecord) -> int:
+        matched = 0
+        for listing_id in upserted.changed_ids:
+            stored = self._listings.get(listing_id)
+            if stored is None:  # deleted since the upsert; nothing to match
+                continue
+            try:
+                amenities = self._extractor.extract(stored.listing)
+                self._listings.set_amenities(listing_id, amenities)
+                result = match_listing(
+                    stored.listing,
+                    active.criteria,
+                    criteria_version=active.version,
+                    amenities=amenities,
+                )
+                self._record(stored.listing, result)
+            except Exception:
+                log.exception("ingest_match_failed", source=source, listing_id=listing_id)
+                continue
+            matched += 1
+        return matched

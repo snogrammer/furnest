@@ -325,6 +325,10 @@ class SourcesSettings(_Group):
     # Retries after the first attempt for 429s, 5xx responses and transport errors.
     max_retries: Annotated[int, Field(ge=0)] = 3
     browser_enabled: bool = False
+    # A listing is marked removed once it has been missing from this many successful
+    # runs of its source *and* unseen for this many hours.
+    remove_after_missed_runs: PositiveInt = 3
+    remove_after_hours: PositiveInt = 24
     # Per-adapter overrides as JSON, keyed by adapter name.
     adapters: dict[
         Annotated[str, StringConstraints(pattern=ADAPTER_NAME_PATTERN)], AdapterOverrides

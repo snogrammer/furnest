@@ -46,6 +46,8 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SOURCES_BROWSER_ENABLED", "true")
     monkeypatch.setenv("SOURCES_RESPECT_ROBOTS", "false")
     monkeypatch.setenv("SOURCES_MAX_RETRIES", "5")
+    monkeypatch.setenv("SOURCES_REMOVE_AFTER_MISSED_RUNS", "4")
+    monkeypatch.setenv("SOURCES_REMOVE_AFTER_HOURS", "72")
     monkeypatch.setenv("BASE_URL", "https://furnest.example.com")
 
     settings = Settings()
@@ -57,6 +59,8 @@ def test_env_vars_are_parsed_and_coerced(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.sources.browser_enabled is True
     assert settings.sources.respect_robots is False
     assert settings.sources.max_retries == 5
+    assert settings.sources.remove_after_missed_runs == 4
+    assert settings.sources.remove_after_hours == 72
     assert str(settings.app.base_url) == "https://furnest.example.com/"
 
 
