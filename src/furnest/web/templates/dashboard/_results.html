@@ -1,0 +1,41 @@
+{% from "dashboard/_card.html" import card with context %}
+{% if oob %}{% include "dashboard/_status_input.html" %}{% endif %}
+<nav class="tabs" aria-label="Status">
+  <ul>
+    {% for t in d.tabs %}
+    <li><a href="{{ f.url(status=t.tab.key, page=1) }}" hx-get="{{ f.url(status=t.tab.key, page=1) }}"
+      {% if f.view.value == "list" and t.tab.key == f.status %}aria-current="page"{% endif %}>{{ t.tab.label }} <span class="count">{{ t.count }}</span></a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% if f.view.value == "board" %}
+<div class="board">
+  {% for col in d.columns %}
+  <section class="board-column" aria-labelledby="col-{{ col.tab.key }}">
+    <h2 id="col-{{ col.tab.key }}">{{ col.tab.label }} <span class="count">{{ col.total }}</span></h2>
+    {% for row in col.rows %}{{ card(row) }}{% else %}<p class="muted">Nothing here.</p>{% endfor %}
+    {% if col.total > col.rows | length %}
+    {% set more = f.url(status=col.tab.key, view="list", page=1) %}
+    <p class="muted">Showing {{ col.rows | length }} of {{ col.total }}. <a href="{{ more }}" hx-get="{{ more }}">Open in list</a></p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+{% if d.rows %}
+<ul class="property-list">
+  {% for row in d.rows %}<li>{{ card(row) }}</li>{% endfor %}
+</ul>
+{% if d.pages > 1 %}
+<nav class="pagination" aria-label="Pages">
+  {% if d.page > 1 %}<a rel="prev" href="{{ f.url(page=d.page - 1) }}" hx-get="{{ f.url(page=d.page - 1) }}">Previous</a>{% endif %}
+  <span>Page {{ d.page }} of {{ d.pages }} · {{ d.total }} properties</span>
+  {% if d.page < d.pages %}<a rel="next" href="{{ f.url(page=d.page + 1) }}" hx-get="{{ f.url(page=d.page + 1) }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% elif f.q %}
+<p class="muted empty">No {{ f.tab.label | lower }} properties match “{{ f.q }}”.</p>
+{% else %}
+<p class="muted empty">No {{ f.tab.label | lower }} properties.</p>
+{% endif %}
+{% endif %}

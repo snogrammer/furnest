@@ -321,7 +321,8 @@ main {
 
 .criteria-form button,
 .rerun button,
-.version button {
+.version button,
+.filters button {
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--accent);
   border-radius: var(--radius);
@@ -529,6 +530,226 @@ button.secondary {
   .health-failing,
   .health-run-failed {
     color: #f2b8b5;
+  }
+}
+
+/* Dashboard: filters, status tabs, property cards, list and board. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space) / 2);
+  margin-bottom: var(--space);
+}
+
+.filters input[type="search"],
+.filters select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.filter-search {
+  flex: 1 1 14rem;
+}
+
+.filter-search input {
+  width: 100%;
+}
+
+.segmented {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented label {
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.segmented label:has(input:checked) {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.segmented input {
+  margin: 0 0.25rem 0 0;
+}
+
+.tabs {
+  overflow-x: auto;
+  margin-bottom: var(--space);
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs ul {
+  display: flex;
+  gap: calc(var(--space) / 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.tabs a {
+  display: inline-block;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.tabs a[aria-current="page"] {
+  border-bottom-color: var(--accent);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.count {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.property-list {
+  display: grid;
+  gap: calc(var(--space) / 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.property-card {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.property-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--space) / 2);
+}
+
+.property-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.property-card .facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--space);
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+
+.property-card .facts dt {
+  display: inline;
+  color: var(--muted);
+}
+
+.property-card .facts dt::after {
+  content: " ";
+}
+
+.property-card .facts dd {
+  display: inline;
+  margin: 0;
+  font-weight: 600;
+}
+
+.property-card .address,
+.property-card .card-foot {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.property-card .card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--space);
+}
+
+.status {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.status-suggested,
+.status-approved {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.status-won {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* A strip of columns that scrolls inside itself on narrow screens. */
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(16rem, 85%);
+  gap: var(--space);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 0.5rem;
+}
+
+.board-column {
+  display: grid;
+  align-content: start;
+  gap: calc(var(--space) / 2);
+  scroll-snap-align: start;
+}
+
+.board-column h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space);
+  margin-top: var(--space);
+  font-size: 0.875rem;
+}
+
+.empty {
+  padding: var(--space) 0;
+}
+
+@media (min-width: 40rem) {
+  .board {
+    grid-auto-columns: minmax(16rem, 1fr);
   }
 }
 

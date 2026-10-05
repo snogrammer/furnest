@@ -2,5 +2,31 @@
 {% block title %}Dashboard · furnest{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<p class="muted">Nothing to show yet. Matched properties will appear here once sources are configured.</p>
+<form id="filters" class="filters" method="get" action="/" role="search"
+  hx-get="/" hx-target="#results" hx-push-url="true" hx-trigger="submit, change" hx-sync="this:replace">
+  {% include "dashboard/_status_input.html" %}
+  <label class="filter-search">
+    <span class="visually-hidden">Search</span>
+    <input type="search" name="q" value="{{ f.q }}" maxlength="200" placeholder="Search title or address" autocomplete="off"
+      hx-get="/" hx-trigger="input changed delay:300ms, search" hx-include="closest form" hx-sync="closest form:replace">
+  </label>
+  <label>
+    <span class="visually-hidden">Sort</span>
+    <select name="sort">
+      {% for value, label in sorts.items() %}
+      <option value="{{ value.value }}" {% if f.sort == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <fieldset class="segmented">
+    <legend class="visually-hidden">Layout</legend>
+    <label><input type="radio" name="view" value="list" {% if f.view.value == "list" %}checked{% endif %}> List</label>
+    <label><input type="radio" name="view" value="board" {% if f.view.value == "board" %}checked{% endif %}> Board</label>
+  </fieldset>
+  <label class="check"><input type="checkbox" name="snoozed" value="true" {% if f.snoozed %}checked{% endif %}> Include snoozed</label>
+  <button type="submit" class="secondary">Apply</button>
+</form>
+<div id="results" hx-target="#results" hx-push-url="true" aria-live="polite">
+{% include "dashboard/_results.html" %}
+</div>
 {% endblock %}

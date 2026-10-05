@@ -1,0 +1,19 @@
+{% macro card(row) %}{% set p = row.property %}{% set l = row.listing %}
+<article class="property-card" id="property-{{ p.id }}">
+  <header>
+    <h3>{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</h3>
+    <span class="status status-{{ p.status.value }}">{{ status_label(p.status) }}</span>
+  </header>
+  <dl class="facts">
+    <div><dt>Score</dt><dd>{% if p.score is not none %}{{ p.score }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Price</dt><dd>{% if l and l.monthly_price %}{{ l.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}</dd></div>
+    {% set bb = beds_baths(l.beds, l.baths) if l else none %}
+    {% if bb %}<div><dt>Size</dt><dd>{{ bb }}</dd></div>{% endif %}
+  </dl>
+  {% if p.address %}<p class="address">{{ p.address }}</p>{% endif %}
+  <p class="card-foot">
+    {% if l %}<a href="{{ l.url }}" rel="noopener noreferrer" target="_blank">View on {{ source_name(l.source) }}</a>{% endif %}
+    {% if p.snoozed_until %}<small class="muted">Snoozed until <time datetime="{{ p.snoozed_until.isoformat() }}">{{ p.snoozed_until.strftime("%Y-%m-%d %H:%M UTC") }}</time></small>{% endif %}
+  </p>
+</article>
+{% endmacro %}

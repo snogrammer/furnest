@@ -1,7 +1,7 @@
 """Dashboard auth end to end: login, sessions, Bearer, CSRF, rate limiting, proxies."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import pytest
 from fastapi import FastAPI
@@ -241,7 +241,7 @@ def test_wrong_bearer_is_not_rescued_by_session(authed_client: TestClient) -> No
 
 
 @pytest.fixture
-def post_client(migrated_engine: Engine, login: LoginFn) -> TestClient:
+def post_client(migrated_engine: Engine, login: LoginFn) -> Iterator[TestClient]:
     """An authed client on an app with an extra protected POST route."""
     from fastapi import APIRouter, Depends
 
@@ -253,9 +253,9 @@ def post_client(migrated_engine: Engine, login: LoginFn) -> TestClient:
         return {"ok": True}
 
     app.include_router(router)
-    client = TestClient(app)
-    login(client)
-    return client
+    with TestClient(app) as client:
+        login(client)
+        yield client
 
 
 def test_missing_csrf_is_rejected(post_client: TestClient) -> None:

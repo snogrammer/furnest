@@ -24,9 +24,16 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
   of its listings is active, and :meth:`SqlPropertyStore.restore_relisted` moves it
   back when one returns.
 * :meth:`SqlPropertyStore.snooze` hides a property from the default views
-  (:meth:`SqlPropertyStore.query`) until ``snoozed_until``.
+  (:meth:`SqlPropertyStore.query` and :meth:`SqlPropertyStore.search`) until
+  ``snoozed_until``.
   :meth:`SqlPropertyStore.unsnooze_expired` clears expired snoozes and queues the
   notification again for a property still waiting on a decision.
+
+The dashboard reads through :meth:`SqlPropertyStore.search`, one page at a time,
+and :meth:`SqlPropertyStore.status_counts`. Each row carries a summary of the
+property's primary listing: its lowest-id active listing, or its lowest-id listing
+if none is active. Text search matches that listing's title and the property's
+address.
 
 A snooze isn't a status change, but who snoozed matters, so it is still written to
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
@@ -37,15 +44,16 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.models import AuditEvent, CriteriaVersion, Listing, Property
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
-from furnest.domain import Actor, AddressParser, NormalizedListing, PropertyStatus
+from furnest.domain import Actor, AddressParser, Money, NormalizedListing, PropertyStatus
 from furnest.domain.status import TRANSITIONS, check_transition
 from furnest.matching import MatchResult
 from furnest.worker import queue
@@ -101,6 +109,40 @@ class AuditEntry:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class ListingSummary:
+    """What a list of properties shows about the listing behind each one."""
+
+    id: int
+    source: str
+    url: str
+    title: str
+    monthly_price: Money | None
+    beds: int | None
+    baths: float | None
+    removed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class PropertyRow:
+    property: PropertyState
+    # None only for a property whose listings were all deleted.
+    listing: ListingSummary | None
+
+
+@dataclass(frozen=True)
+class PropertyPage:
+    rows: list[PropertyRow]
+    # Matching properties across all pages.
+    total: int
+
+
+class PropertySort(StrEnum):
+    SCORE = "score"  # best first; unscored last
+    PRICE = "price"  # cheapest monthly price first; unknown last
+    NEWEST = "newest"
+
+
 def _state(row: Property) -> PropertyState:
     return PropertyState(
         id=row.id,
@@ -115,6 +157,73 @@ def _state(row: Property) -> PropertyState:
         status_changed_at=row.status_changed_at,
         created_at=row.created_at,
     )
+
+
+def _summary(row: Listing | None) -> ListingSummary | None:
+    if row is None:
+        return None
+    price = None
+    if row.monthly_price_minor is not None and row.currency is not None:
+        price = Money(amount_minor=row.monthly_price_minor, currency=row.currency)
+    return ListingSummary(
+        id=row.id,
+        source=row.source,
+        url=row.url,
+        title=row.title,
+        monthly_price=price,
+        beds=row.beds,
+        baths=row.baths,
+        removed_at=row.removed_at,
+    )
+
+
+def _visible(now: datetime) -> ColumnElement[bool]:
+    """Not snoozed past ``now``."""
+    return Property.snoozed_until.is_(None) | (Property.snoozed_until <= now)
+
+
+def _primary_listing_id() -> ScalarSelect[int]:
+    return (
+        select(Listing.id)
+        .where(Listing.property_id == Property.id)
+        .order_by(Listing.removed_at.is_not(None), Listing.id)
+        .limit(1)
+        .correlate(Property)
+        .scalar_subquery()
+    )
+
+
+def _filtered[*Ts](
+    statement: Select[*Ts],
+    *,
+    now: datetime,
+    statuses: Iterable[PropertyStatus] | None,
+    text: str | None,
+    include_snoozed: bool,
+) -> Select[*Ts]:
+    """``statement`` over properties joined to their primary listing, filtered."""
+    statement = statement.select_from(Property).outerjoin(
+        Listing, Listing.id == _primary_listing_id()
+    )
+    if statuses is not None:
+        statement = statement.where(Property.status.in_(list(statuses)))
+    if not include_snoozed:
+        statement = statement.where(_visible(now))
+    if text:
+        statement = statement.where(
+            or_(
+                Listing.title.icontains(text, autoescape=True),
+                Property.address.icontains(text, autoescape=True),
+            )
+        )
+    return statement
+
+
+_ORDER = {
+    PropertySort.SCORE: (Property.score.desc().nulls_last(),),
+    PropertySort.PRICE: (Listing.monthly_price_minor.asc().nulls_last(),),
+    PropertySort.NEWEST: (),
+}
 
 
 def _entry(row: AuditEvent) -> AuditEntry:
@@ -405,11 +514,65 @@ class SqlPropertyStore:
         if statuses is not None:
             statement = statement.where(Property.status.in_(list(statuses)))
         if not include_snoozed:
-            statement = statement.where(
-                Property.snoozed_until.is_(None) | (Property.snoozed_until <= now)
-            )
+            statement = statement.where(_visible(now))
         with session_scope(self._session_factory) as session:
             return [_state(row) for row in session.scalars(statement)]
+
+    def search(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+        offset: int = 0,
+        statuses: Iterable[PropertyStatus] | None = None,
+        text: str | None = None,
+        sort: PropertySort = PropertySort.SCORE,
+        include_snoozed: bool = False,
+    ) -> PropertyPage:
+        """One page of properties with their primary listing, for the dashboard.
+
+        Filters as :meth:`query` does, plus ``text``: a case-insensitive substring
+        of the listing title or the address (``%`` and ``_`` match themselves).
+        Ties in ``sort`` fall back to newest first, so paging is stable.
+        """
+        statuses = None if statuses is None else list(statuses)
+
+        def filtered[*Ts](statement: Select[*Ts]) -> Select[*Ts]:
+            return _filtered(
+                statement,
+                now=now,
+                statuses=statuses,
+                text=text,
+                include_snoozed=include_snoozed,
+            )
+
+        statement = (
+            filtered(select(Property, Listing))
+            .order_by(*_ORDER[sort], Property.created_at.desc(), Property.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        with session_scope(self._session_factory) as session:
+            total = session.scalar(filtered(select(func.count(Property.id)))) or 0
+            rows = [
+                PropertyRow(property=_state(prop), listing=_summary(listing))
+                for prop, listing in session.execute(statement)
+            ]
+            return PropertyPage(rows=rows, total=total)
+
+    def status_counts(
+        self, *, now: datetime, text: str | None = None, include_snoozed: bool = False
+    ) -> dict[PropertyStatus, int]:
+        """How many properties :meth:`search` would find in each status (absent: none)."""
+        statement = _filtered(
+            select(Property.status, func.count(Property.id)),
+            now=now,
+            statuses=None,
+            text=text,
+            include_snoozed=include_snoozed,
+        ).group_by(Property.status)
+        with session_scope(self._session_factory) as session:
+            return {status: count for status, count in session.execute(statement)}
 
     def get(self, property_id: int) -> PropertyState | None:
         with session_scope(self._session_factory) as session:
