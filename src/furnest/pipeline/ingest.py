@@ -10,12 +10,15 @@ One run:
    run for the source's listings it didn't return, marking some removed
    (:meth:`SqlListingStore.mark_missing`);
 4. finishes the run row as ``success`` with its counts;
-5. extracts amenities and runs :func:`~furnest.matching.match_listing` for every
+5. hands the ids it marked removed to ``on_removed`` and the relisted ones to
+   ``on_relisted``;
+6. extracts amenities and runs :func:`~furnest.matching.match_listing` for every
    new, changed or relisted listing, and hands each result to ``record``.
 
-Step 5 runs after the write transaction has committed, because an LLM extractor can
-take seconds per listing and SQLite has a single writer. A listing whose
-extraction or matching raises is logged and skipped; the run still succeeds.
+Steps 5 and 6 run after the write transaction has committed, because an LLM
+extractor can take seconds per listing and SQLite has a single writer. A hook, or
+a listing's extraction or matching, that raises is logged and skipped; the run
+still succeeds.
 
 If the search or the store raises, the run row is finished as ``failed`` with the
 error and the exception propagates, so the scheduler can update the ``sources``
@@ -24,16 +27,18 @@ active criteria profile there is nothing to search for, so no run happens.
 
 ``cancelled`` is set by the worker when the run times out. A search that returns
 after that is thrown away (the run fails with :class:`RunCancelledError`) rather than
-stored late, and step 5 stops at the next listing.
+stored late, and step 6 stops at the next listing.
 
-``record`` defaults to discarding results. #28 plugs in the property store, which
-moves passing listings to ``suggested`` and removed ones to ``unavailable``.
+The hooks default to doing nothing. The worker plugs in
+:class:`~furnest.pipeline.properties.PropertyPipeline`, which moves passing listings'
+properties to ``suggested`` and properties whose listings are all gone to
+``unavailable``.
 """
 
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -50,7 +55,13 @@ from furnest.matching import match_listing
 from furnest.pipeline.rerun import ResultSink, discard
 from furnest.sources.base import SourceAdapter
 
+ListingIdsHook = Callable[[Sequence[int]], None]
+
 log = get_logger(__name__)
+
+
+def ignore(_listing_ids: Sequence[int]) -> None:
+    return None
 
 
 class RunCancelledError(Exception):
@@ -74,6 +85,8 @@ class ListingIngestor:
         extractor: AmenityExtractor,
         settings: SourcesSettings,
         record: ResultSink = discard,
+        on_removed: ListingIdsHook = ignore,
+        on_relisted: ListingIdsHook = ignore,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._listings = SqlListingStore(session_factory)
@@ -81,6 +94,8 @@ class ListingIngestor:
         self._extractor = extractor
         self._settings = settings
         self._record = record
+        self._on_removed = on_removed
+        self._on_relisted = on_relisted
         self._clock = clock
 
     def run(
@@ -126,6 +141,8 @@ class ListingIngestor:
         self._listings.finish_run(
             run_id, status=SourceRunStatus.SUCCESS, at=self._clock(), counts=counts
         )
+        self._call_hook("removed", self._on_removed, source, removed)
+        self._call_hook("relisted", self._on_relisted, source, upserted.relisted_ids)
         matched = self._match_changed(source, upserted, active, cancelled)
         log.info(
             "ingest_run",
@@ -138,6 +155,17 @@ class ListingIngestor:
             matched=matched,
         )
         return RunSummary(run_id=run_id, counts=counts, matched=matched, removed_ids=tuple(removed))
+
+    @staticmethod
+    def _call_hook(
+        what: str, hook: ListingIdsHook, source: str, listing_ids: Sequence[int]
+    ) -> None:
+        if not listing_ids:
+            return
+        try:
+            hook(listing_ids)
+        except Exception:
+            log.exception("ingest_hook_failed", source=source, hook=what, listing_ids=listing_ids)
 
     def _match_changed(
         self,
@@ -163,7 +191,7 @@ class ListingIngestor:
                     criteria_version=active.version,
                     amenities=amenities,
                 )
-                self._record(stored.listing, result)
+                self._record(stored, result)
             except Exception:
                 log.exception("ingest_match_failed", source=source, listing_id=listing_id)
                 continue

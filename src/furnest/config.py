@@ -346,6 +346,15 @@ class SourcesSettings(_Group):
     ] = Field(default_factory=dict)
 
 
+class PipelineSettings(_Group):
+    model_config = SettingsConfigDict(env_prefix="PIPELINE_")
+
+    # How long the Snooze button hides a property from the default views.
+    snooze_hours: PositiveInt = 72
+    # How often the worker looks for expired snoozes to bring back.
+    unsnooze_interval_minutes: PositiveInt = 15
+
+
 class Settings(BaseModel):
     """All environment settings, one attribute per group."""
 
@@ -365,6 +374,7 @@ class Settings(BaseModel):
     geocoding: GeocodingSettings = Field(default_factory=GeocodingSettings)
     reverse_image: ReverseImageSettings = Field(default_factory=ReverseImageSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
+    pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
     @property
     def database_url(self) -> str:

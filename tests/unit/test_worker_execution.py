@@ -119,7 +119,8 @@ def test_registering_a_kind_twice_is_an_error() -> None:
         registry.register("send", lambda _ctx: None)
 
 
-def test_default_registry_runs_criteria_reruns() -> None:
+def test_default_registry_runs_criteria_reruns_and_takes_notifications() -> None:
     registry = default_registry(sessionmaker())
     assert registry.get("rerun_criteria") is not None
+    assert registry.get("notify") is not None
     assert registry.get("anything") is None

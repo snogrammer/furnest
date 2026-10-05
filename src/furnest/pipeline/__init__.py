@@ -1,1 +1,1 @@
-"""Property status state machine and audit events. Built in P4."""
+"""Ingestion, source scheduling, criteria re-runs and the property pipeline."""

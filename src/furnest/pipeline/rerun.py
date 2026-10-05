@@ -5,12 +5,14 @@ active at the time, so a run explains its results against the exact profile the 
 saw, even if another version is activated while the job waits in the queue.
 
 The handler is deliberately thin. It loads the version, runs
-:func:`~furnest.matching.match_listing` on every listing that ``listings`` yields and
-hands each result to ``record``. The default source yields nothing and the default
-sink discards. #28 plugs in stored listings (``SqlListingStore.active``) and the
-property store, which also keeps human-decided states from regressing. The handler
-checks ``ctx.cancelled`` between listings, and re-running it is harmless because
-every result is recomputed from scratch.
+:func:`~furnest.matching.match_listing` on every listing that ``listings`` yields,
+with the amenities extracted when the listing was ingested, and hands each result to
+``record``. The default source yields nothing and the default sink discards. The
+worker plugs in the active stored listings (``SqlListingStore.active``) and
+:class:`~furnest.pipeline.properties.PropertyPipeline`, which updates scores without
+moving any property a person already decided on. The handler checks
+``ctx.cancelled`` between listings, and re-running it is harmless because every
+result is recomputed from scratch.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.criteria_store import CriteriaStore
-from furnest.domain import NormalizedListing
+from furnest.db.listing_store import StoredListing
 from furnest.logging import get_logger
 from furnest.matching import MatchResult, match_listing
 
@@ -30,17 +32,17 @@ if TYPE_CHECKING:
 
 RERUN_CRITERIA = "rerun_criteria"
 
-ListingSource = Callable[[], Iterable[NormalizedListing]]
-ResultSink = Callable[[NormalizedListing, MatchResult], None]
+ListingSource = Callable[[], Iterable[StoredListing]]
+ResultSink = Callable[[StoredListing, MatchResult], None]
 
 log = get_logger(__name__)
 
 
-def no_listings() -> Iterable[NormalizedListing]:
+def no_listings() -> Iterable[StoredListing]:
     return ()
 
 
-def discard(_listing: NormalizedListing, _result: MatchResult) -> None:
+def discard(_listing: StoredListing, _result: MatchResult) -> None:
     return None
 
 
@@ -60,10 +62,13 @@ class RerunCriteria:
         version = int(ctx.payload["criteria_version"])
         criteria = self._store.get(version).criteria
         scored = 0
-        for listing in self._listings():
+        for stored in self._listings():
             if ctx.cancelled.is_set():
                 log.info("criteria_rerun_cancelled", criteria_version=version, scored=scored)
                 return
-            self._record(listing, match_listing(listing, criteria, criteria_version=version))
+            result = match_listing(
+                stored.listing, criteria, criteria_version=version, amenities=stored.amenities
+            )
+            self._record(stored, result)
             scored += 1
         log.info("criteria_rerun", criteria_version=version, scored=scored)

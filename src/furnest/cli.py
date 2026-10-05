@@ -101,6 +101,7 @@ def worker() -> None:
     from furnest.db.session import make_session_factory
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.pipeline.ingest import ListingIngestor
+    from furnest.pipeline.properties import PropertyPipeline, schedule_unsnooze
     from furnest.pipeline.schedule import register_run_now, schedule_sources
     from furnest.sources.config import SourceConfigError
     from furnest.sources.registry import discover
@@ -119,13 +120,18 @@ def worker() -> None:
             )
             raise typer.Exit(code=1)
         factory = make_session_factory(engine)
-        jobs = default_registry(factory)
+        pipeline = PropertyPipeline(factory, settings=settings.pipeline)
+        jobs = default_registry(factory, pipeline)
         worker = Worker(settings, engine, jobs)
         ingestor = ListingIngestor(
             factory,
             extractor=build_amenity_extractor(settings.llm, SqlAmenityCache(factory)),
             settings=settings.sources,
+            record=pipeline.record,
+            on_removed=pipeline.removed,
+            on_relisted=pipeline.relisted,
         )
+        schedule_unsnooze(worker, pipeline, settings.pipeline)
         try:
             sources = discover()
             schedule_sources(worker, sources, settings.sources, factory, ingestor)

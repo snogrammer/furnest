@@ -1,21 +1,25 @@
 """ListingIngestor: one source run from search through storage to matching."""
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import SourcesSettings
 from furnest.db.criteria_store import CriteriaStore
-from furnest.db.listing_store import RunCounts, SqlListingStore
-from furnest.db.models import SourceRunStatus
-from furnest.domain import Amenity, AmenityResult, Criteria, NormalizedListing
+from furnest.db.listing_store import RunCounts, SqlListingStore, StoredListing
+from furnest.db.models import Job, SourceRunStatus
+from furnest.db.property_store import NOTIFY, PropertyState, SqlPropertyStore
+from furnest.db.session import session_scope
+from furnest.domain import Amenity, AmenityResult, Criteria, NormalizedListing, PropertyStatus
 from furnest.matching import MatchResult
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.pipeline.ingest import ListingIngestor, RunCancelledError
+from furnest.pipeline.properties import PropertyPipeline
 from furnest.sources.base import AdapterConfig, SourceAdapter
 
 pytestmark = pytest.mark.integration
@@ -74,8 +78,8 @@ class Recorder:
     def __init__(self) -> None:
         self.results: list[tuple[str, MatchResult]] = []
 
-    def __call__(self, listing: NormalizedListing, result: MatchResult) -> None:
-        self.results.append((listing.source_id, result))
+    def __call__(self, stored: StoredListing, result: MatchResult) -> None:
+        self.results.append((stored.listing.source_id, result))
 
 
 @pytest.fixture
@@ -233,8 +237,8 @@ def test_matching_stops_once_cancelled(
     CriteriaStore(session_factory).save(Criteria(furnished_required=False), created_by="cli")
     cancelled = threading.Event()
 
-    def cancel_after_first(listing: NormalizedListing, result: MatchResult) -> None:
-        recorder(listing, result)
+    def cancel_after_first(stored: StoredListing, result: MatchResult) -> None:
+        recorder(stored, result)
         cancelled.set()
 
     ingestor = ListingIngestor(
@@ -279,3 +283,105 @@ def test_one_failing_listing_does_not_fail_the_run(
     assert summary.matched == 1
     assert [sid for sid, _ in recorder.results] == ["good"]
     assert SqlListingStore(session_factory).runs()[0].status is SourceRunStatus.SUCCESS
+
+
+# --- Wired to the property pipeline ----------------------------------------------
+
+
+@pytest.fixture
+def wired(session_factory: sessionmaker[Session], clock: Clock) -> ListingIngestor:
+    CriteriaStore(session_factory).save(
+        Criteria(min_beds=2, furnished_required=False), created_by="cli"
+    )
+    pipeline = PropertyPipeline(session_factory, clock=clock)
+    return ListingIngestor(
+        session_factory,
+        extractor=KeywordAmenityExtractor(),
+        settings=SourcesSettings(remove_after_missed_runs=1, remove_after_hours=1),
+        record=pipeline.record,
+        on_removed=pipeline.removed,
+        on_relisted=pipeline.relisted,
+        clock=clock,
+    )
+
+
+def property_of(session_factory: sessionmaker[Session], source_id: str) -> PropertyState:
+    stored = SqlListingStore(session_factory).find("fake", source_id)
+    assert stored is not None
+    state = SqlPropertyStore(session_factory).for_listing(stored.id)
+    assert state is not None
+    return state
+
+
+def notify_jobs(session_factory: sessionmaker[Session]) -> list[int]:
+    with session_scope(session_factory) as session:
+        jobs = session.scalars(select(Job).where(Job.kind == NOTIFY).order_by(Job.id))
+        return [job.payload["property_id"] for job in jobs]
+
+
+def test_a_passing_listing_is_suggested_and_a_failing_one_stays_new(
+    wired: ListingIngestor, adapter: FakeAdapter, session_factory: sessionmaker[Session]
+) -> None:
+    adapter.results = [listing("a", beds=3), listing("b", beds=1)]
+
+    wired.run(adapter)
+
+    a, b = property_of(session_factory, "a"), property_of(session_factory, "b")
+    assert (a.status, b.status) == (PropertyStatus.SUGGESTED, PropertyStatus.NEW)
+    assert a.score is not None
+    assert b.score is not None
+    assert notify_jobs(session_factory) == [a.id]
+
+
+def test_a_property_whose_listing_disappears_is_unavailable_until_it_returns(
+    wired: ListingIngestor,
+    adapter: FakeAdapter,
+    clock: Clock,
+    session_factory: sessionmaker[Session],
+) -> None:
+    adapter.results = [listing("a", beds=3), listing("b", beds=3)]
+    wired.run(adapter)
+    clock.now = T0 + timedelta(hours=2)
+    adapter.results = [listing("b", beds=3)]
+
+    wired.run(adapter)
+
+    assert property_of(session_factory, "a").status is PropertyStatus.UNAVAILABLE
+    assert property_of(session_factory, "b").status is PropertyStatus.SUGGESTED
+
+    clock.now = T0 + timedelta(hours=3)
+    adapter.results = [listing("a", beds=3), listing("b", beds=3)]
+    wired.run(adapter)
+
+    assert property_of(session_factory, "a").status is PropertyStatus.SUGGESTED
+    # Back where it was, so the user isn't notified a second time.
+    assert len(notify_jobs(session_factory)) == 2
+
+
+def test_a_failing_hook_does_not_fail_the_run(
+    session_factory: sessionmaker[Session], adapter: FakeAdapter, clock: Clock
+) -> None:
+    CriteriaStore(session_factory).save(Criteria(furnished_required=False), created_by="cli")
+    calls: list[str] = []
+
+    def explode(_ids: Sequence[int]) -> None:
+        calls.append("hook")
+        raise RuntimeError("boom")
+
+    ingestor = ListingIngestor(
+        session_factory,
+        extractor=KeywordAmenityExtractor(),
+        settings=SourcesSettings(remove_after_missed_runs=1, remove_after_hours=1),
+        on_removed=explode,
+        clock=clock,
+    )
+    adapter.results = [listing("a")]
+    ingestor.run(adapter)
+    clock.now = T0 + timedelta(hours=2)
+    adapter.results = []
+
+    summary = ingestor.run(adapter)
+
+    assert summary is not None
+    assert summary.counts.removed == 1
+    assert calls == ["hook"]

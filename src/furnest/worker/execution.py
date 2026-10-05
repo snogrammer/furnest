@@ -18,11 +18,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.base import utcnow
+
+if TYPE_CHECKING:
+    from furnest.pipeline.properties import PropertyPipeline
 
 
 class JobTimeoutError(Exception):
@@ -126,10 +129,18 @@ class JobRegistry:
         return max([default, *(r.timeout for r in self._handlers.values() if r.timeout)])
 
 
-def default_registry(session_factory: sessionmaker[Session]) -> JobRegistry:
+def default_registry(
+    session_factory: sessionmaker[Session], pipeline: "PropertyPipeline | None" = None
+) -> JobRegistry:
     """Handlers the worker ships with. Later issues register theirs here."""
+    from furnest.db.listing_store import SqlListingStore
+    from furnest.pipeline import properties
     from furnest.pipeline.rerun import RERUN_CRITERIA, RerunCriteria
 
+    pipeline = pipeline or properties.PropertyPipeline(session_factory)
     registry = JobRegistry()
-    registry.register(RERUN_CRITERIA, RerunCriteria(session_factory))
+    listings = SqlListingStore(session_factory)
+    rerun = RerunCriteria(session_factory, listings=listings.active, record=pipeline.record)
+    registry.register(RERUN_CRITERIA, rerun)
+    registry.register(properties.NOTIFY, properties.notify_not_configured)
     return registry
