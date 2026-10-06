@@ -77,14 +77,17 @@ def match_message(
     base_url: str,
     source_name: Callable[[str], str] = str,
     disabled: Collection[DiscordAction] = (),
+    superseded: bool = False,
 ) -> JsonObject:
     """The create/edit-message payload for ``detail``.
 
     ``base_url`` is the dashboard's public URL (``BASE_URL``). ``source_name`` turns an
     adapter key into its display name. Buttons in ``disabled`` are shown greyed out.
+    ``superseded`` marks a message that a newer post of the same property replaced.
     """
+    embed = match_embed(detail, base_url=base_url, source_name=source_name, superseded=superseded)
     return {
-        "embeds": [match_embed(detail, base_url=base_url, source_name=source_name)],
+        "embeds": [embed],
         "components": [action_row(detail.property.id, disabled=disabled)],
         "allowed_mentions": {"parse": []},
     }
@@ -95,6 +98,7 @@ def match_embed(
     *,
     base_url: str,
     source_name: Callable[[str], str] = str,
+    superseded: bool = False,
 ) -> JsonObject:
     state = detail.property
     primary = detail.primary
@@ -131,6 +135,8 @@ def match_embed(
     footer = f"furnest · {_status_text(state.status)}"
     if state.snoozed_until is not None:
         footer += f" · snoozed until {state.snoozed_until:%Y-%m-%d}"
+    if superseded:
+        footer += " · reposted"
     embed["footer"] = {"text": truncate(footer, "footer")}
     embed["timestamp"] = state.status_changed_at.isoformat()
     return embed

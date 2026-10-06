@@ -1,4 +1,4 @@
-"""PropertyPipeline: snooze length, the unsnooze job and the notify placeholder."""
+"""PropertyPipeline: snooze length and the unsnooze job."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -11,11 +11,9 @@ from furnest.db.listing_store import SqlListingStore
 from furnest.domain import Actor, NormalizedListing
 from furnest.matching import MatchResult
 from furnest.pipeline.properties import (
-    NOTIFY,
     UNSNOOZE_EXPIRED,
     PropertyPipeline,
     UnsnoozeExpired,
-    notify_not_configured,
     schedule_unsnooze,
 )
 from furnest.worker.execution import Handler, JobContext
@@ -89,7 +87,3 @@ def test_unsnooze_is_scheduled_at_the_configured_interval(
     job = scheduler.jobs[UNSNOOZE_EXPIRED]
     assert isinstance(job["handler"], UnsnoozeExpired)
     assert job["interval"] == timedelta(minutes=5)
-
-
-def test_notifications_are_consumed_until_discord_exists() -> None:
-    notify_not_configured(ctx(NOTIFY, {"property_id": 1}))

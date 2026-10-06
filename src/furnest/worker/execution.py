@@ -139,12 +139,13 @@ def default_registry(
 ) -> JobRegistry:
     """Handlers the worker ships with. Later issues register theirs here.
 
-    ``settings`` configures the Discord message sync; without them it reads the
-    environment. ``source_name`` turns an adapter key into its display name.
+    ``settings`` configures the Discord poster and message sync; without them it
+    reads the environment. ``source_name`` turns an adapter key into its display name.
     """
     from furnest.config import Settings
     from furnest.db.listing_store import SqlListingStore
     from furnest.email.inquiry import INQUIRY_CREATE, inquiry_not_implemented
+    from furnest.notify.post import NotifyPost
     from furnest.notify.sync import MESSAGE_SYNC_JOB, MessageSync
     from furnest.pipeline import properties
     from furnest.pipeline.rerun import RERUN_CRITERIA, RerunCriteria
@@ -154,10 +155,14 @@ def default_registry(
     listings = SqlListingStore(session_factory)
     rerun = RerunCriteria(session_factory, listings=listings.active, record=pipeline.record)
     registry.register(RERUN_CRITERIA, rerun)
-    registry.register(properties.NOTIFY, properties.notify_not_configured)
+    settings = settings or Settings()
+    registry.register(
+        properties.NOTIFY,
+        NotifyPost(session_factory, settings=settings, source_name=source_name),
+    )
     registry.register(
         MESSAGE_SYNC_JOB,
-        MessageSync(session_factory, settings=settings or Settings(), source_name=source_name),
+        MessageSync(session_factory, settings=settings, source_name=source_name),
     )
     registry.register(INQUIRY_CREATE, inquiry_not_implemented)
     return registry

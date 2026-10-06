@@ -44,6 +44,12 @@ audit event points at the note with ``payload["note_id"]``.
 A snooze isn't a status change, but who snoozed matters, so it is still written to
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
 
+Once the notify job has posted a property to Discord
+(:meth:`SqlPropertyStore.attach_message`), every status change and every snooze or
+unsnooze also queues a :data:`MESSAGE_SYNC_JOB` (:func:`enqueue_sync`) in the same
+transaction. It doesn't matter whether the change came from the dashboard, the API,
+a button or the system: the message always ends up showing the property as it is.
+
 :func:`transition_in`, :func:`deny_in` and :func:`snooze_in` do the same work as the
 store methods, but inside a session the caller already holds. The Discord
 interactions endpoint uses them, so a button's state change commits or rolls back
@@ -64,7 +70,7 @@ from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.listing_store import PricePoint, price_points, stored_listing
-from furnest.db.models import AuditEvent, CriteriaVersion, Listing, Note, Property
+from furnest.db.models import AuditEvent, CriteriaVersion, JobStatus, Listing, Note, Property
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
 from furnest.domain import Actor, AddressParser, Money, NormalizedListing, PropertyStatus
@@ -72,8 +78,13 @@ from furnest.domain.status import TRANSITIONS, check_transition
 from furnest.matching import MatchResult
 from furnest.worker import queue
 
-# The job that tells the user about a suggested property; consumed by P5's Discord poster.
+# The job that tells the user about a suggested property: furnest.notify.post posts it.
 NOTIFY = "notify"
+# The job that redraws a property's Discord message from the database: furnest.notify.sync.
+MESSAGE_SYNC_JOB = "discord.message_sync"
+# Jobs that haven't started yet. A running one may already have read the old state,
+# so it doesn't count when deciding whether another notify or sync is needed.
+_NOT_STARTED = (JobStatus.QUEUED, JobStatus.FAILED)
 
 
 # The longest note body accepted, in characters, after stripping.
@@ -112,6 +123,8 @@ class PropertyState:
     manual_contact_required: bool
     status_changed_at: datetime
     created_at: datetime
+    # The match message in Discord, once the notify job has posted it.
+    discord_message_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -221,6 +234,7 @@ def _state(row: Property) -> PropertyState:
         manual_contact_required=row.manual_contact_required,
         status_changed_at=row.status_changed_at,
         created_at=row.created_at,
+        discord_message_id=row.discord_message_id,
     )
 
 
@@ -401,6 +415,39 @@ def _criteria_version_id(session: Session, version: int | None) -> int | None:
 FINISHED = frozenset({PropertyStatus.ARCHIVED, PropertyStatus.WON, PropertyStatus.LOST})
 
 
+def enqueue_sync(
+    session: Session, property_id: int, *, channel_id: str | None, message_id: str | None
+) -> None:
+    """Queue an edit of the message to match the property, unless one is already queued.
+
+    Does nothing without a channel and message id, for example after a click that
+    carried no message, or for a property that was never posted.
+    """
+    if channel_id is None or message_id is None:
+        return
+    queued = queue.pending(session, MESSAGE_SYNC_JOB, statuses=_NOT_STARTED, message_id=message_id)
+    if queued is not None:
+        return
+    queue.enqueue(
+        session,
+        MESSAGE_SYNC_JOB,
+        {"property_id": property_id, "channel_id": channel_id, "message_id": message_id},
+    )
+
+
+def _sync_message(session: Session, row: Property) -> None:
+    """Queue a redraw of the property's Discord message, if it has one."""
+    enqueue_sync(
+        session, row.id, channel_id=row.discord_channel_id, message_id=row.discord_message_id
+    )
+
+
+def _enqueue_notify(session: Session, property_id: int) -> None:
+    """Queue a :data:`NOTIFY` job for the property, unless one is already waiting."""
+    if queue.pending(session, NOTIFY, statuses=_NOT_STARTED, property_id=property_id) is None:
+        queue.enqueue(session, NOTIFY, {"property_id": property_id})
+
+
 def _apply_transition(
     session: Session,
     row: Property,
@@ -431,6 +478,7 @@ def _apply_transition(
             created_at=at,
         )
     )
+    _sync_message(session, row)
 
 
 def _audit_in_place(
@@ -454,6 +502,7 @@ def _audit_in_place(
             created_at=at,
         )
     )
+    _sync_message(session, row)
 
 
 def transition_in(
@@ -645,7 +694,7 @@ class SqlPropertyStore:
                     detail="match",
                     payload={"score": result.score, "criteria_version": result.criteria_version},
                 )
-                queue.enqueue(session, NOTIFY, {"property_id": row.id})
+                _enqueue_notify(session, row.id)
             return _state(row)
 
     def mark_gone(self, listing_ids: Iterable[int], *, at: datetime) -> list[int]:
@@ -735,8 +784,29 @@ class SqlPropertyStore:
                     session, row, actor=Actor.SYSTEM, at=now, payload={"unsnoozed": True}
                 )
                 if row.status is PropertyStatus.SUGGESTED:
-                    queue.enqueue(session, NOTIFY, {"property_id": row.id})
+                    _enqueue_notify(session, row.id)
             return [row.id for row in rows]
+
+    def attach_message(
+        self, property_id: int, *, channel_id: str, message_id: str, rendered: PropertyState
+    ) -> None:
+        """Remember the Discord message just posted for the property.
+
+        ``rendered`` is the state the message was drawn from. If the property changed
+        while the message was being posted, a sync is queued so the message catches
+        up. A message posted earlier (a notification repeated after a snooze) is
+        synced too, which marks it as reposted.
+        """
+        with session_scope(self._session_factory) as session:
+            row = session.get(Property, property_id)
+            if row is None:
+                raise PropertyNotFoundError(property_id)
+            if row.discord_message_id != message_id:
+                _sync_message(session, row)
+            row.discord_channel_id = channel_id
+            row.discord_message_id = message_id
+            if (row.status, row.snoozed_until) != (rendered.status, rendered.snoozed_until):
+                _sync_message(session, row)
 
     def query(
         self,

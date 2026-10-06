@@ -19,7 +19,7 @@ outcome.
 """
 
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -58,14 +58,24 @@ def enqueue(
     return job
 
 
-def pending(session: Session, kind: str, **payload: str | int) -> Job | None:
-    """The oldest job of ``kind`` that hasn't finished yet and whose payload has these
-    string or integer values, or ``None``. Lets the web process avoid queueing the same
-    work twice.
+# A job in one of these states will still run (or is running).
+_UNFINISHED = (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.FAILED)
+
+
+def pending(
+    session: Session,
+    kind: str,
+    *,
+    statuses: Iterable[JobStatus] = _UNFINISHED,
+    **payload: str | int,
+) -> Job | None:
+    """The oldest job of ``kind`` in ``statuses`` (by default, any that hasn't finished
+    yet) whose payload has these string or integer values, or ``None``. Lets the web
+    process avoid queueing the same work twice.
     """
     statement = select(Job).where(
         Job.kind == kind,
-        Job.status.in_([JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.FAILED]),
+        Job.status.in_(list(statuses)),
         *(
             (
                 Job.payload[key].as_string()

@@ -13,9 +13,8 @@ the hooks :class:`~furnest.pipeline.ingest.ListingIngestor` and
 * :meth:`~PropertyPipeline.snooze` hides a property for ``PIPELINE_SNOOZE_HOURS``,
   and :class:`UnsnoozeExpired`, a scheduled worker job, brings it back afterwards.
 
-Until the Discord integration (P5) registers its own handler, ``notify`` jobs are
-consumed by :func:`notify_not_configured`, which only logs them. P5 can still post
-every ``suggested`` property that has no Discord message yet.
+``notify`` jobs are consumed by :class:`furnest.notify.post.NotifyPost`, which posts
+the property to Discord.
 """
 
 from __future__ import annotations
@@ -43,7 +42,6 @@ __all__ = [
     "UNSNOOZE_EXPIRED",
     "PropertyPipeline",
     "UnsnoozeExpired",
-    "notify_not_configured",
     "schedule_unsnooze",
 ]
 
@@ -108,8 +106,3 @@ def schedule_unsnooze(
         UnsnoozeExpired(pipeline),
         interval=timedelta(minutes=settings.unsnooze_interval_minutes),
     )
-
-
-def notify_not_configured(ctx: JobContext) -> None:
-    """Placeholder ``notify`` handler until Discord notifications exist (P5)."""
-    log.info("notify_skipped", property_id=ctx.payload.get("property_id"))

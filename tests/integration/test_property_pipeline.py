@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SqlListingStore
-from furnest.db.models import CriteriaVersion, Job, Listing, Property
+from furnest.db.models import CriteriaVersion, Job, JobStatus, Listing, Property
 from furnest.db.property_store import (
     NOTIFY,
     PropertyNotFoundError,
@@ -72,6 +72,11 @@ def notify_jobs(session_factory: sessionmaker[Session]) -> list[int]:
     with session_scope(session_factory) as session:
         jobs = session.scalars(select(Job).where(Job.kind == NOTIFY).order_by(Job.id))
         return [job.payload["property_id"] for job in jobs]
+
+
+def finish_jobs(session_factory: sessionmaker[Session]) -> None:
+    with session_scope(session_factory) as session:
+        session.execute(update(Job).values(status=JobStatus.SUCCEEDED))
 
 
 def set_removed(
@@ -404,6 +409,7 @@ def test_expired_snoozes_are_cleared_and_suggested_ones_notified_again(
     store.snooze(waiting.id, until=T0 + HOUR, actor=Actor.DISCORD, at=T0)
     store.snooze(decided.id, until=T0 + HOUR, actor=Actor.DISCORD, at=T0)
     store.snooze(later.id, until=T0 + 5 * HOUR, actor=Actor.DISCORD, at=T0)
+    finish_jobs(session_factory)  # the first notifications went out
 
     assert store.unsnooze_expired(now=T0 + HOUR) == [waiting.id, decided.id]
 
@@ -414,6 +420,30 @@ def test_expired_snoozes_are_cleared_and_suggested_ones_notified_again(
     last = store.audit_events(waiting.id)[-1]
     assert (last.actor, last.payload) == (Actor.SYSTEM, {"unsnoozed": True})
     assert store.unsnooze_expired(now=T0 + 2 * HOUR) == []
+
+
+def test_a_notification_still_waiting_to_run_is_not_queued_twice(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    waiting = store.record_match(add_listing("a"), passing(), at=T0)
+    store.snooze(waiting.id, until=T0 + HOUR, actor=Actor.DISCORD, at=T0)
+
+    store.unsnooze_expired(now=T0 + HOUR)
+
+    assert notify_jobs(session_factory) == [waiting.id]
+
+
+def test_a_running_notification_does_not_stop_the_next_one(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    waiting = store.record_match(add_listing("a"), passing(), at=T0)
+    store.snooze(waiting.id, until=T0 + HOUR, actor=Actor.DISCORD, at=T0)
+    with session_scope(session_factory) as session:
+        session.execute(update(Job).values(status=JobStatus.RUNNING))
+
+    store.unsnooze_expired(now=T0 + HOUR)
+
+    assert notify_jobs(session_factory) == [waiting.id, waiting.id]
 
 
 def test_an_unavailable_property_with_no_audit_of_it_is_not_restored(

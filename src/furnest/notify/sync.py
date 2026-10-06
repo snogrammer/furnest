@@ -1,9 +1,10 @@
 """Keeping a match message in Discord in step with its property.
 
-When someone acts on a property from Discord, the interactions endpoint changes the
-state in the database and queues a :data:`MESSAGE_SYNC_JOB` (:func:`enqueue_sync`)
-in the same transaction. The endpoint can't edit the message itself: it has to
-answer within 3 seconds and must never wait on the network.
+Whenever a posted property's status or snooze changes, from the dashboard, the API,
+a Discord button or the system, the property store queues a
+:data:`MESSAGE_SYNC_JOB` (:func:`enqueue_sync`) in the same transaction. Nothing
+edits the message in-line: the interactions endpoint has to answer within 3 seconds,
+and no request should wait on Discord.
 
 The worker runs :class:`MessageSync`. It renders the property's message again from
 the database, with the buttons that no longer apply greyed out
@@ -11,6 +12,10 @@ the database, with the buttons that no longer apply greyed out
 The edit always renders the property's current state, so a late or repeated job is
 harmless. The bot token is used rather than the interaction token, which expires
 after 15 minutes, so a job the queue retries later still works.
+
+A message the property no longer points at was replaced by a repost (see
+:mod:`furnest.notify.post`). It is drawn with every button greyed out and marked as
+reposted, so only the newest message is live.
 
 * Discord not configured: the job logs and does nothing.
 * Message deleted (404): logged and dropped, since there is nothing to edit.
@@ -25,37 +30,18 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import Settings
-from furnest.db.property_store import SqlPropertyStore
+from furnest.db.property_store import MESSAGE_SYNC_JOB, SqlPropertyStore, enqueue_sync
 from furnest.logging import get_logger
+from furnest.notify.custom_ids import DiscordAction
 from furnest.notify.discord import DiscordClient, DiscordNotFoundError, discord_client
 from furnest.notify.embeds import disabled_actions, match_message
-from furnest.worker import queue
 
 if TYPE_CHECKING:
     from furnest.worker.execution import JobContext
 
 log = get_logger(__name__)
 
-MESSAGE_SYNC_JOB = "discord.message_sync"
-
-
-def enqueue_sync(
-    session: Session, property_id: int, *, channel_id: str | None, message_id: str | None
-) -> None:
-    """Queue an edit of the message to match the property, unless one is already queued.
-
-    Does nothing without a channel and message id, for example after a click that
-    carried no message.
-    """
-    if channel_id is None or message_id is None:
-        return
-    if queue.pending(session, MESSAGE_SYNC_JOB, message_id=message_id) is not None:
-        return
-    queue.enqueue(
-        session,
-        MESSAGE_SYNC_JOB,
-        {"property_id": property_id, "channel_id": channel_id, "message_id": message_id},
-    )
+__all__ = ["MESSAGE_SYNC_JOB", "MessageSync", "enqueue_sync"]
 
 
 class MessageSync:
@@ -90,11 +76,13 @@ class MessageSync:
         if client is None:
             log.info("discord_sync_skipped", property_id=property_id, reason="not configured")
             return
+        superseded = detail.property.discord_message_id not in (None, message_id)
         payload = match_message(
             detail,
             base_url=self._base_url,
             source_name=self._source_name,
-            disabled=disabled_actions(detail.property),
+            disabled=frozenset(DiscordAction) if superseded else disabled_actions(detail.property),
+            superseded=superseded,
         )
         with client:
             try:
