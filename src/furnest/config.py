@@ -273,6 +273,15 @@ class SmtpSettings(_Group):
     password: SecretStr | None = None
     security: SmtpSecurity = SmtpSecurity.STARTTLS
     from_address: EmailStr | None = None
+    # Display name in the From header, e.g. "Jane Doe" <furnest@example.com>.
+    from_name: str | None = None
+    # Connect/read timeout for each SMTP operation; keep it well below the job timeout.
+    timeout_seconds: PositiveFloat = 30.0
+
+    @property
+    def configured(self) -> bool:
+        """True when there is a server to send through and an address to send from."""
+        return self.host is not None and self.from_address is not None
 
 
 class ImapSettings(_Group):

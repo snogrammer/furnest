@@ -7,6 +7,19 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "aiosmtpd"
+version = "1.4.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "atpublic" },
+    { name = "attrs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c4/ca/b2b7cc880403ef24be77383edaadfcf0098f5d7b9ddbf3e2c17ef0a6af0d/aiosmtpd-1.4.6.tar.gz", hash = "sha256:5a811826e1a5a06c25ebc3e6c4a704613eb9a1bcf6b78428fbe865f4f6c9a4b8", size = 152775, upload-time = "2024-05-18T11:37:50.029Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/39/d401756df60a8344848477d54fdf4ce0f50531f6149f3b8eaae9c06ae3dc/aiosmtpd-1.4.6-py3-none-any.whl", hash = "sha256:72c99179ba5aa9ae0abbda6994668239b64a5ce054471955fe75f581d2592475", size = 154263, upload-time = "2024-05-18T11:37:47.877Z" },
+]
+
+[[package]]
 name = "alembic"
 version = "1.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -125,6 +138,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/73/f534b881c99c1267470a68536c395a5a5e1c36dde74b5f498ec88513cfc5/ast_serialize-0.12.0-cp39-abi3-win32.whl", hash = "sha256:a84ad8c86cb3b1afeaa006ac9574d66e255e1bb3048377f6593915fa16002d03", size = 1125756, upload-time = "2026-10-02T15:13:12.484Z" },
     { url = "https://files.pythonhosted.org/packages/aa/58/39afbc3b4bba9d45aa6704cb26390dc07c58ab95c5ff9e19f2f0de23079c/ast_serialize-0.12.0-cp39-abi3-win_amd64.whl", hash = "sha256:7c20ea5edc5824d9215248c76e58f4fe1a4bf1844b7b697daf1cfabfb2d4d79c", size = 1165562, upload-time = "2026-10-02T15:13:13.922Z" },
     { url = "https://files.pythonhosted.org/packages/90/95/952edccca32e34a3e41bfc54398ce60e0d78c82429e8601da20446fa9933/ast_serialize-0.12.0-cp39-abi3-win_arm64.whl", hash = "sha256:549ae89b7b631ce24bc62dc976a8e35445ffd29529df8ec5958e01fb589d938c", size = 1137965, upload-time = "2026-10-02T15:13:15.518Z" },
+]
+
+[[package]]
+name = "atpublic"
+version = "8.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/da/105fb4e9e966f61eedef4cee081a99a8bf18792ad56aa64467618e8b23c0/atpublic-8.0.1.tar.gz", hash = "sha256:4cc00a2b8ea5645a268edc310667302fe1de2b91aba88d0bd634c0e6564f6ef4", size = 27401, upload-time = "2026-09-21T23:15:08.96Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/53/6864ee88ca91a6b1ecc0c0dff9fb6114628a416f3786e0dd80bddbce207f/atpublic-8.0.1-py3-none-any.whl", hash = "sha256:8696fe5b26ec7c8ea521cc8e5487495ba1d3530a9b9a9dc350c8f4f82848f77c", size = 11111, upload-time = "2026-09-21T23:15:08.112Z" },
+]
+
+[[package]]
+name = "attrs"
+version = "26.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055, upload-time = "2026-03-19T14:22:25.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
 ]
 
 [[package]]
@@ -436,6 +467,7 @@ browser = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aiosmtpd" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -470,6 +502,7 @@ provides-extras = ["browser"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aiosmtpd", specifier = ">=1.4.6" },
     { name = "mypy", specifier = ">=1.11" },
     { name = "pre-commit", specifier = ">=3.8" },
     { name = "pytest", specifier = ">=8.3" },

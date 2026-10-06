@@ -19,6 +19,7 @@ from furnest.config import (
     RuntimeSettings,
     Settings,
     SmtpSecurity,
+    SmtpSettings,
     env_var_names,
     get_settings,
 )
@@ -350,3 +351,20 @@ def test_discord_interaction_max_age(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert discord.public_key == "aB" * 32
     assert discord.interaction_max_age_seconds == 60
+
+
+def test_smtp_defaults_and_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    smtp = SmtpSettings()
+    assert smtp.from_name is None
+    assert smtp.timeout_seconds == 30.0
+    assert smtp.configured is False
+
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    assert SmtpSettings().configured is False  # no From address yet
+    monkeypatch.setenv("SMTP_FROM_ADDRESS", "furnest@example.com")
+    monkeypatch.setenv("SMTP_FROM_NAME", "furnest")
+    monkeypatch.setenv("SMTP_TIMEOUT_SECONDS", "5")
+    smtp = SmtpSettings()
+    assert smtp.configured is True
+    assert smtp.from_name == "furnest"
+    assert smtp.timeout_seconds == 5.0

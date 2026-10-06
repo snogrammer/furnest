@@ -40,6 +40,8 @@ class JobContext:
     payload: dict[str, Any]
     attempt: int
     deadline: datetime
+    # Attempts the queue allows; ``attempt == max_attempts`` is the last try.
+    max_attempts: int = 1
     cancelled: threading.Event = field(default_factory=threading.Event)
 
 
@@ -139,12 +141,14 @@ def default_registry(
 ) -> JobRegistry:
     """Handlers the worker ships with. Later issues register theirs here.
 
-    ``settings`` configures the Discord poster, message sync, alerts and digest; without them it
-    reads the environment. ``source_name`` turns an adapter key into its display name.
+    ``settings`` configures the Discord poster, message sync, alerts, digest and email
+    sender; without them it reads the environment. ``source_name`` turns an adapter key
+    into its display name.
     """
     from furnest.config import Settings
     from furnest.db.listing_store import SqlListingStore
     from furnest.email.inquiry import INQUIRY_CREATE, inquiry_not_implemented
+    from furnest.email.send import EMAIL_SEND, EmailSend
     from furnest.notify.alerts import SOURCE_ALERT_JOB, SourceAlertPost
     from furnest.notify.digest import DIGEST_JOB, DigestPost
     from furnest.notify.post import NotifyPost
@@ -169,4 +173,5 @@ def default_registry(
     registry.register(SOURCE_ALERT_JOB, SourceAlertPost(settings=settings, source_name=source_name))
     registry.register(DIGEST_JOB, DigestPost(session_factory, settings=settings))
     registry.register(INQUIRY_CREATE, inquiry_not_implemented)
+    registry.register(EMAIL_SEND, EmailSend(session_factory, settings=settings))
     return registry

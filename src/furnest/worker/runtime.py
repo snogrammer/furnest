@@ -334,6 +334,7 @@ class Worker:
                 payload=job.payload,
                 attempt=job.attempt,
                 deadline=utcnow() + timeout,
+                max_attempts=job.max_attempts,
             )
             outcome = run_with_timeout(registration.handler, ctx, abandon=self._abandon)
 
