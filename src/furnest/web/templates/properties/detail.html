@@ -19,6 +19,22 @@
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
   {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+  {% if notice %}<p class="flash" role="status">{{ notice }}</p>{% endif %}
+  {% if can_inquire %}
+  <form method="post" action="/properties/{{ p.id }}/inquire" class="inquire-form" hx-boost="true">
+    {{ csrf_field(request) }}
+    <button type="submit"{% if not smtp_configured %} disabled aria-describedby="inquire-hint"{% endif %}>Inquire</button>
+    {% if not smtp_configured %}<small id="inquire-hint" class="muted">Set up SMTP (SMTP_HOST, SMTP_FROM_ADDRESS) to send inquiries.</small>{% endif %}
+  </form>
+  {% endif %}
+  {% if inquiry %}
+  <p class="inquiry-pending">
+    {% if inquiry.status.value == "draft" %}An inquiry draft is waiting for review.
+    {% elif inquiry.status.value == "failed" %}The inquiry couldn't be sent.
+    {% else %}The inquiry is being sent.{% endif %}
+    {% if inquiry.status.value in ("draft", "failed") %}<a href="/inquiries#inquiry-{{ inquiry.id }}">Review it</a>{% endif %}
+  </p>
+  {% endif %}
   {% set moves = actions | rejectattr(0, "equalto", archived) | list %}
   {% if actions %}
   <div class="status-actions" role="group" aria-label="Change status">
@@ -154,7 +170,25 @@
 
   <section aria-labelledby="emails">
     <h2 id="emails">Email log</h2>
-    <p class="muted">Inquiries and replies will show here once email is set up (P6).</p>
+    {% if emails %}
+    <ol class="email-log">
+      {% for e in emails | reverse %}
+      <li id="email-{{ e.id }}">
+        <details>
+          <summary>
+            <span class="status status-{{ e.status.value }}">{{ e.status.value | capitalize }}</span>
+            {{ e.subject }}
+            <small class="muted">{% if e.direction.value == "inbound" %}from {{ e.from_address }}{% else %}to {{ e.to_address or "(no address)" }}{% endif %} · {{ when(e.sent_at or e.created_at) }}</small>
+          </summary>
+          {% if e.error %}<p class="form-error">{{ e.error }}</p>{% endif %}
+          <pre class="email-body">{{ e.body_rendered }}</pre>
+        </details>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">No emails yet.</p>
+    {% endif %}
   </section>
 
   <section aria-labelledby="enrichment">

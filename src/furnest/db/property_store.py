@@ -274,6 +274,13 @@ def _primary_listing_id() -> ScalarSelect[int]:
     )
 
 
+def primary_listing(session: Session, property_id: int) -> Listing | None:
+    """The property's primary listing: its lowest-id active one, else its lowest-id one."""
+    return session.scalars(
+        select(Listing).where(Listing.property_id == property_id).order_by(*_LISTING_ORDER)
+    ).first()
+
+
 def _filtered[*Ts](
     statement: Select[*Ts],
     *,

@@ -1098,3 +1098,43 @@ button.secondary {
 .data-table form {
   margin: 0;
 }
+
+/* The inquiry review queue: one card per draft. */
+.inquiry {
+  margin-block: var(--space);
+  padding: var(--space);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.inquiry h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.inquiry .criteria-form {
+  margin-bottom: 0.5rem;
+}
+
+.inquire-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+
+.email-log {
+  list-style: none;
+  padding: 0;
+}
+
+.email-log li {
+  padding-block: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.email-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

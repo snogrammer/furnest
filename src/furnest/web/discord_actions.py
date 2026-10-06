@@ -12,7 +12,8 @@ of the same interaction id is acknowledged without running the handler again.
   (:func:`~furnest.db.property_store.deny_in`).
 * **Inquire** approves a ``suggested`` property first, then queues an
   :data:`~furnest.email.inquiry.INQUIRY_CREATE` job, unless one is already queued
-  for it. That job drafts the email and respects ``INQUIRY_MODE``.
+  for it (:func:`~furnest.email.inquiry.request_inquiry_in`, which the dashboard
+  shares). That job drafts the email and respects ``INQUIRY_MODE``.
 * **Snooze** hides the property for ``PIPELINE_SNOOZE_HOURS``.
 
 Every change is audited with the Discord actor and the clicking user's name and id.
@@ -43,7 +44,7 @@ from furnest.db.property_store import (
     transition_in,
 )
 from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, allowed_targets
-from furnest.email.inquiry import INQUIRY_CREATE
+from furnest.email.inquiry import request_inquiry_in
 from furnest.notify.custom_ids import DiscordAction, encode_custom_id
 from furnest.notify.embeds import APPROVABLE, INQUIRABLE
 from furnest.notify.interactions import (
@@ -57,7 +58,6 @@ from furnest.notify.interactions import (
 )
 from furnest.notify.sync import enqueue_sync
 from furnest.web.discord_dispatch import InteractionDispatcher
-from furnest.worker import queue
 
 # The Deny modal's one text input.
 REASON_INPUT = "reason"
@@ -124,25 +124,13 @@ class ButtonActions:
             return _rejected(
                 session, interaction, f"Can't send an inquiry for this property: it is {_s(row)}."
             )
-        if row.status is PropertyStatus.SUGGESTED:
-            transition_in(
-                session,
-                property_id,
-                PropertyStatus.APPROVED,
-                actor=Actor.DISCORD,
-                at=self._clock(),
-                detail=interaction.actor_detail,
-            )
-        if queue.pending(session, INQUIRY_CREATE, property_id=property_id) is None:
-            queue.enqueue(
-                session,
-                INQUIRY_CREATE,
-                {
-                    "property_id": property_id,
-                    "actor": Actor.DISCORD.value,
-                    "actor_detail": interaction.actor_detail,
-                },
-            )
+        request_inquiry_in(
+            session,
+            property_id,
+            actor=Actor.DISCORD,
+            at=self._clock(),
+            detail=interaction.actor_detail,
+        )
         return _synced(session, interaction)
 
     def snooze(self, session: Session, interaction: Interaction) -> JsonObject:

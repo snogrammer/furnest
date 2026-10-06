@@ -51,6 +51,7 @@ from furnest.web.routes import (
     discord,
     email_templates,
     health,
+    inquiries,
     pages,
     sources,
 )
@@ -115,6 +116,7 @@ def create_app(
         pages.router,
         criteria.router,
         email_templates.router,
+        inquiries.router,
         sources.router,
     ):
         app.include_router(html_router, include_in_schema=False)

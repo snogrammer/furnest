@@ -6,6 +6,10 @@ queues an ``email.send`` job in the same transaction. The job moves it to ``sent
 or to ``failed`` when the server refuses it outright or the queue runs out of
 retries. ``error`` keeps the last failure either way.
 
+An inquiry in review mode starts as a ``draft`` (``furnest.email.inquiry``): the
+rendered text, waiting in the dashboard's review queue. Sending it turns the same
+row ``queued``, so the log keeps one row per inquiry whatever the mode.
+
 ``message_id`` is generated once, when the row is created, so every retry sends the
 same Message-ID header. Replies quote it in In-Reply-To/References, which is how
 the IMAP poller (#44) will match them; it logs those as ``inbound`` rows.
@@ -26,6 +30,7 @@ class EmailDirection(StrEnum):
 
 
 class EmailStatus(StrEnum):
+    DRAFT = "draft"  # an inquiry waiting for review; not sent until someone sends it
     QUEUED = "queued"  # waiting to be sent, or between retries (see ``error``)
     SENT = "sent"
     FAILED = "failed"  # refused permanently, or out of retries
@@ -51,7 +56,8 @@ class Email(Base):
         ),
         default=EmailDirection.OUTBOUND,
     )
-    to_address: Mapped[str] = mapped_column(String(320))
+    # NULL only on a draft whose listing has no email address.
+    to_address: Mapped[str | None] = mapped_column(String(320))
     from_address: Mapped[str] = mapped_column(String(320))
     subject: Mapped[str] = mapped_column(Text)
     body_rendered: Mapped[str] = mapped_column(Text)

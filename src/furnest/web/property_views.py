@@ -218,15 +218,25 @@ ACTION_LABELS: dict[PropertyStatus, str] = {
 }
 
 
+# Moves that belong to the inquiry flow, which has its own buttons: Inquire drafts
+# the email, and the review queue sends or discards it. A plain status button would
+# leave a property drafted with no draft, or sent with nothing sent.
+_INQUIRY_MOVES = frozenset({S.INQUIRY_DRAFTED, S.INQUIRY_SENT})
+
+
 def status_actions(status: PropertyStatus) -> list[tuple[PropertyStatus, str]]:
     """The detail page's status buttons: every move the dashboard may make.
 
-    Deny is left out; it has its own form, with an optional reason.
+    Deny is left out; it has its own form, with an optional reason. So are the
+    inquiry flow's moves (see ``_INQUIRY_MOVES``), and leaving ``inquiry_drafted``
+    other than by archiving: the review queue's Discard does that.
     """
     return [
         (to, ACTION_LABELS[to])
         for to in allowed_targets(status, Actor.DASHBOARD)
         if to is not S.DENIED
+        and to not in _INQUIRY_MOVES
+        and (status is not S.INQUIRY_DRAFTED or to is S.ARCHIVED)
     ]
 
 

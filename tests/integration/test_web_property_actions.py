@@ -91,7 +91,10 @@ def last_audit_actor(store: SqlPropertyStore, property_id: int) -> Actor:
     ("status", "buttons", "deny"),
     [
         (S.SUGGESTED, ["approved", "archived"], True),
-        (S.APPROVED, ["inquiry_drafted", "archived"], True),
+        # The inquiry flow's moves go through Inquire and the review queue instead.
+        (S.APPROVED, ["archived"], True),
+        (S.INQUIRY_DRAFTED, ["archived"], False),
+        (S.INQUIRY_SENT, ["in_progress", "responded", "lost", "archived"], False),
         (S.DENIED, ["approved", "archived"], False),
         (S.WON, ["archived"], False),
         (S.UNAVAILABLE, ["archived"], False),

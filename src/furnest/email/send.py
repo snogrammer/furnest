@@ -3,7 +3,8 @@
 The row from :func:`furnest.db.email_store.queue_email` already has the text and
 the Message-ID; this job only delivers it and records the outcome.
 
-* Already ``sent`` (a retried or duplicate job): nothing to do.
+* Already ``sent`` (a retried or duplicate job), or a ``draft`` nobody has sent
+  yet: nothing to do. A ``failed`` row is sent again if its job is re-queued.
 * SMTP not configured: the attempt is recorded and the job raises, so the queue
   retries. Configuring SMTP and restarting the worker lets it go out.
 * The server refuses it permanently (5xx): the row is ``failed`` and the job ends
@@ -38,6 +39,8 @@ __all__ = ["EMAIL_SEND", "EmailSend", "Sender"]
 
 log = get_logger(__name__)
 
+_NOT_TO_SEND = frozenset({EmailStatus.SENT, EmailStatus.DRAFT})
+
 
 class Sender(Protocol):
     def send(self, message: EmailMessage) -> None: ...
@@ -60,8 +63,8 @@ class EmailSend:
     def __call__(self, ctx: JobContext) -> None:
         email_id = int(ctx.payload["email_id"])
         email = self._store.get(email_id)
-        if email is None or email.status is EmailStatus.SENT:
-            log.info("email_send_skipped", email_id=email_id, reason="missing or already sent")
+        if email is None or email.status in _NOT_TO_SEND or email.to_address is None:
+            log.info("email_send_skipped", email_id=email_id, reason="missing, sent or a draft")
             return
         final = ctx.attempt >= ctx.max_attempts
         if not self._smtp.configured:
@@ -98,5 +101,6 @@ class EmailSend:
             if permanent:
                 return
             raise
+        # For an inquiry, this also moves the property to inquiry_sent.
         self._store.mark_sent(email_id)
         log.info("email_sent", email_id=email_id, recipient_domain=recipient_domain)

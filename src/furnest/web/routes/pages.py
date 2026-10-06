@@ -9,6 +9,11 @@ JavaScript. With htmx the form and the tab, page and view links ask for the
 results fragment only (``HX-Request``) and push the URL, so back and reload keep
 working. A page past the last one shows the last page.
 
+The detail page also asks for an inquiry (Inquire, :func:`inquire`): it approves a
+suggested property and queues the job that drafts the email, as the Discord button
+does. While the property is ``inquiry_drafted`` the page links to the draft in the
+review queue (``/inquiries``), and the email log lists every email about it.
+
 A post redirects back to the detail page (303). An empty or too long note
 re-renders the page with the error (422); a deny or status change the state
 machine forbids re-renders it with 409. The status buttons only offer allowed
@@ -30,16 +35,22 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.responses import Response
 
+from furnest.config import INQUIRY_MODE, InquiryMode, RuntimeSettings
 from furnest.db.base import utcnow
+from furnest.db.email_store import SqlEmailStore, StoredEmail
+from furnest.db.models import EmailDirection, Property
 from furnest.db.property_store import (
     MAX_NOTE_LENGTH,
     PropertyNotFoundError,
     PropertySort,
     SqlPropertyStore,
 )
-from furnest.db.session import make_session_factory
+from furnest.db.session import make_session_factory, session_scope
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, beds_baths
 from furnest.domain.status import TRANSITIONS
+from furnest.email.inquiry import request_inquiry_in
+from furnest.notify.embeds import INQUIRABLE
 from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
 from furnest.web.csrf import require_csrf
@@ -131,6 +142,7 @@ def _render_detail(
     property_id: int,
     *,
     error: str | None = None,
+    notice: str | None = None,
     note: str = "",
     reason: str = "",
     status_code: int = 200,
@@ -138,11 +150,19 @@ def _render_detail(
     detail = _store(request).detail(property_id)
     if detail is None:
         raise HTTPException(status_code=404)
+    emails = SqlEmailStore(make_session_factory(request.app.state.engine)).for_property(property_id)
+    status = detail.property.status
     context = {
         "d": detail,
         "p": detail.property,
         "can_deny": PropertyStatus.DENIED in TRANSITIONS[detail.property.status],
-        "actions": status_actions(detail.property.status),
+        "actions": status_actions(status),
+        "can_inquire": status in INQUIRABLE,
+        "smtp_configured": request.app.state.settings.smtp.configured,
+        "emails": emails,
+        # The draft (or failed send) waiting in the review queue.
+        "inquiry": _open_inquiry(status, emails),
+        "notice": notice,
         "archived": PropertyStatus.ARCHIVED,
         "error": error,
         "note": note,
@@ -160,8 +180,30 @@ def _render_detail(
 
 
 @router.api_route("/properties/{property_id}", methods=["GET", "HEAD"], response_class=HTMLResponse)
-def property_detail(request: Request, property_id: int) -> Response:
-    return _render_detail(request, property_id)
+def property_detail(
+    request: Request,
+    property_id: int,
+    inquiry: Annotated[str | None, Query(max_length=20)] = None,
+) -> Response:
+    notice = None
+    if inquiry == "requested":
+        settings = request.app.state.settings
+        factory = make_session_factory(request.app.state.engine)
+        mode = RuntimeSettings(settings, SqlSettingsStore(factory)).get(INQUIRY_MODE)
+        notice = (
+            "Inquiry requested. It is sent as soon as it's written."
+            if mode is InquiryMode.AUTO
+            else "Inquiry requested. The draft shows up under Inquiries in a moment."
+        )
+    return _render_detail(request, property_id, notice=notice)
+
+
+def _open_inquiry(status: PropertyStatus, emails: list[StoredEmail]) -> StoredEmail | None:
+    """The draft (or failed send) waiting in the review queue, while there is one."""
+    if status is not PropertyStatus.INQUIRY_DRAFTED:
+        return None
+    outbound = [e for e in emails if e.direction is EmailDirection.OUTBOUND]
+    return outbound[-1] if outbound else None
 
 
 # The form fields allow some slack over MAX_NOTE_LENGTH for surrounding whitespace;
@@ -232,6 +274,25 @@ def bulk(
     if request.headers.get("HX-Request") == "true":
         return _render_dashboard(request, filters, notice=result.notice())
     return RedirectResponse(filters.url(), status_code=303)
+
+
+@router.post("/properties/{property_id}/inquire", response_class=HTMLResponse)
+def inquire(request: Request, property_id: int) -> Response:
+    with session_scope(make_session_factory(request.app.state.engine)) as session:
+        row = session.get(Property, property_id)
+        if row is None:
+            raise HTTPException(status_code=404)
+        status = row.status
+        if status in INQUIRABLE:
+            request_inquiry_in(session, property_id, actor=Actor.DASHBOARD, at=utcnow())
+    if status not in INQUIRABLE:
+        return _render_detail(
+            request,
+            property_id,
+            error=f"Can't send an inquiry for this property: it is {status_label(status)}.",
+            status_code=409,
+        )
+    return RedirectResponse(f"/properties/{property_id}?inquiry=requested", status_code=303)
 
 
 @router.post("/properties/{property_id}/status", response_class=HTMLResponse)
