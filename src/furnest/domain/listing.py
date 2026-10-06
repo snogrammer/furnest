@@ -133,3 +133,13 @@ class NormalizedListing(_Frozen):
     def monthly_price(self) -> Money | None:
         """The monthly-equivalent (lower) price, or ``None`` when the price is unknown."""
         return self.price.monthly if self.price else None
+
+
+def beds_baths(beds: int | None, baths: float | None) -> str | None:
+    """A short "2 bd · 1.5 ba" summary ("Studio" for 0 beds), or ``None`` if both are unknown."""
+    parts = []
+    if beds is not None:
+        parts.append("Studio" if beds == 0 else f"{beds} bd")
+    if baths is not None:
+        parts.append(f"{baths:g} ba")
+    return " · ".join(parts) or None

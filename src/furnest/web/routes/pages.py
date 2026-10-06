@@ -38,7 +38,7 @@ from furnest.db.property_store import (
     SqlPropertyStore,
 )
 from furnest.db.session import make_session_factory
-from furnest.domain import Actor, InvalidTransitionError, PropertyStatus
+from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, beds_baths
 from furnest.domain.status import TRANSITIONS
 from furnest.web.auth import require_auth
 from furnest.web.csrf import require_csrf
@@ -53,7 +53,6 @@ from furnest.web.property_views import (
     View,
     apply_bulk,
     audit_label,
-    beds_baths,
     build_dashboard,
     status_actions,
     status_label,

@@ -221,6 +221,10 @@ class DiscordSettings(_Group):
     public_key: str | None = None
     bot_token: SecretStr | None = None
     channel_id: str | None = None
+    request_timeout_seconds: PositiveFloat = 10.0
+    # Retries after the first attempt for 5xx responses and transport errors. A 429 is
+    # waited out as Discord asks (a few times at most) and has its own budget.
+    max_retries: Annotated[int, Field(ge=0)] = 3
 
 
 class SmtpSettings(_Group):

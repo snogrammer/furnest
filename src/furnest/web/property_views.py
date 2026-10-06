@@ -179,15 +179,6 @@ def build_dashboard(
     return Dashboard(filters, tabs, rows, total, page, pages, [])
 
 
-def beds_baths(beds: int | None, baths: float | None) -> str | None:
-    parts = []
-    if beds is not None:
-        parts.append("Studio" if beds == 0 else f"{beds} bd")
-    if baths is not None:
-        parts.append(f"{baths:g} ba")
-    return " · ".join(parts) or None
-
-
 def status_label(status: PropertyStatus) -> str:
     return status.value.replace("_", " ")
 

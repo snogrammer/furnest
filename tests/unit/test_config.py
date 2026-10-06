@@ -35,6 +35,8 @@ def test_defaults_load_with_empty_environment() -> None:
     assert settings.db.busy_timeout_ms == 5000
     assert settings.smtp.port == 587
     assert settings.discord.bot_token is None
+    assert settings.discord.request_timeout_seconds == 10.0
+    assert settings.discord.max_retries == 3
     assert settings.sentry.dsn is None
 
 
@@ -122,6 +124,8 @@ def test_dotenv_file_in_working_directory_is_read() -> None:
         ("SENTRY_TRACES_SAMPLE_RATE", "1.5"),
         ("SMTP_FROM_ADDRESS", "not-an-email"),
         ("DB_URL", "postgresql://db.example.com/furnest"),
+        ("DISCORD_MAX_RETRIES", "-1"),
+        ("DISCORD_REQUEST_TIMEOUT_SECONDS", "0"),
     ],
 )
 def test_invalid_values_are_rejected(
@@ -131,6 +135,16 @@ def test_invalid_values_are_rejected(
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_discord_client_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_REQUEST_TIMEOUT_SECONDS", "2.5")
+    monkeypatch.setenv("DISCORD_MAX_RETRIES", "0")
+
+    discord = Settings().discord
+
+    assert discord.request_timeout_seconds == 2.5
+    assert discord.max_retries == 0
 
 
 def test_secrets_are_not_exposed_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:

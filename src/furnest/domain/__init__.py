@@ -13,7 +13,7 @@ from furnest.domain.address import (
 from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult, amenity_label
 from furnest.domain.criteria import Area, Criteria, CriteriaChange, FilterRule, diff_criteria
 from furnest.domain.geo import EARTH_RADIUS, DistanceUnit, haversine
-from furnest.domain.listing import Address, Contact, NormalizedListing
+from furnest.domain.listing import Address, Contact, NormalizedListing, beds_baths
 from furnest.domain.money import (
     DEFAULT_CURRENCY,
     USD,
@@ -64,6 +64,7 @@ __all__ = [
     "RentPeriod",
     "allowed_targets",
     "amenity_label",
+    "beds_baths",
     "check_transition",
     "diff_criteria",
     "get_currency",

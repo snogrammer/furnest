@@ -1,0 +1,68 @@
+{
+  "allowed_mentions": {
+    "parse": []
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "furnest:approve:42",
+          "disabled": false,
+          "label": "Approve",
+          "style": 3,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:deny:42",
+          "disabled": false,
+          "label": "Deny",
+          "style": 4,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:inquire:42",
+          "disabled": false,
+          "label": "Inquire",
+          "style": 1,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:snooze:42",
+          "disabled": false,
+          "label": "Snooze",
+          "style": 2,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "embeds": [
+    {
+      "color": 2450411,
+      "description": "123 Main St, Springfield, ST 00000",
+      "fields": [
+        {
+          "inline": true,
+          "name": "Score",
+          "value": "87/100"
+        },
+        {
+          "inline": false,
+          "name": "Why it matched",
+          "value": "• Price fit — 27.5/30 pts\n• Washer/dryer — 10/10 pts\n• Extra beds — 7.5/15 pts"
+        },
+        {
+          "inline": false,
+          "name": "Links",
+          "value": "[Open in furnest](https://furnest.example.com/properties/42)"
+        }
+      ],
+      "footer": {
+        "text": "furnest · unavailable"
+      },
+      "timestamp": "2026-10-01T12:30:00+00:00",
+      "title": "Property #42"
+    }
+  ]
+}
