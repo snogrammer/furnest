@@ -116,6 +116,8 @@ FURNEST_IMAGE=registry.example.com/furnest FURNEST_TAG=v0.1.0 docker compose up 
 
 Put a TLS reverse proxy in front. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the proxy's address.
 
+[docs/discord-setup.md](docs/discord-setup.md) walks through creating the Discord application and bot, inviting it and setting the interactions endpoint.
+
 ## CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request to `main`, on pushes to `main` and on `v*` tags. GitHub Actions and Gitea Actions both run it unchanged:
