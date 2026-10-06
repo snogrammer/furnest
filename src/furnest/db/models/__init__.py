@@ -2,6 +2,7 @@
 
 from furnest.db.models.amenity_cache import AmenityExtraction
 from furnest.db.models.criteria import CriteriaVersion
+from furnest.db.models.discord import DiscordInteraction
 from furnest.db.models.jobs import Job, JobLock, JobStatus
 from furnest.db.models.listing import (
     Listing,
@@ -19,6 +20,7 @@ __all__ = [
     "AmenityExtraction",
     "AuditEvent",
     "CriteriaVersion",
+    "DiscordInteraction",
     "Job",
     "JobLock",
     "JobStatus",

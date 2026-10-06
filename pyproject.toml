@@ -17,6 +17,7 @@ dependencies = [
     "nh3>=0.3.7",
     "pydantic-settings>=2.4",
     "pydantic[email]>=2.8",
+    "pynacl>=1.5",
     "python-multipart>=0.0.32",
     "sentry-sdk>=2.71.0",
     "sqlalchemy>=2.0",

@@ -23,6 +23,7 @@ to "off" and stay inert until configured.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -214,6 +215,9 @@ class LoggingSettings(_Group):
     format: LogFormat = LogFormat.JSON
 
 
+_ED25519_PUBLIC_KEY = re.compile(r"[0-9a-fA-F]{64}")
+
+
 class DiscordSettings(_Group):
     model_config = SettingsConfigDict(env_prefix="DISCORD_")
 
@@ -225,6 +229,17 @@ class DiscordSettings(_Group):
     # Retries after the first attempt for 5xx responses and transport errors. A 429 is
     # waited out as Discord asks (a few times at most) and has its own budget.
     max_retries: Annotated[int, Field(ge=0)] = 3
+    # How far an interaction's signed timestamp may be from our clock, either way,
+    # before ``POST /discord/interactions`` rejects it as a possible replay.
+    interaction_max_age_seconds: PositiveInt = 300
+
+    @field_validator("public_key")
+    @classmethod
+    def _public_key_is_hex(cls, value: str | None) -> str | None:
+        if value is not None and _ED25519_PUBLIC_KEY.fullmatch(value) is None:
+            msg = "DISCORD_PUBLIC_KEY must be the 64-character hex key from the developer portal"
+            raise ValueError(msg)
+        return value
 
 
 class SmtpSettings(_Group):

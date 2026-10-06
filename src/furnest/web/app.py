@@ -8,7 +8,8 @@ adapter registry (injectable, for tests) through ``request.app.state``.
 
 Every route needs auth (``furnest.web.auth``) except health probes, static files,
 ``/favicon.ico`` (browsers fetch it from the root, even on the login page),
-login/logout and, later, the Discord interactions endpoint. ``create_app`` refuses to
+login/logout and ``POST /discord/interactions``, which Discord calls and which
+checks Discord's signature instead (``routes.discord``). ``create_app`` refuses to
 build an app without usable ``AUTH_TOKEN``/``AUTH_SESSION_SECRET``.
 
 Middleware, outermost first: trusted-proxy header rewriting (only when
@@ -38,10 +39,11 @@ from furnest.logging import get_logger
 from furnest.sources.registry import SourceRegistry, discover
 from furnest.web.auth import Authenticator, register_auth_handlers
 from furnest.web.csrf import CsrfMiddleware, CsrfSigner
+from furnest.web.discord_dispatch import InteractionDispatcher
 from furnest.web.errors import register_error_handlers
 from furnest.web.headers import SecurityHeadersMiddleware
 from furnest.web.ratelimit import SlidingWindowLimiter
-from furnest.web.routes import api, auth, criteria, health, pages, sources
+from furnest.web.routes import api, auth, criteria, discord, health, pages, sources
 from furnest.web.templating import STATIC_DIR
 
 log = get_logger(__name__)
@@ -81,6 +83,7 @@ def create_app(
     app.state.settings = settings
     app.state.authenticator = authenticator
     app.state.source_registry = source_registry or discover()
+    app.state.discord_dispatcher = InteractionDispatcher()
     app.state.csrf_signer = csrf_signer = CsrfSigner(authenticator.secret)
     app.state.login_limiter = SlidingWindowLimiter(
         settings.auth.login_max_attempts, settings.auth.login_window_seconds
@@ -97,6 +100,7 @@ def create_app(
     app.add_api_route("/favicon.ico", favicon, include_in_schema=False)
     for html_router in (health.router, auth.router, pages.router, criteria.router, sources.router):
         app.include_router(html_router, include_in_schema=False)
+    app.include_router(discord.router, include_in_schema=False)
     app.include_router(api.router)
     app.include_router(api.docs_router)
     return app

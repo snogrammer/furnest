@@ -306,3 +306,21 @@ def test_worker_heartbeat_interval_must_be_below_max_age(
 
     with pytest.raises(ValidationError, match="must be below WORKER_HEARTBEAT_MAX_AGE_SECONDS"):
         Settings()
+
+
+def test_discord_public_key_must_be_hex(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_PUBLIC_KEY", "not-a-key")
+
+    with pytest.raises(ValidationError, match="DISCORD_PUBLIC_KEY"):
+        Settings()
+
+
+def test_discord_interaction_max_age(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings().discord.interaction_max_age_seconds == 300
+    monkeypatch.setenv("DISCORD_PUBLIC_KEY", "aB" * 32)
+    monkeypatch.setenv("DISCORD_INTERACTION_MAX_AGE_SECONDS", "60")
+
+    discord = Settings().discord
+
+    assert discord.public_key == "aB" * 32
+    assert discord.interaction_max_age_seconds == 60

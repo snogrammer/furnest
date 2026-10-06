@@ -134,6 +134,7 @@ def default_registry(
 ) -> JobRegistry:
     """Handlers the worker ships with. Later issues register theirs here."""
     from furnest.db.listing_store import SqlListingStore
+    from furnest.notify.interactions import INTERACTION_JOB, interaction_not_handled
     from furnest.pipeline import properties
     from furnest.pipeline.rerun import RERUN_CRITERIA, RerunCriteria
 
@@ -143,4 +144,5 @@ def default_registry(
     rerun = RerunCriteria(session_factory, listings=listings.active, record=pipeline.record)
     registry.register(RERUN_CRITERIA, rerun)
     registry.register(properties.NOTIFY, properties.notify_not_configured)
+    registry.register(INTERACTION_JOB, interaction_not_handled)
     return registry
