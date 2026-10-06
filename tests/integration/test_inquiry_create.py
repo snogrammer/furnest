@@ -17,10 +17,12 @@ from furnest.config import (
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.email_store import (
     EMAIL_SEND,
+    EmailNotFoundError,
     NotSendableError,
     SmtpNotConfiguredError,
     SqlEmailStore,
     discard_draft_in,
+    mark_sent_manually_in,
     send_draft_in,
 )
 from furnest.db.email_template_store import SqlEmailTemplateStore
@@ -239,17 +241,95 @@ def test_running_twice_drafts_once(
     assert len(_emails(session_factory, property_id)) == 1
 
 
-def test_without_smtp_raises_and_leaves_it_approved(
+@pytest.mark.parametrize("mode", [InquiryMode.REVIEW, InquiryMode.AUTO])
+def test_without_smtp_drafts_with_no_from_address(
+    session_factory: sessionmaker[Session],
+    make_property: Any,  # noqa: ANN401
+    mode: InquiryMode,
+) -> None:
+    property_id = make_property()
+
+    InquiryCreate(session_factory, settings=_settings(mode, smtp=False))(_ctx(property_id))
+
+    (email,) = _emails(session_factory, property_id)
+    assert (email.status, email.from_address, email.to_address) == (
+        EmailStatus.DRAFT,
+        None,
+        LISTER,
+    )
+    assert email.message_id.endswith("@furnest.invalid>")
+    assert _send_jobs(session_factory) == 0
+    assert _status(session_factory, property_id) is S.INQUIRY_DRAFTED
+
+
+def test_sending_a_draft_needs_smtp_and_fills_in_the_from_address(
     session_factory: sessionmaker[Session],
     make_property: Any,  # noqa: ANN401
 ) -> None:
     property_id = make_property()
+    InquiryCreate(session_factory, settings=_settings(smtp=False))(_ctx(property_id))
+    (draft,) = _emails(session_factory, property_id)
 
-    with pytest.raises(SmtpNotConfiguredError):
-        InquiryCreate(session_factory, settings=_settings(smtp=False))(_ctx(property_id))
+    with pytest.raises(SmtpNotConfiguredError), session_scope(session_factory) as session:
+        send_draft_in(session, SmtpSettings(), draft.id, to=LISTER, subject="s", body="b")
+    with session_scope(session_factory) as session:
+        sent = send_draft_in(session, _settings().smtp, draft.id, to=LISTER, subject="s", body="b")
 
-    assert _emails(session_factory, property_id) == []
-    assert _status(session_factory, property_id) is S.APPROVED
+    assert (sent.status, sent.from_address) == (EmailStatus.QUEUED, FROM)
+    assert sent.message_id.endswith("@example.com>")
+    assert sent.message_id != draft.message_id
+    assert _send_jobs(session_factory) == 1
+
+
+@pytest.mark.parametrize("smtp", [True, False])
+def test_marking_a_draft_sent_by_hand(
+    session_factory: sessionmaker[Session],
+    make_property: Any,  # noqa: ANN401
+    smtp: bool,
+) -> None:
+    property_id = make_property(email=None)
+    InquiryCreate(session_factory, settings=_settings(smtp=smtp))(_ctx(property_id))
+    (draft,) = _emails(session_factory, property_id)
+
+    with session_scope(session_factory) as session:
+        marked = mark_sent_manually_in(
+            session, draft.id, subject="Edited", body="What I sent", at=T0
+        )
+
+    assert (marked.status, marked.to_address, marked.sent_at) == (EmailStatus.SENT, None, T0)
+    assert (marked.subject, marked.body_rendered) == ("Edited", "What I sent")
+    assert _send_jobs(session_factory) == 0
+    assert _status(session_factory, property_id) is S.INQUIRY_SENT
+    (last,) = [
+        e
+        for e in SqlPropertyStore(session_factory).audit_events(property_id)
+        if e.to_status is S.INQUIRY_SENT
+    ]
+    assert (last.actor, last.actor_detail, last.payload) == (
+        Actor.DASHBOARD,
+        "sent manually",
+        {"email_id": draft.id, "manual": True},
+    )
+    assert SqlEmailStore(session_factory).review_queue() == []
+    with pytest.raises(NotSendableError), session_scope(session_factory) as session:
+        mark_sent_manually_in(session, draft.id, subject="s", body="b", at=T0)
+
+
+def test_marking_a_missing_email_sent_raises(session_factory: sessionmaker[Session]) -> None:
+    with pytest.raises(EmailNotFoundError), session_scope(session_factory) as session:
+        mark_sent_manually_in(session, 999, subject="s", body="b", at=T0)
+
+
+def test_the_review_queue_says_where_to_send_by_hand(
+    session_factory: sessionmaker[Session],
+    make_property: Any,  # noqa: ANN401
+) -> None:
+    property_id = make_property(email=None)
+    InquiryCreate(session_factory, settings=_settings())(_ctx(property_id))
+
+    (item,) = SqlEmailStore(session_factory).review_queue()
+
+    assert (item.source, item.listing_url) == ("test", f"https://example.com/l{property_id}")
 
 
 def test_a_broken_template_fails_the_job(
@@ -325,7 +405,7 @@ def test_send_and_discard_refuse_a_sent_email(
     (email,) = _emails(session_factory, property_id)
 
     with pytest.raises(NotSendableError), session_scope(session_factory) as session:
-        send_draft_in(session, email.id, to=LISTER, subject="s", body="b")
+        send_draft_in(session, _settings().smtp, email.id, to=LISTER, subject="s", body="b")
     with pytest.raises(NotSendableError), session_scope(session_factory) as session:
         discard_draft_in(session, email.id)
 
@@ -344,7 +424,9 @@ def test_failed_inquiry_stays_in_the_queue_until_resent(
     assert (item.email.status, item.email.error) == (EmailStatus.FAILED, "550 no such user")
 
     with session_scope(session_factory) as session:
-        resent = send_draft_in(session, email.id, to="other@example.com", subject="s", body="b")
+        resent = send_draft_in(
+            session, _settings().smtp, email.id, to="other@example.com", subject="s", body="b"
+        )
     assert (resent.status, resent.error, resent.attempts) == (EmailStatus.QUEUED, None, 0)
     assert store.review_queue() == []
 

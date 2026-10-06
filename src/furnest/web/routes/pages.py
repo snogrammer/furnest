@@ -14,6 +14,11 @@ suggested property and queues the job that drafts the email, as the Discord butt
 does. While the property is ``inquiry_drafted`` the page links to the draft in the
 review queue (``/inquiries``), and the email log lists every email about it.
 
+A property flagged ``manual_contact_required`` (its listing gives no email address)
+gets a prominent link to the listing, where the lister is messaged. While its draft
+waits, the page shows the message ready to copy and a **Mark as sent** form, which
+posts to the review queue's ``/inquiries/{id}/mark-sent`` and comes back here.
+
 A post redirects back to the detail page (303). An empty or too long note
 re-renders the page with the error (422); a deny or status change the state
 machine forbids re-renders it with 409. The status buttons only offer allowed
@@ -43,6 +48,7 @@ from furnest.db.property_store import (
     MAX_NOTE_LENGTH,
     PropertyNotFoundError,
     PropertySort,
+    PropertyState,
     SqlPropertyStore,
 )
 from furnest.db.session import make_session_factory, session_scope
@@ -50,6 +56,7 @@ from furnest.db.settings_store import SqlSettingsStore
 from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, beds_baths
 from furnest.domain.status import TRANSITIONS
 from furnest.email.inquiry import request_inquiry_in
+from furnest.email.templates import MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH
 from furnest.notify.embeds import INQUIRABLE
 from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
@@ -152,6 +159,7 @@ def _render_detail(
         raise HTTPException(status_code=404)
     emails = SqlEmailStore(make_session_factory(request.app.state.engine)).for_property(property_id)
     status = detail.property.status
+    inquiry = _open_inquiry(status, emails)
     context = {
         "d": detail,
         "p": detail.property,
@@ -161,13 +169,17 @@ def _render_detail(
         "smtp_configured": request.app.state.settings.smtp.configured,
         "emails": emails,
         # The draft (or failed send) waiting in the review queue.
-        "inquiry": _open_inquiry(status, emails),
+        "inquiry": inquiry,
+        # ...shown here to copy, when it goes out by hand.
+        "manual_inquiry": inquiry if inquiry and _by_hand(detail.property, inquiry) else None,
         "notice": notice,
         "archived": PropertyStatus.ARCHIVED,
         "error": error,
         "note": note,
         "reason": reason,
         "max_note_length": MAX_NOTE_LENGTH,
+        "max_subject": MAX_SUBJECT_LENGTH,
+        "max_body": MAX_BODY_LENGTH,
         "beds_baths": beds_baths,
         "status_label": status_label,
         "audit_label": audit_label,
@@ -186,7 +198,9 @@ def property_detail(
     inquiry: Annotated[str | None, Query(max_length=20)] = None,
 ) -> Response:
     notice = None
-    if inquiry == "requested":
+    if inquiry == "marked":
+        notice = "Inquiry marked as sent."
+    elif inquiry == "requested":
         settings = request.app.state.settings
         factory = make_session_factory(request.app.state.engine)
         mode = RuntimeSettings(settings, SqlSettingsStore(factory)).get(INQUIRY_MODE)
@@ -196,6 +210,11 @@ def property_detail(
             else "Inquiry requested. The draft shows up under Inquiries in a moment."
         )
     return _render_detail(request, property_id, notice=notice)
+
+
+def _by_hand(state: PropertyState, inquiry: StoredEmail) -> bool:
+    """Whether the waiting inquiry is to be sent by hand, through the listing's site."""
+    return state.manual_contact_required or inquiry.to_address is None
 
 
 def _open_inquiry(status: PropertyStatus, emails: list[StoredEmail]) -> StoredEmail | None:

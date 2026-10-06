@@ -20,6 +20,9 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
   match moves a ``new`` property to ``suggested`` and queues a :data:`NOTIFY` job in
   the same transaction. In every other state only the score changes, so re-running
   the criteria never undoes a decision a person made.
+  It also keeps ``manual_contact_required`` in step with the primary listing: set
+  while that listing has no email address, so the inquiry is sent by hand through
+  the source (``furnest.email.inquiry``).
 * :meth:`SqlPropertyStore.mark_gone` moves a property to ``unavailable`` once none
   of its listings is active, and :meth:`SqlPropertyStore.restore_relisted` moves it
   back when one returns.
@@ -279,6 +282,12 @@ def primary_listing(session: Session, property_id: int) -> Listing | None:
     return session.scalars(
         select(Listing).where(Listing.property_id == property_id).order_by(*_LISTING_ORDER)
     ).first()
+
+
+def _manual_contact(listing_row: Listing) -> bool:
+    """Whether the listing gives no email address, so the lister is reached through
+    the source's own messaging (a ``platform_only`` contact, or none at all)."""
+    return NormalizedListing.model_validate(listing_row.data).contact.email is None
 
 
 def _filtered[*Ts](
@@ -690,6 +699,11 @@ class SqlPropertyStore:
         """
         with session_scope(self._session_factory) as session:
             row = self._ensure(session, listing_id, at=at, actor=Actor.SYSTEM)
+            primary = primary_listing(session, row.id)
+            manual = _manual_contact(primary) if primary is not None else False
+            if manual != row.manual_contact_required:
+                row.manual_contact_required = manual
+                _sync_message(session, row)
             row.score = result.score
             row.match_result = result.model_dump(mode="json")
             row.criteria_version_id = _criteria_version_id(session, result.criteria_version)
@@ -961,6 +975,7 @@ class SqlPropertyStore:
             address=self._canonical_address(listing),
             lat=listing_row.lat,
             lng=listing_row.lng,
+            manual_contact_required=_manual_contact(listing_row),
             status_changed_at=at,
             created_at=at,
             updated_at=at,

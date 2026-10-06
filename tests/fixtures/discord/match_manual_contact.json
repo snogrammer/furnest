@@ -1,0 +1,87 @@
+{
+  "allowed_mentions": {
+    "parse": []
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "furnest:approve:42",
+          "disabled": false,
+          "label": "Approve",
+          "style": 3,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:deny:42",
+          "disabled": false,
+          "label": "Deny",
+          "style": 4,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:inquire:42",
+          "disabled": false,
+          "label": "Inquire",
+          "style": 1,
+          "type": 2
+        },
+        {
+          "custom_id": "furnest:snooze:42",
+          "disabled": false,
+          "label": "Snooze",
+          "style": 2,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "embeds": [
+    {
+      "color": 2450411,
+      "description": "123 Main St, Springfield, ST 00000",
+      "fields": [
+        {
+          "inline": true,
+          "name": "Price",
+          "value": "$2,400.00/mo"
+        },
+        {
+          "inline": true,
+          "name": "Beds / Baths",
+          "value": "2 bd · 1.5 ba"
+        },
+        {
+          "inline": true,
+          "name": "Score",
+          "value": "87/100"
+        },
+        {
+          "inline": false,
+          "name": "Why it matched",
+          "value": "• Price fit — 27.5/30 pts\n• Washer/dryer — 10/10 pts\n• Extra beds — 7.5/15 pts"
+        },
+        {
+          "inline": false,
+          "name": "Contact",
+          "value": "No email address. Message the lister on [Example Source](https://listings.example.com/units/abc-1)."
+        },
+        {
+          "inline": false,
+          "name": "Links",
+          "value": "[Example Source](https://listings.example.com/units/abc-1) · [Open in furnest](https://furnest.example.com/properties/42)"
+        }
+      ],
+      "footer": {
+        "text": "furnest · suggested"
+      },
+      "image": {
+        "url": "https://img.example.com/abc-1/1.jpg"
+      },
+      "timestamp": "2026-10-01T12:30:00+00:00",
+      "title": "Sunny furnished 2BR near the park",
+      "url": "https://listings.example.com/units/abc-1"
+    }
+  ]
+}

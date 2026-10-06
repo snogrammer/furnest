@@ -170,6 +170,19 @@ def test_snapshot_hostile_text_and_disabled_buttons() -> None:
     assert_snapshot("match_hostile", payload)
 
 
+def test_snapshot_manual_contact() -> None:
+    d = detail(property=state(manual_contact_required=True))
+
+    assert_snapshot("match_manual_contact", build(d))
+
+
+def test_manual_contact_without_a_listing_has_no_contact_field() -> None:
+    d = detail(listings=[], property=state(manual_contact_required=True))
+
+    (embed,) = build(d)["embeds"]
+    assert "Contact" not in [field["name"] for field in embed["fields"]]
+
+
 # --- Rules ------------------------------------------------------------------------
 
 

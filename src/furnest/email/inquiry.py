@@ -14,11 +14,19 @@ decides:
 * ``review``: the draft waits in the dashboard's review queue (``/inquiries``),
   where it can be edited and sent, or discarded.
 * ``auto``: the draft is sent straight away, unless the listing has no email
-  address, in which case it waits for review all the same.
+  address or SMTP isn't set up, in which case it waits for review all the same.
 
 Either way the property becomes ``inquiry_sent`` only once the server accepts the
 message (:meth:`~furnest.db.email_store.SqlEmailStore.mark_sent`). An inquiry that
 fails for good goes back to the review queue with its error.
+
+**Manual contact.** Some listings give no email address: the source only relays
+messages through its own site (Furnished Finder does this), and the property is
+flagged ``manual_contact_required``. Drafting doesn't need SMTP, so such a property
+gets a draft all the same. The detail page and the review queue show it ready to
+copy, with a link to the listing, and once it has been sent there, **Mark as sent**
+(:func:`manual_edit`, :func:`~furnest.db.email_store.mark_sent_manually_in`)
+records the text that went out and moves the property to ``inquiry_sent``.
 
 The job is idempotent: it does nothing for a property that is no longer
 ``approved`` (a draft already exists, or someone denied it in the meantime).
@@ -160,9 +168,14 @@ class InquiryCreate:
                 payload={"email_id": email.id},
             )
             send_now = False
-            if mode is InquiryMode.AUTO and to is not None:
+            if mode is InquiryMode.AUTO and to is not None and self._smtp.configured:
                 send_draft_in(
-                    session, email.id, to=to, subject=email.subject, body=email.body_rendered
+                    session,
+                    self._smtp,
+                    email.id,
+                    to=to,
+                    subject=email.subject,
+                    body=email.body_rendered,
                 )
                 send_now = True
         log.info(
@@ -172,6 +185,7 @@ class InquiryCreate:
             mode=mode.value,
             queued=send_now,
             has_recipient=to is not None,
+            smtp_configured=self._smtp.configured,
         )
 
 
@@ -195,6 +209,12 @@ class ReviewEdit:
     body: str
 
 
+@dataclass(frozen=True)
+class ManualEdit:
+    subject: str
+    body: str
+
+
 def review_edit(to: str, subject: str, body: str) -> ReviewEdit:
     """Check a reviewed inquiry before it is sent.
 
@@ -205,6 +225,16 @@ def review_edit(to: str, subject: str, body: str) -> ReviewEdit:
         address = str(_EMAIL.validate_python(to.strip()))
     except ValidationError:
         raise InvalidEditError("Enter the email address to send this to.") from None
+    text = manual_edit(subject, body)
+    return ReviewEdit(to=address, subject=text.subject, body=text.body)
+
+
+def manual_edit(subject: str, body: str) -> ManualEdit:
+    """Check the text of an inquiry someone sent by hand before it is logged as sent.
+
+    The same rules as :func:`review_edit`, without a recipient: the log should hold
+    what an email would have.
+    """
     folded = " ".join(subject.split())
     if not folded:
         raise InvalidEditError("The subject can't be empty.")
@@ -215,4 +245,4 @@ def review_edit(to: str, subject: str, body: str) -> ReviewEdit:
         raise InvalidEditError("The message can't be empty.")
     if len(body) > MAX_BODY_LENGTH:
         raise InvalidEditError(f"The message can be at most {MAX_BODY_LENGTH} characters.")
-    return ReviewEdit(to=address, subject=folded, body=body)
+    return ManualEdit(subject=folded, body=body)

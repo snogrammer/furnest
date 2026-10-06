@@ -18,13 +18,19 @@
     {% if bb %}<div><dt>Size</dt><dd>{{ bb }}{% if primary.listing.sqft %} · {{ primary.listing.sqft }} sqft{% endif %}</dd></div>{% endif %}
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
+  {% if p.manual_contact_required %}
+  <aside class="manual-contact" aria-labelledby="manual-contact-title">
+    <p><strong id="manual-contact-title">Manual contact required.</strong> This listing has no email address: message the lister through {% if primary %}{{ source_name(primary.summary.source) }}{% else %}the listing's site{% endif %}.</p>
+    {% if primary %}<a class="button" href="{{ primary.summary.url }}" rel="noopener noreferrer" target="_blank">Contact on {{ source_name(primary.summary.source) }}</a>{% endif %}
+  </aside>
+  {% endif %}
   {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
   {% if notice %}<p class="flash" role="status">{{ notice }}</p>{% endif %}
   {% if can_inquire %}
   <form method="post" action="/properties/{{ p.id }}/inquire" class="inquire-form" hx-boost="true">
     {{ csrf_field(request) }}
-    <button type="submit"{% if not smtp_configured %} disabled aria-describedby="inquire-hint"{% endif %}>Inquire</button>
-    {% if not smtp_configured %}<small id="inquire-hint" class="muted">Set up SMTP (SMTP_HOST, SMTP_FROM_ADDRESS) to send inquiries.</small>{% endif %}
+    <button type="submit"{% if not smtp_configured %} aria-describedby="inquire-hint"{% endif %}>Inquire</button>
+    {% if not smtp_configured %}<small id="inquire-hint" class="muted">SMTP isn't set up: the draft can be copied and marked as sent by hand.</small>{% endif %}
   </form>
   {% endif %}
   {% if inquiry %}
@@ -34,6 +40,29 @@
     {% else %}The inquiry is being sent.{% endif %}
     {% if inquiry.status.value in ("draft", "failed") %}<a href="/inquiries#inquiry-{{ inquiry.id }}">Review it</a>{% endif %}
   </p>
+  {% endif %}
+  {% if manual_inquiry %}{% set m = manual_inquiry %}
+  <section class="manual-inquiry" aria-labelledby="manual-inquiry-title">
+    <h2 id="manual-inquiry-title">Message to send</h2>
+    <p class="muted">Copy this into {% if primary %}<a href="{{ primary.summary.url }}" rel="noopener noreferrer" target="_blank">{{ source_name(primary.summary.source) }}</a>{% else %}the listing's site{% endif %}, send it there, then mark it as sent. Edit it here first if you like: what you mark as sent is what the email log keeps.</p>
+    <form method="post" action="/inquiries/{{ m.id }}/mark-sent" class="criteria-form">
+      {{ csrf_field(request) }}
+      <input type="hidden" name="back" value="property">
+      <div class="field">
+        <label for="manual-subject">Subject</label>
+        <div class="copy-row">
+          <input id="manual-subject" name="subject" maxlength="{{ max_subject }}" required value="{{ m.subject }}">
+          <button type="button" class="secondary" data-copy-target="manual-subject">Copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="manual-body">Message</label>
+        <textarea id="manual-body" name="body" rows="12" maxlength="{{ max_body }}" required class="mono">{{ m.body_rendered }}</textarea>
+        <div class="actions"><button type="button" class="secondary" data-copy-target="manual-body">Copy message</button></div>
+      </div>
+      <div class="actions"><button type="submit">Mark as sent</button></div>
+    </form>
+  </section>
   {% endif %}
   {% set moves = actions | rejectattr(0, "equalto", archived) | list %}
   {% if actions %}
@@ -66,7 +95,6 @@
   </details>
   {% endif %}
   {% if p.snoozed_until %}<p class="muted">Snoozed until {{ when(p.snoozed_until) }}</p>{% endif %}
-  {% if p.manual_contact_required %}<p class="muted">Manual contact required: reach out through the source's own messaging.</p>{% endif %}
 
   <section aria-labelledby="photos">
     <h2 id="photos">Photos</h2>
@@ -178,7 +206,7 @@
           <summary>
             <span class="status status-{{ e.status.value }}">{{ e.status.value | capitalize }}</span>
             {{ e.subject }}
-            <small class="muted">{% if e.direction.value == "inbound" %}from {{ e.from_address }}{% else %}to {{ e.to_address or "(no address)" }}{% endif %} · {{ when(e.sent_at or e.created_at) }}</small>
+            <small class="muted">{% if e.direction.value == "inbound" %}from {{ e.from_address }}{% elif not e.to_address and e.status.value == "sent" %}sent by hand{% else %}to {{ e.to_address or "(no address)" }}{% endif %} · {{ when(e.sent_at or e.created_at) }}</small>
           </summary>
           {% if e.error %}<p class="form-error">{{ e.error }}</p>{% endif %}
           <pre class="email-body">{{ e.body_rendered }}</pre>

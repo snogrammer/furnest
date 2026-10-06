@@ -6,7 +6,7 @@
 </div>
 {% if error and failed is none %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
 {% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
-<p class="muted">Inquiry drafts waiting for review, and inquiries that couldn't be sent. Edit one and send it, or discard it to put the property back to approved.</p>
+<p class="muted">Inquiry drafts waiting for review, and inquiries that couldn't be sent. Edit one and send it, or discard it to put the property back to approved. If you sent one yourself, through the listing's site, mark it as sent.</p>
 {% if not items %}
 <p class="muted" id="inquiries-empty">Nothing to review.</p>
 {% endif %}
@@ -20,7 +20,11 @@
   </header>
   {% if e.error %}<p class="form-error">Last attempt failed: {{ e.error }}</p>{% endif %}
   {% if mine and error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
-  {% if not e.to_address and not mine %}<p class="muted">The listing has no email address. Fill one in to send it.</p>{% endif %}
+  {% if not e.to_address and not mine %}
+  <div class="manual-contact">
+    <p>The listing has no email address. Send this message through {% if item.listing_url %}<a href="{{ item.listing_url }}" rel="noopener noreferrer" target="_blank">{{ source_name(item.source) }}</a>{% else %}the listing's site{% endif %}, then mark it as sent{% if smtp_configured %}, or fill in an address to email it{% endif %}.</p>
+  </div>
+  {% endif %}
   <form class="criteria-form" method="post" action="/inquiries/{{ e.id }}/send">
     {{ csrf_field(request) }}
     <div class="field">
@@ -35,7 +39,10 @@
       <label for="body-{{ e.id }}">Message</label>
       <textarea id="body-{{ e.id }}" name="body" rows="14" maxlength="{{ max_body }}" required class="mono">{{ typed.body if mine else e.body_rendered }}</textarea>
     </div>
-    <div class="actions"><button type="submit">Send</button></div>
+    <div class="actions">
+      <button type="submit"{% if not smtp_configured %} disabled title="SMTP isn't set up"{% endif %}>Send</button>
+      <button type="submit" formaction="/inquiries/{{ e.id }}/mark-sent" formnovalidate class="secondary">Mark as sent</button>
+    </div>
   </form>
   <form method="post" action="/inquiries/{{ e.id }}/discard" hx-boost="true" hx-confirm="Discard this inquiry? The property goes back to approved.">
     {{ csrf_field(request) }}

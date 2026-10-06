@@ -8,7 +8,9 @@ what the tests snapshot.
 
 The embed shows the first photo, the monthly price, beds and baths, the score with
 its top contributors, the source listing (the title links to it) and the
-dashboard's detail page. Under it, one row of buttons: Approve, Deny, Inquire and
+dashboard's detail page. A listing with no email address
+(``manual_contact_required``) adds a Contact field that links to the source, where
+the lister has to be messaged. Under it, one row of buttons: Approve, Deny, Inquire and
 Snooze, each with a ``custom_id`` from :mod:`furnest.notify.custom_ids`.
 
 Two things keep scraped text from misbehaving in a channel:
@@ -125,6 +127,12 @@ def match_embed(
     reasons = _top_breakdown(detail)
     if reasons:
         fields.append(_field("Why it matched", reasons))
+    if state.manual_contact_required and primary is not None:
+        source = escape_markdown(source_name(primary.summary.source))
+        url = _link_url(str(primary.summary.url))
+        fields.append(
+            _field("Contact", f"No email address. Message the lister on [{source}]({url}).")
+        )
     links = [f"[Open in furnest]({_link_url(dashboard_url(base_url, state.id))})"]
     if primary is not None:
         label = escape_markdown(source_name(primary.summary.source))

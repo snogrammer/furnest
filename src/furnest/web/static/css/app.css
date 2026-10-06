@@ -1138,3 +1138,56 @@ button.secondary {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* A listing with no email address: the lister is messaged through its source. */
+.manual-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem var(--space);
+  margin-block: var(--space);
+  padding: 0.75rem var(--space);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.manual-contact p {
+  margin: 0;
+}
+
+a.button {
+  display: inline-block;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* The copy-ready message for an inquiry sent by hand. */
+.manual-inquiry {
+  margin-block: var(--space);
+  padding: var(--space);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.manual-inquiry h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.copy-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.copy-row input {
+  flex: 1;
+  min-width: 0;
+}

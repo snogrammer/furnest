@@ -63,7 +63,12 @@ class EmailSend:
     def __call__(self, ctx: JobContext) -> None:
         email_id = int(ctx.payload["email_id"])
         email = self._store.get(email_id)
-        if email is None or email.status in _NOT_TO_SEND or email.to_address is None:
+        if (
+            email is None
+            or email.status in _NOT_TO_SEND
+            or email.to_address is None
+            or email.from_address is None  # only a draft, which send_draft_in fills in
+        ):
             log.info("email_send_skipped", email_id=email_id, reason="missing, sent or a draft")
             return
         final = ctx.attempt >= ctx.max_attempts

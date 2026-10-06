@@ -51,7 +51,8 @@ class World:
         self.factory = session_factory
         self.n = 0
 
-    def property(self, status: PropertyStatus = S.APPROVED) -> int:
+    def property(self, status: PropertyStatus = S.APPROVED, *, contact: str | None = None) -> int:
+        """A property whose listing gives ``contact`` as its email address, if any."""
         self.n += 1
         listing = NormalizedListing.model_validate(
             {
@@ -59,6 +60,7 @@ class World:
                 "source_id": f"l{self.n}",
                 "url": f"https://example.com/l{self.n}",
                 "title": f"Sunny flat {self.n}",
+                "contact": {"email": contact},
             }
         )
         (listing_id,) = (
@@ -75,8 +77,8 @@ class World:
             )
 
     def draft(self, *, to: str | None = LISTER) -> tuple[int, int]:
-        """A drafted property and its draft's id."""
-        property_id = self.property(S.INQUIRY_DRAFTED)
+        """A drafted property and its draft's id; the listing gives ``to`` as its address."""
+        property_id = self.property(S.INQUIRY_DRAFTED, contact=to)
         settings = Settings()
         with session_scope(self.factory) as session:
             email = draft_email(
@@ -438,7 +440,7 @@ def test_detail_without_emails(authed_client: TestClient, world: World) -> None:
     assert "No emails yet." in html
 
 
-def test_inquire_is_disabled_without_smtp(
+def test_inquire_works_without_smtp(
     migrated_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
     login: Any,  # noqa: ANN401
@@ -450,5 +452,182 @@ def test_inquire_is_disabled_without_smtp(
         login(client)
         html = client.get(f"/properties/{property_id}", headers=HTML).text
 
-    assert re.search(r'<button type="submit" disabled aria-describedby="inquire-hint">', html)
-    assert "Set up SMTP" in html
+    assert re.search(r'<button type="submit" aria-describedby="inquire-hint">Inquire', html)
+    assert "copied and marked as sent by hand" in html
+
+
+def test_send_without_smtp_is_a_conflict(
+    migrated_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    login: Any,  # noqa: ANN401
+    csrf: Csrf,
+) -> None:
+    world = World(make_session_factory(migrated_engine))
+    _, email_id = world.draft()
+    monkeypatch.delenv("SMTP_HOST")
+    with TestClient(create_app(Settings(), engine=migrated_engine)) as client:
+        login(client)
+        response = post(client, csrf, f"/inquiries/{email_id}/send", form(body="Edited"))
+
+    assert response.status_code == 409
+    assert "SMTP isn&#39;t set up" in response.text
+    assert "Edited" in response.text
+    email = world.email(email_id)
+    assert email is not None and email.status is EmailStatus.DRAFT
+    assert world.jobs(EMAIL_SEND) == []
+
+
+# --- Manual contact -------------------------------------------------------------
+
+
+def manual(**overrides: str) -> dict[str, str]:
+    return {"subject": "Inquiry about the flat", "body": "Hi, sent on the site"} | overrides
+
+
+def test_queue_offers_mark_as_sent_with_the_listing_link(
+    authed_client: TestClient, world: World
+) -> None:
+    _, email_id = world.draft(to=None)
+
+    html = authed_client.get("/inquiries", headers=HTML).text
+
+    assert f'formaction="/inquiries/{email_id}/mark-sent"' in html
+    assert 'href="https://example.com/l1"' in html
+
+
+def test_mark_sent_logs_the_text_and_moves_the_property(
+    authed_client: TestClient, csrf: Csrf, world: World
+) -> None:
+    property_id, email_id = world.draft(to=None)
+
+    response = post(
+        authed_client,
+        csrf,
+        f"/inquiries/{email_id}/mark-sent",
+        manual(subject=" Edited\n subject ", body="Sent it\r\nthere"),
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/inquiries?done=marked"
+    email = world.email(email_id)
+    assert email is not None
+    assert (email.status, email.subject, email.body_rendered, email.to_address) == (
+        EmailStatus.SENT,
+        "Edited subject",
+        "Sent it\nthere",
+        None,
+    )
+    assert world.status(property_id) is S.INQUIRY_SENT
+    assert world.jobs(EMAIL_SEND) == []
+    flash = authed_client.get(response.headers["location"], headers=HTML).text
+    assert "Inquiry marked as sent." in flash
+
+
+def test_mark_sent_from_the_detail_page_goes_back_there(
+    authed_client: TestClient, csrf: Csrf, world: World
+) -> None:
+    property_id, email_id = world.draft(to=None)
+
+    response = post(
+        authed_client, csrf, f"/inquiries/{email_id}/mark-sent", manual(back="property")
+    )
+
+    assert response.headers["location"] == f"/properties/{property_id}?inquiry=marked"
+    html = authed_client.get(response.headers["location"], headers=HTML).text
+    assert "Inquiry marked as sent." in html
+    assert "sent by hand" in html
+
+
+def test_mark_sent_rejects_an_empty_message(
+    authed_client: TestClient, csrf: Csrf, world: World
+) -> None:
+    _, email_id = world.draft(to=None)
+
+    response = post(authed_client, csrf, f"/inquiries/{email_id}/mark-sent", manual(body=" "))
+
+    assert response.status_code == 422
+    assert "The message can&#39;t be empty." in response.text
+    email = world.email(email_id)
+    assert email is not None and email.status is EmailStatus.DRAFT
+
+
+def test_mark_sent_after_the_property_moved_on_is_a_conflict(
+    authed_client: TestClient, csrf: Csrf, world: World
+) -> None:
+    property_id, email_id = world.draft(to=None)
+    world.set_status(property_id, S.ARCHIVED)
+
+    response = post(authed_client, csrf, f"/inquiries/{email_id}/mark-sent", manual())
+
+    assert response.status_code == 409
+    email = world.email(email_id)
+    assert email is not None and email.status is EmailStatus.DRAFT
+
+
+def test_mark_sent_of_a_sent_email_is_a_conflict(
+    authed_client: TestClient, csrf: Csrf, world: World
+) -> None:
+    _, email_id = world.draft()
+    SqlEmailStore(world.factory).mark_sent(email_id)
+
+    response = post(authed_client, csrf, f"/inquiries/{email_id}/mark-sent", manual())
+
+    assert response.status_code == 409
+
+
+def test_mark_sent_of_an_unknown_email_is_404(authed_client: TestClient, csrf: Csrf) -> None:
+    assert post(authed_client, csrf, "/inquiries/999/mark-sent", manual()).status_code == 404
+
+
+def test_mark_sent_needs_csrf(authed_client: TestClient, world: World) -> None:
+    _, email_id = world.draft(to=None)
+
+    response = authed_client.post(
+        f"/inquiries/{email_id}/mark-sent", data=manual(), headers=HTML, follow_redirects=False
+    )
+
+    assert response.status_code == 403
+
+
+def test_detail_shows_the_platform_link_for_manual_contact(
+    authed_client: TestClient, world: World
+) -> None:
+    property_id = world.property()
+
+    html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
+
+    assert "Manual contact required." in html
+    assert re.search(r'<a class="button" href="https://example.com/l1"[^>]*>Contact on test', html)
+    assert "Message to send" not in html
+
+
+def test_detail_has_no_platform_link_when_the_listing_has_an_email(
+    authed_client: TestClient, world: World
+) -> None:
+    property_id = world.property(contact=LISTER)
+
+    html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
+
+    assert "Manual contact required." not in html
+
+
+def test_detail_shows_the_draft_ready_to_copy(authed_client: TestClient, world: World) -> None:
+    property_id, email_id = world.draft(to=None)
+
+    html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
+
+    assert "Message to send" in html
+    assert f'action="/inquiries/{email_id}/mark-sent"' in html
+    assert '<input type="hidden" name="back" value="property">' in html
+    assert 'data-copy-target="manual-body"' in html
+    assert "/static/js/copy.js" in html
+
+
+def test_detail_has_no_copy_block_for_an_emailed_draft(
+    authed_client: TestClient, world: World
+) -> None:
+    property_id, _ = world.draft()
+
+    html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
+
+    assert "Message to send" not in html

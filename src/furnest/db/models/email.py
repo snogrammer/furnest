@@ -8,7 +8,9 @@ retries. ``error`` keeps the last failure either way.
 
 An inquiry in review mode starts as a ``draft`` (``furnest.email.inquiry``): the
 rendered text, waiting in the dashboard's review queue. Sending it turns the same
-row ``queued``, so the log keeps one row per inquiry whatever the mode.
+row ``queued``, so the log keeps one row per inquiry whatever the mode. A listing
+with no email address is contacted by hand: its draft is copied into the source's
+own messaging and *marked* as sent, which makes the row ``sent`` with no recipient.
 
 ``message_id`` is generated once, when the row is created, so every retry sends the
 same Message-ID header. Replies quote it in In-Reply-To/References, which is how
@@ -58,7 +60,9 @@ class Email(Base):
     )
     # NULL only on a draft whose listing has no email address.
     to_address: Mapped[str | None] = mapped_column(String(320))
-    from_address: Mapped[str] = mapped_column(String(320))
+    # NULL only on an inquiry drafted while SMTP wasn't set up (filled in on send),
+    # or one that was then marked as sent by hand.
+    from_address: Mapped[str | None] = mapped_column(String(320))
     subject: Mapped[str] = mapped_column(Text)
     body_rendered: Mapped[str] = mapped_column(Text)
     status: Mapped[EmailStatus] = mapped_column(

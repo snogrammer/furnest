@@ -14,9 +14,15 @@ saves the reviewed text and queues it like :func:`queue_email` would, and
 same way. :meth:`SqlEmailStore.review_queue` lists what waits on a person: drafts
 and failed inquiries whose property is still ``inquiry_drafted``.
 
+A draft needs no SMTP: without a From address it is logged with ``from_address``
+NULL, and :func:`send_draft_in` fills it in (and makes a fresh Message-ID) once SMTP
+is set up. A listing with no email address is contacted by hand through its source
+instead: :func:`mark_sent_manually_in` records that the draft went out that way.
+
 When an inquiry goes out, :meth:`SqlEmailStore.mark_sent` moves its property from
 ``inquiry_drafted`` to ``inquiry_sent`` in the same transaction, so the status
-only says "sent" once the server has accepted the message.
+only says "sent" once the server has accepted the message (or, for one sent by
+hand, once someone said so).
 """
 
 from dataclasses import dataclass
@@ -39,6 +45,10 @@ EMAIL_SEND = "email.send"
 
 # Long enough for an SMTP server's reply and a traceback summary.
 MAX_ERROR_LENGTH = 2000
+
+# The Message-ID domain of a draft made with no From address. It is replaced before
+# the draft is ever emailed (send_draft_in), so it never leaves furnest.
+_NO_DOMAIN = "furnest.invalid"
 
 
 class SmtpNotConfiguredError(RuntimeError):
@@ -71,7 +81,7 @@ class StoredEmail:
     property_id: int | None
     direction: EmailDirection
     to_address: str | None
-    from_address: str
+    from_address: str | None
     subject: str
     body_rendered: str
     status: EmailStatus
@@ -105,22 +115,27 @@ class ReviewItem:
     """An inquiry in the review queue, with what the queue shows about its property."""
 
     email: StoredEmail
-    title: str | None  # the property's primary listing's title
+    # From the property's primary listing: where to send it by hand, if need be.
+    title: str | None
+    source: str | None
+    listing_url: str | None
+
+
+def _message_id(from_address: str | None) -> str:
+    domain = from_address.rpartition("@")[2] if from_address else _NO_DOMAIN
+    return make_msgid(domain=domain)
 
 
 def _outbound(
     session: Session,
-    smtp: SmtpSettings,
     status: EmailStatus,
     *,
+    from_address: str | None,
     to: str | None,
     subject: str,
     body: str,
     property_id: int | None,
 ) -> Email:
-    if smtp.from_address is None:
-        raise SmtpNotConfiguredError
-    from_address = str(smtp.from_address)
     row = Email(
         property_id=property_id,
         direction=EmailDirection.OUTBOUND,
@@ -130,7 +145,7 @@ def _outbound(
         body_rendered=body,
         status=status,
         attempts=0,
-        message_id=make_msgid(domain=from_address.rpartition("@")[2]),
+        message_id=_message_id(from_address),
     )
     session.add(row)
     session.flush()
@@ -151,10 +166,12 @@ def queue_email(
     Raises :class:`SmtpNotConfiguredError` when there is no From address to
     record (and no domain for the Message-ID).
     """
+    if smtp.from_address is None:
+        raise SmtpNotConfiguredError
     row = _outbound(
         session,
-        smtp,
         EmailStatus.QUEUED,
+        from_address=str(smtp.from_address),
         to=to,
         subject=subject,
         body=body,
@@ -175,13 +192,14 @@ def draft_email(
 ) -> StoredEmail:
     """Log an outbound email as a ``draft``: nothing is sent until :func:`send_draft_in`.
 
-    ``to`` may be ``None`` when the listing has no email address. Raises
-    :class:`SmtpNotConfiguredError` like :func:`queue_email`.
+    ``to`` may be ``None`` when the listing has no email address. SMTP needn't be
+    set up: without a From address the draft can still be marked as sent by hand
+    (:func:`mark_sent_manually_in`), and :func:`send_draft_in` fills one in.
     """
     row = _outbound(
         session,
-        smtp,
         EmailStatus.DRAFT,
+        from_address=None if smtp.from_address is None else str(smtp.from_address),
         to=to,
         subject=subject,
         body=body,
@@ -200,14 +218,28 @@ def _sendable(session: Session, email_id: int) -> Email:
 
 
 def send_draft_in(
-    session: Session, email_id: int, *, to: str, subject: str, body: str
+    session: Session,
+    smtp: SmtpSettings,
+    email_id: int,
+    *,
+    to: str,
+    subject: str,
+    body: str,
 ) -> StoredEmail:
     """Save the reviewed text of a draft (or failed email) and queue it to be sent.
 
     The text is taken as given; :func:`furnest.email.inquiry.review_edit` checks
-    what a person typed. The Message-ID stays the one made with the draft.
+    what a person typed. The Message-ID stays the one made with the draft, unless
+    the draft was made without a From address: it gets the configured one and a
+    Message-ID in its domain. Raises :class:`SmtpNotConfiguredError` when SMTP isn't
+    set up, since nothing could send it.
     """
+    if not smtp.configured or smtp.from_address is None:
+        raise SmtpNotConfiguredError
     row = _sendable(session, email_id)
+    if row.from_address is None:
+        row.from_address = str(smtp.from_address)
+        row.message_id = _message_id(row.from_address)
     row.to_address = to
     row.subject = subject
     row.body_rendered = body
@@ -217,6 +249,54 @@ def send_draft_in(
     session.flush()
     queue.enqueue(session, EMAIL_SEND, {"email_id": row.id})
     return _stored(row)
+
+
+def mark_sent_manually_in(
+    session: Session, email_id: int, *, subject: str, body: str, at: datetime
+) -> StoredEmail:
+    """Record that a draft (or failed email) was sent by hand, through the source.
+
+    The row keeps the text as sent, becomes ``sent`` without being queued, and its
+    property moves to ``inquiry_sent`` with the ``dashboard`` actor. The text is
+    taken as given; :func:`furnest.email.inquiry.manual_edit` checks what was typed.
+    """
+    row = _sendable(session, email_id)
+    row.subject = subject
+    row.body_rendered = body
+    row.status = EmailStatus.SENT
+    row.sent_at = at
+    row.error = None
+    session.flush()
+    _property_sent(session, row, at=at, actor=Actor.DASHBOARD, detail="sent manually", manual=True)
+    return _stored(row)
+
+
+def _property_sent(
+    session: Session,
+    row: Email,
+    *,
+    at: datetime,
+    actor: Actor,
+    detail: str,
+    manual: bool = False,
+) -> None:
+    """Move the inquiry's property from ``inquiry_drafted`` to ``inquiry_sent``."""
+    if row.property_id is None:
+        return
+    prop = session.get(Property, row.property_id)
+    if prop is not None and prop.status is PropertyStatus.INQUIRY_DRAFTED:
+        payload: dict[str, object] = {"email_id": row.id}
+        if manual:
+            payload["manual"] = True
+        transition_in(
+            session,
+            prop.id,
+            PropertyStatus.INQUIRY_SENT,
+            actor=actor,
+            at=at,
+            detail=detail,
+            payload=payload,
+        )
 
 
 def discard_draft_in(session: Session, email_id: int) -> StoredEmail:
@@ -276,6 +356,8 @@ class SqlEmailStore:
                     ReviewItem(
                         email=_stored(row),
                         title=listing.title if listing else None,
+                        source=listing.source if listing else None,
+                        listing_url=listing.url if listing else None,
                     )
                 )
             return items
@@ -291,19 +373,7 @@ class SqlEmailStore:
             row.status = EmailStatus.SENT
             row.sent_at = at
             row.error = None
-            if row.property_id is None:
-                return
-            prop = session.get(Property, row.property_id)
-            if prop is not None and prop.status is PropertyStatus.INQUIRY_DRAFTED:
-                transition_in(
-                    session,
-                    prop.id,
-                    PropertyStatus.INQUIRY_SENT,
-                    actor=Actor.SYSTEM,
-                    at=at,
-                    detail="email sent",
-                    payload={"email_id": row.id},
-                )
+            _property_sent(session, row, at=at, actor=Actor.SYSTEM, detail="email sent")
 
     def record_failure(self, email_id: int, error: str, *, final: bool) -> None:
         """Count a failed attempt. ``final`` means it won't be retried: the row is ``failed``."""

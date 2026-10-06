@@ -11,6 +11,7 @@ from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import CriteriaVersion, Job, JobStatus, Listing, Property
 from furnest.db.property_store import (
+    MESSAGE_SYNC_JOB,
     NOTIFY,
     PropertyNotFoundError,
     SnoozeError,
@@ -455,3 +456,61 @@ def test_an_unavailable_property_with_no_audit_of_it_is_not_restored(
         session.execute(update(Property).where(Property.id == prop.id).values(status=S.UNAVAILABLE))
 
     assert store.restore_relisted([listing_id], at=T0 + HOUR) == []
+
+
+# --- Manual contact -------------------------------------------------------------
+
+
+def _listing(source_id: str, email: str | None) -> NormalizedListing:
+    return NormalizedListing.model_validate(
+        {
+            "source": "test",
+            "source_id": source_id,
+            "url": f"https://example.com/{source_id}",
+            "title": "Furnished place",
+            "contact": {"email": email, "platform_only": email is None},
+        }
+    )
+
+
+def _sync_jobs(session_factory: sessionmaker[Session]) -> int:
+    with session_scope(session_factory) as session:
+        jobs = session.scalars(select(Job).where(Job.kind == MESSAGE_SYNC_JOB))
+        return len(list(jobs))
+
+
+@pytest.mark.parametrize(("email", "manual"), [(None, True), ("lister@example.com", False)])
+def test_a_property_needs_manual_contact_when_its_listing_has_no_email(
+    session_factory: sessionmaker[Session],
+    store: SqlPropertyStore,
+    email: str | None,
+    manual: bool,
+) -> None:
+    (listing_id,) = (
+        SqlListingStore(session_factory)
+        .upsert_batch("test", [_listing("a", email)], seen_at=T0)
+        .new_ids
+    )
+
+    created = store.ensure_for_listing(listing_id, at=T0)
+    matched = store.record_match(listing_id, passing(), at=T0)
+
+    assert (created.manual_contact_required, matched.manual_contact_required) == (manual, manual)
+
+
+def test_the_flag_follows_the_listing_and_redraws_the_message(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore
+) -> None:
+    listings = SqlListingStore(session_factory)
+    (listing_id,) = listings.upsert_batch("test", [_listing("a", None)], seen_at=T0).new_ids
+    state = store.record_match(listing_id, passing(), at=T0)
+    store.attach_message(state.id, channel_id="1", message_id="2", rendered=state)
+    synced = _sync_jobs(session_factory)
+
+    listings.upsert_batch("test", [_listing("a", "lister@example.com")], seen_at=T0 + HOUR)
+    after = store.record_match(listing_id, passing(), at=T0 + HOUR)
+
+    assert after.manual_contact_required is False
+    assert _sync_jobs(session_factory) == synced + 1
+    store.record_match(listing_id, passing(), at=T0 + 2 * HOUR)
+    assert _sync_jobs(session_factory) == synced + 1
