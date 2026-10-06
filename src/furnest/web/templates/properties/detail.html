@@ -18,6 +18,20 @@
     {% if bb %}<div><dt>Size</dt><dd>{{ bb }}{% if primary.listing.sqft %} · {{ primary.listing.sqft }} sqft{% endif %}</dd></div>{% endif %}
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
+  {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+  {% if can_deny %}
+  <details class="deny"{% if reason %} open{% endif %}>
+    <summary>Deny…</summary>
+    <form method="post" action="/properties/{{ p.id }}/deny" class="note-form">
+      {{ csrf_field(request) }}
+      <div class="field">
+        <label for="deny-reason">Reason <small class="muted">(optional, saved as a note; markdown)</small></label>
+        <textarea id="deny-reason" name="reason" rows="3" maxlength="{{ max_note_length }}">{{ reason }}</textarea>
+      </div>
+      <button type="submit" class="danger">Deny property</button>
+    </form>
+  </details>
+  {% endif %}
   {% if p.snoozed_until %}<p class="muted">Snoozed until {{ when(p.snoozed_until) }}</p>{% endif %}
   {% if p.manual_contact_required %}<p class="muted">Manual contact required: reach out through the source's own messaging.</p>{% endif %}
 
@@ -134,6 +148,30 @@
   <section aria-labelledby="risk">
     <h2 id="risk">Risk flags</h2>
     <p class="muted">Scam and risk signals will show here (P8).</p>
+  </section>
+
+  <section aria-labelledby="notes">
+    <h2 id="notes">Notes</h2>
+    {% if d.notes %}
+    <ol class="notes" reversed>
+      {% for n in d.notes | reverse %}
+      <li id="note-{{ n.id }}">
+        <small class="muted">{{ n.actor.value }}{% if n.actor_detail %} ({{ n.actor_detail }}){% endif %} · {{ when(n.created_at) }}</small>
+        <div class="note-body">{{ render_markdown(n.body_md) }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">No notes yet.</p>
+    {% endif %}
+    <form method="post" action="/properties/{{ p.id }}/notes" class="note-form">
+      {{ csrf_field(request) }}
+      <div class="field">
+        <label for="note-body">Add a note <small class="muted">(markdown)</small></label>
+        <textarea id="note-body" name="body" rows="4" required maxlength="{{ max_note_length }}">{{ note }}</textarea>
+      </div>
+      <button type="submit">Add note</button>
+    </form>
   </section>
 
   <section aria-labelledby="timeline">

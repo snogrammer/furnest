@@ -2,7 +2,7 @@
 
 import pytest
 
-from furnest.web.html import render_description
+from furnest.web.html import render_description, render_markdown
 
 
 @pytest.mark.parametrize(
@@ -42,3 +42,37 @@ def test_plain_text_is_escaped_with_paragraphs_and_line_breaks() -> None:
 
 def test_empty_text_renders_nothing() -> None:
     assert str(render_description("  \n\n ")) == ""
+
+
+@pytest.mark.parametrize(
+    ("note", "forbidden"),
+    [
+        ("<script>alert(1)</script>", ["<script"]),
+        ('<img src="x" onerror="alert(1)">', ["<img"]),
+        ("[x](javascript:alert(1))", ["href", "<a"]),
+        ("![photo](https://example.com/a.png)", ["<img", "a.png"]),
+        ('<a href="https://example.com" onclick="steal()">x</a>', ["<a "]),
+        ("<!-- hidden -->", ["<!--"]),
+    ],
+)
+def test_note_html_is_neutralized(note: str, forbidden: list[str]) -> None:
+    html = str(render_markdown(note))
+
+    for fragment in forbidden:
+        assert fragment not in html
+
+
+def test_note_markdown_renders() -> None:
+    html = str(
+        render_markdown(
+            "# Plan\n\n**Call** _Mon_, `9am`\n\n- one\n- two\n\n> quoted\n\n"
+            "[map](https://example.com/m) <mailto:a@example.com>"
+        )
+    )
+
+    assert "<h1>Plan</h1>" in html
+    assert "<strong>Call</strong> <em>Mon</em>, <code>9am</code>" in html
+    assert "<ul>\n<li>one</li>" in html
+    assert "<blockquote>" in html
+    assert '<a href="https://example.com/m" rel="noopener noreferrer nofollow">map</a>' in html
+    assert 'href="mailto:a@example.com"' in html

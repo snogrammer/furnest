@@ -898,6 +898,79 @@ button.secondary {
   display: block;
 }
 
+/* Notes and the deny form on the detail page. */
+.notes {
+  margin: 0 0 var(--space);
+  padding: 0;
+  list-style: none;
+}
+
+.notes > li {
+  padding: calc(var(--space) / 2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.note-body {
+  max-width: 42rem;
+  overflow-wrap: anywhere;
+}
+
+.note-body > :first-child {
+  margin-top: 0.25rem;
+}
+
+.note-body > :last-child {
+  margin-bottom: 0;
+}
+
+.note-body pre {
+  overflow-x: auto;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.note-form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) / 2);
+  max-width: 42rem;
+}
+
+.note-form button {
+  align-self: flex-start;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.note-form button.danger {
+  border-color: #b3261e;
+  background: #b3261e;
+  color: #ffffff;
+}
+
+.deny {
+  margin-bottom: var(--space);
+}
+
+.deny summary {
+  cursor: pointer;
+  color: #b3261e;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .deny summary {
+    color: #f2b8b5;
+  }
+}
+
 .description {
   max-width: 42rem;
   overflow-wrap: anywhere;

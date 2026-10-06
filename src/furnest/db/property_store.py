@@ -36,6 +36,11 @@ property's primary listing: its lowest-id active listing, or its lowest-id listi
 if none is active. Text search matches that listing's title and the property's
 address.
 
+Notes (:meth:`SqlPropertyStore.add_note`, :meth:`SqlPropertyStore.notes`) are
+free-form markdown about a property. :meth:`SqlPropertyStore.deny` denies a
+property and, given a reason, saves it as a note in the same transaction; the
+audit event points at the note with ``payload["note_id"]``.
+
 A snooze isn't a status change, but who snoozed matters, so it is still written to
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
 """
@@ -54,7 +59,7 @@ from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.listing_store import PricePoint, price_points, stored_listing
-from furnest.db.models import AuditEvent, CriteriaVersion, Listing, Property
+from furnest.db.models import AuditEvent, CriteriaVersion, Listing, Note, Property
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
 from furnest.domain import Actor, AddressParser, Money, NormalizedListing, PropertyStatus
@@ -64,6 +69,10 @@ from furnest.worker import queue
 
 # The job that tells the user about a suggested property; consumed by P5's Discord poster.
 NOTIFY = "notify"
+
+
+# The longest note body accepted, in characters, after stripping.
+MAX_NOTE_LENGTH = 10_000
 
 
 class PropertyNotFoundError(LookupError):
@@ -110,6 +119,17 @@ class AuditEntry:
     actor: Actor
     actor_detail: str | None
     payload: dict[str, Any] | None
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class NoteEntry:
+    id: int
+    property_id: int
+    # Markdown, unrendered.
+    body_md: str
+    actor: Actor
+    actor_detail: str | None
     created_at: datetime
 
 
@@ -161,6 +181,8 @@ class PropertyDetail:
     listings: list[ListingDetail]
     # Oldest first.
     audit: list[AuditEntry]
+    # Oldest first.
+    notes: list[NoteEntry]
 
     # ``property`` above shadows the builtin in this class body.
     @builtins.property
@@ -287,6 +309,52 @@ def _audit(session: Session, property_id: int) -> list[AuditEntry]:
         .order_by(AuditEvent.created_at, AuditEvent.id)
     )
     return [_entry(row) for row in rows]
+
+
+def _note_entry(row: Note) -> NoteEntry:
+    return NoteEntry(
+        id=row.id,
+        property_id=row.property_id,
+        body_md=row.body_md,
+        actor=row.actor,
+        actor_detail=row.actor_detail,
+        created_at=row.created_at,
+    )
+
+
+def _notes(session: Session, property_id: int) -> list[NoteEntry]:
+    """The property's notes, oldest first."""
+    rows = session.scalars(
+        select(Note).where(Note.property_id == property_id).order_by(Note.created_at, Note.id)
+    )
+    return [_note_entry(row) for row in rows]
+
+
+def note_body(text: str) -> str:
+    """``text`` stripped, or :class:`ValueError` if that is empty or too long."""
+    body = text.strip()
+    if not body:
+        raise ValueError("a note can't be empty")
+    if len(body) > MAX_NOTE_LENGTH:
+        raise ValueError(f"a note can't be longer than {MAX_NOTE_LENGTH} characters")
+    return body
+
+
+def _add_note(
+    session: Session,
+    property_id: int,
+    body: str,
+    *,
+    actor: Actor,
+    at: datetime,
+    detail: str | None,
+) -> Note:
+    row = Note(
+        property_id=property_id, body_md=body, actor=actor, actor_detail=detail, created_at=at
+    )
+    session.add(row)
+    session.flush()
+    return row
 
 
 def _match(data: dict[str, Any] | None) -> MatchResult | None:
@@ -422,6 +490,66 @@ class SqlPropertyStore:
                 raise PropertyNotFoundError(property_id)
             _apply_transition(session, row, to, actor=actor, at=at, detail=detail, payload=payload)
             return _state(row)
+
+    def deny(
+        self,
+        property_id: int,
+        *,
+        actor: Actor,
+        at: datetime,
+        reason: str | None = None,
+        detail: str | None = None,
+    ) -> PropertyState:
+        """Move the property to ``denied``, saving a non-blank ``reason`` as a note.
+
+        Raises like :meth:`transition`, and :class:`ValueError` if the reason is
+        too long. Nothing is written unless the whole deny succeeds.
+        """
+        body = None if reason is None or not reason.strip() else note_body(reason)
+        with session_scope(self._session_factory) as session:
+            row = session.get(Property, property_id)
+            if row is None:
+                raise PropertyNotFoundError(property_id)
+            payload = None
+            if body is not None:
+                note = _add_note(session, property_id, body, actor=actor, at=at, detail=detail)
+                payload = {"note_id": note.id}
+            _apply_transition(
+                session,
+                row,
+                PropertyStatus.DENIED,
+                actor=actor,
+                at=at,
+                detail=detail,
+                payload=payload,
+            )
+            return _state(row)
+
+    def add_note(
+        self,
+        property_id: int,
+        body: str,
+        *,
+        actor: Actor,
+        at: datetime,
+        detail: str | None = None,
+    ) -> NoteEntry:
+        """Add a markdown note to the property.
+
+        Raises :class:`ValueError` for an empty or too long body and
+        :class:`PropertyNotFoundError` if there is no such property.
+        """
+        text = note_body(body)
+        with session_scope(self._session_factory) as session:
+            if session.get(Property, property_id) is None:
+                raise PropertyNotFoundError(property_id)
+            note = _add_note(session, property_id, text, actor=actor, at=at, detail=detail)
+            return _note_entry(note)
+
+    def notes(self, property_id: int) -> list[NoteEntry]:
+        """The property's notes, oldest first."""
+        with session_scope(self._session_factory) as session:
+            return _notes(session, property_id)
 
     def record_match(self, listing_id: int, result: MatchResult, *, at: datetime) -> PropertyState:
         """Store ``result`` on the listing's property, creating the property if needed.
@@ -662,6 +790,7 @@ class SqlPropertyStore:
                 match=_match(row.match_result),
                 listings=listings,
                 audit=_audit(session, property_id),
+                notes=_notes(session, property_id),
             )
 
     def for_listing(self, listing_id: int) -> PropertyState | None:

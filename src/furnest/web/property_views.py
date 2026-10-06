@@ -192,4 +192,7 @@ def audit_label(entry: AuditEntry) -> str:
         if "snoozed_until" in payload:
             return f"Snoozed until {str(payload['snoozed_until'])[:10]}"
         return f"Updated while {status_label(entry.to_status)}"
-    return f"{status_label(entry.from_status)} → {status_label(entry.to_status)}"
+    label = f"{status_label(entry.from_status)} → {status_label(entry.to_status)}"
+    if entry.payload and "note_id" in entry.payload:
+        label += " (reason in notes)"
+    return label

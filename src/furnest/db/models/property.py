@@ -11,6 +11,9 @@ creation.
 ``score``, ``match_result`` and ``criteria_version_id`` hold the latest match, and
 ``snoozed_until``, ``manual_contact_required`` and the Discord message reference
 are set by the pipeline and the Discord integration.
+
+A :class:`Note` is free-form markdown someone wrote about a property. Deny reasons
+are notes too; the deny's audit event names its note in ``payload["note_id"]``.
 """
 
 from datetime import datetime
@@ -21,6 +24,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from furnest.db.base import Base, UTCDateTime, utcnow
 from furnest.domain import Actor, PropertyStatus
+
+
+def _actor_enum(name: str) -> Enum:
+    return Enum(
+        Actor,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        length=16,
+        values_callable=lambda actors: [a.value for a in actors],
+    )
 
 
 def _status_enum(name: str) -> Enum:
@@ -71,17 +85,22 @@ class AuditEvent(Base):
         _status_enum("audit_event_from_status")
     )
     to_status: Mapped[PropertyStatus] = mapped_column(_status_enum("audit_event_to_status"))
-    actor: Mapped[Actor] = mapped_column(
-        Enum(
-            Actor,
-            name="audit_event_actor",
-            native_enum=False,
-            create_constraint=True,
-            length=16,
-            values_callable=lambda actors: [a.value for a in actors],
-        )
-    )
+    actor: Mapped[Actor] = mapped_column(_actor_enum("audit_event_actor"))
     # Free text about the actor: a Discord user, a job name, a reason.
     actor_detail: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Note(Base):
+    __tablename__ = "notes"
+    __table_args__ = (Index("ix_notes_property_id_created_at", "property_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"))
+    # Markdown as written; rendered and sanitized on display (furnest.web.html).
+    body_md: Mapped[str] = mapped_column(Text)
+    actor: Mapped[Actor] = mapped_column(_actor_enum("note_actor"))
+    # Free text about the actor, such as a Discord user.
+    actor_detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
