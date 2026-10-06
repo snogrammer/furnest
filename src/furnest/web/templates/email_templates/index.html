@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Email templates · furnest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Email templates</h1>
+  <a href="/email-templates/new">New template</a>
+</div>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+{% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
+<p class="muted">Inquiry emails are written from these templates. The inquiry flow uses <code>{{ default_name }}</code>.</p>
+<div class="table-scroll">
+<table class="data-table">
+  <thead>
+    <tr><th scope="col">Name</th><th scope="col">Subject</th><th scope="col">Updated</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+  </thead>
+  <tbody>
+    {% for t in templates %}
+    <tr id="template-{{ t.name }}">
+      <th scope="row"><a href="/email-templates/{{ t.name }}">{{ t.name }}</a></th>
+      <td><code>{{ t.subject }}</code></td>
+      <td><time datetime="{{ t.updated_at.isoformat() }}">{{ t.updated_at.strftime("%Y-%m-%d %H:%M UTC") }}</time></td>
+      <td>
+        {% if t.name != default_name %}
+        <form method="post" action="/email-templates/{{ t.name }}/delete">
+          {{ csrf_field(request) }}
+          <button type="submit" class="link-button">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<form class="criteria-form signature-form" method="post" action="/email-templates/signature">
+  {{ csrf_field(request) }}
+  <fieldset>
+    <legend>Signature</legend>
+    <div class="field">
+      <label for="signature">Added where a template uses <code>{{ "{{ signature }}" }}</code></label>
+      <textarea id="signature" name="signature" rows="4" maxlength="{{ max_signature }}" class="mono">{{ signature }}</textarea>
+      <small class="muted">Plain text. Put your name and how to reach you here, not in the templates.</small>
+    </div>
+  </fieldset>
+  <div class="actions"><button type="submit">Save signature</button></div>
+</form>
+{% endblock %}

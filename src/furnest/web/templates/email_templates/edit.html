@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% import "criteria/_macros.html" as m %}
+{% block title %}{{ name or "New template" }} · Email templates · furnest{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% if is_new %}New email template{% else %}Template <code>{{ name }}</code>{% endif %}</h1>
+  <a href="/email-templates">All templates</a>
+</div>
+{% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
+{% if errors %}<div class="form-error" role="alert"><p>Not saved. Fix the highlighted fields.</p></div>{% endif %}
+<div class="template-editor">
+  <form id="template-form" class="criteria-form" method="post" action="/email-templates"
+    hx-post="/email-templates/preview" hx-trigger="input delay:400ms" hx-target="#preview" hx-swap="innerHTML">
+    {{ csrf_field(request) }}
+    {% if is_new %}<input type="hidden" name="is_new" value="true">{% endif %}
+    <fieldset>
+      <legend>Template</legend>
+      <div class="field">
+        <label for="name">Name</label>
+        {% if is_new %}
+        <input id="name" name="name" value="{{ name }}" maxlength="100" pattern="[a-z0-9][a-z0-9_\-]*" autocapitalize="none" required{{ m.described(errors, "name") }}>
+        <small class="muted">Lowercase letters, digits, - and _.</small>
+        {% else %}
+        <input type="hidden" name="name" value="{{ name }}"><code>{{ name }}</code>
+        {% endif %}
+        {{ m.error(errors, "name") }}
+      </div>
+      <div class="field">
+        <label for="subject">Subject</label>
+        <input id="subject" name="subject" value="{{ subject }}" maxlength="{{ max_subject }}" class="mono" required{{ m.described(errors, "subject") }}>
+        {{ m.error(errors, "subject") }}
+      </div>
+      <div class="field">
+        <label for="body">Body</label>
+        <textarea id="body" name="body" rows="18" maxlength="{{ max_body }}" class="mono" required{{ m.described(errors, "body") }}>{{ body }}</textarea>
+        {{ m.error(errors, "body") }}
+      </div>
+    </fieldset>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button type="submit" class="secondary" formaction="/email-templates/preview" formnovalidate>Preview</button>
+    </div>
+  </form>
+
+  <aside class="template-side">
+    <section aria-labelledby="preview-heading">
+      <h2 id="preview-heading">Preview</h2>
+      <p class="muted">A sample listing, your signature and your criteria's move-in date and lease length.</p>
+      <div id="preview" aria-live="polite">{% include "email_templates/_preview.html" %}</div>
+    </section>
+    <section aria-labelledby="variables-heading">
+      <h2 id="variables-heading">Variables</h2>
+      <p class="muted">Jinja2 syntax: <code>{{ "{{ listing.title }}" }}</code>, <code>{{ "{% if listing.price %}…{% endif %}" }}</code>. Guard anything that may be empty with <code>if</code>.</p>
+      <dl class="variables">
+        {% for variable, meaning in variables %}
+        <dt><code>{{ variable }}</code></dt><dd>{{ meaning }}</dd>
+        {% endfor %}
+      </dl>
+    </section>
+  </aside>
+</div>
+{% endblock %}

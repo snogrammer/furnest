@@ -23,6 +23,7 @@
       <ul>
         <li><a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Dashboard</a></li>
         <li><a href="/criteria" {% if request.url.path.startswith("/criteria") %}aria-current="page"{% endif %}>Criteria</a></li>
+        <li><a href="/email-templates" {% if request.url.path.startswith("/email-templates") %}aria-current="page"{% endif %}>Email</a></li>
         <li><a href="/sources" {% if request.url.path.startswith("/sources") %}aria-current="page"{% endif %}>Sources</a></li>
         <li><a href="/api/docs">API</a></li>
       </ul>

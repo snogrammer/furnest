@@ -1,0 +1,11 @@
+{# The rendered sample inquiry, or why the template doesn't render. #}
+{% if preview_error %}
+<p class="form-error" role="alert">{{ preview_error }}</p>
+{% elif preview %}
+<dl class="email-preview">
+  <dt>Subject</dt>
+  <dd class="email-subject">{{ preview.subject }}</dd>
+  <dt>Body</dt>
+  <dd><pre class="email-body">{{ preview.body }}</pre></dd>
+</dl>
+{% endif %}

@@ -1030,3 +1030,71 @@ button.secondary {
 .property-card header h3 {
   flex: 1;
 }
+
+/* Email template editor. */
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+}
+
+.template-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space);
+}
+
+@media (min-width: 64rem) {
+  .template-editor {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+.template-side h2 {
+  margin-bottom: 0.25rem;
+  font-size: 1.1rem;
+}
+
+.email-preview {
+  margin: 0;
+  padding: var(--space);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.email-preview dt {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.email-preview dd {
+  margin: 0 0 calc(var(--space) / 2);
+}
+
+.email-subject {
+  font-weight: 600;
+}
+
+.email-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+.variables dt {
+  margin-top: 0.5rem;
+}
+
+.variables dd {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.signature-form {
+  margin-top: calc(var(--space) * 2);
+}
+
+.data-table form {
+  margin: 0;
+}

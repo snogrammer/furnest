@@ -44,7 +44,16 @@ from furnest.web.discord_dispatch import InteractionDispatcher
 from furnest.web.errors import register_error_handlers
 from furnest.web.headers import SecurityHeadersMiddleware
 from furnest.web.ratelimit import SlidingWindowLimiter
-from furnest.web.routes import api, auth, criteria, discord, health, pages, sources
+from furnest.web.routes import (
+    api,
+    auth,
+    criteria,
+    discord,
+    email_templates,
+    health,
+    pages,
+    sources,
+)
 from furnest.web.templating import STATIC_DIR
 
 log = get_logger(__name__)
@@ -100,7 +109,14 @@ def create_app(
     register_auth_handlers(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.add_api_route("/favicon.ico", favicon, include_in_schema=False)
-    for html_router in (health.router, auth.router, pages.router, criteria.router, sources.router):
+    for html_router in (
+        health.router,
+        auth.router,
+        pages.router,
+        criteria.router,
+        email_templates.router,
+        sources.router,
+    ):
         app.include_router(html_router, include_in_schema=False)
     app.include_router(discord.router, include_in_schema=False)
     app.include_router(api.router)
