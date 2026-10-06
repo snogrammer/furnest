@@ -12,7 +12,9 @@ secret logs every browser out. Sessions are stateless: logout deletes the cookie
 it does not revoke it server side. Token comparison is constant time.
 
 Routers opt in with ``dependencies=[Depends(require_auth)]``. An unauthenticated
-browser page load is redirected to ``/login``; everything else gets a 401.
+browser page load is redirected to ``/login``; everything else gets a 401. The JSON
+API uses :func:`require_bearer` instead: Bearer only, so the session cookie (and
+with it CSRF) never comes into play there.
 """
 
 import hashlib
@@ -133,6 +135,16 @@ def require_auth(request: Request) -> None:
     if request.method in ("GET", "HEAD") and _wants_html(request):
         path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
         raise LoginRequired(path)
+    raise HTTPException(
+        status_code=401, detail="Not authenticated", headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+def require_bearer(request: Request) -> None:
+    """Dependency: a valid ``Authorization: Bearer`` header, or a 401."""
+    if auth_method(request) == "bearer":
+        request.state.auth = "bearer"
+        return
     raise HTTPException(
         status_code=401, detail="Not authenticated", headers={"WWW-Authenticate": "Bearer"}
     )

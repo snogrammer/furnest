@@ -75,6 +75,24 @@ One token protects everything except the health probes, static files and the log
 - **CSRF:** every form post and htmx request carries a token tied to a signed cookie. Requests authenticated with Bearer are exempt.
 - **Login rate limit:** after `AUTH_LOGIN_MAX_ATTEMPTS` failed logins from one IP within `AUTH_LOGIN_WINDOW_SECONDS`, `/login` answers `429` with `Retry-After` until the window slides. Behind a reverse proxy, list its address(es) in `WEB_TRUSTED_PROXIES` so the real client IP and scheme come from `X-Forwarded-For`/`X-Forwarded-Proto`. Otherwise those headers are ignored.
 
+### JSON API
+
+Scripts can use the API under `/api/v1` with `Authorization: Bearer <AUTH_TOKEN>`. The session cookie is not accepted there. Signed in, open `/api/docs` to browse the schema in Swagger UI and try requests: enter the token under "Authorize". The raw schema is at `/api/openapi.json`.
+
+| Method | Path | |
+|---|---|---|
+| `GET` | `/api/v1/properties` | Page of properties with their primary listing. Query: `status` (repeatable), `q`, `sort` (`score`, `price`, `newest`), `limit` (≤100), `offset`, `include_snoozed` |
+| `GET` | `/api/v1/properties/{id}` | One property: match result, listings, audit trail, notes |
+| `GET` | `/api/v1/properties/{id}/listings` | The property's listings with price history |
+| `POST` | `/api/v1/properties/{id}/transitions` | `{"to": "approved"}`; a deny may add `"reason"` (saved as a note). `409` if the move isn't allowed |
+| `POST` | `/api/v1/properties/{id}/notes` | `{"body": "markdown"}` → `201` |
+
+```sh
+curl -H "Authorization: Bearer $AUTH_TOKEN" "https://furnest.example.com/api/v1/properties?status=suggested"
+curl -X POST -H "Authorization: Bearer $AUTH_TOKEN" -H "Content-Type: application/json" \
+  -d '{"to": "denied", "reason": "Too far"}' https://furnest.example.com/api/v1/properties/42/transitions
+```
+
 ## Docker deployment
 
 One image runs every role. The command picks it: `web` (default), `worker` or `migrate`.

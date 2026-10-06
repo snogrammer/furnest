@@ -73,7 +73,7 @@ def test_every_forward_pair_is_allowed_or_rejected(
 
 
 @pytest.mark.parametrize(("current", "to"), FORWARD_PAIRS, ids=lambda s: str(s))
-@pytest.mark.parametrize("actor", [Actor.DASHBOARD, Actor.DISCORD])
+@pytest.mark.parametrize("actor", [Actor.DASHBOARD, Actor.DISCORD, Actor.API])
 def test_people_can_do_everything_but_mark_unavailable(
     current: PropertyStatus, to: PropertyStatus, actor: Actor
 ) -> None:
@@ -96,7 +96,7 @@ def test_leaving_unavailable_only_goes_back_or_to_archived(
             check_transition(S.UNAVAILABLE, to, Actor.SYSTEM, restore_to=restore_to)
 
 
-@pytest.mark.parametrize("actor", [Actor.DASHBOARD, Actor.DISCORD])
+@pytest.mark.parametrize("actor", [Actor.DASHBOARD, Actor.DISCORD, Actor.API])
 def test_only_the_system_restores_but_anyone_archives(actor: Actor) -> None:
     with pytest.raises(InvalidTransitionError, match="only the system restores"):
         check_transition(S.UNAVAILABLE, S.APPROVED, actor, restore_to=S.APPROVED)

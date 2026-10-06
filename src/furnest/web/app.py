@@ -15,8 +15,10 @@ Middleware, outermost first: trusted-proxy header rewriting (only when
 ``WEB_TRUSTED_PROXIES`` is set, so the client IP and scheme are right for everything
 below), security headers, CSRF cookie handling.
 
-The interactive API docs are disabled: Swagger UI loads from a CDN, which the
-self-only CSP forbids, and the API is documented in the README instead.
+FastAPI's built-in docs routes are off: their Swagger UI loads from a CDN, which
+the self-only CSP forbids, and they would be public. ``routes.api`` serves the schema
+and a vendored Swagger UI behind auth instead. Only the JSON API is in the schema;
+the HTML routes are left out of it.
 """
 
 from collections.abc import AsyncIterator
@@ -39,7 +41,7 @@ from furnest.web.csrf import CsrfMiddleware, CsrfSigner
 from furnest.web.errors import register_error_handlers
 from furnest.web.headers import SecurityHeadersMiddleware
 from furnest.web.ratelimit import SlidingWindowLimiter
-from furnest.web.routes import auth, criteria, health, pages, sources
+from furnest.web.routes import api, auth, criteria, health, pages, sources
 from furnest.web.templating import STATIC_DIR
 
 log = get_logger(__name__)
@@ -93,11 +95,10 @@ def create_app(
     register_auth_handlers(app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.add_api_route("/favicon.ico", favicon, include_in_schema=False)
-    app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(pages.router)
-    app.include_router(criteria.router)
-    app.include_router(sources.router)
+    for html_router in (health.router, auth.router, pages.router, criteria.router, sources.router):
+        app.include_router(html_router, include_in_schema=False)
+    app.include_router(api.router)
+    app.include_router(api.docs_router)
     return app
 
 

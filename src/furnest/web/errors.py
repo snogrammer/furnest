@@ -1,4 +1,5 @@
-"""Error responses: HTML pages for browsers, JSON for everything else.
+"""Error responses: HTML pages for browsers, JSON for everything else (and for
+the JSON API under ``/api/v1``, whoever asks).
 
 Neither ever includes a stack trace. Unhandled exceptions are logged here (and
 reach Sentry through its FastAPI integration when it is enabled).
@@ -21,7 +22,13 @@ log = get_logger(__name__)
 _PAGES = {404: "errors/404.html"}
 
 
+# The JSON API answers in JSON whatever the client accepts.
+_API_PREFIX = "/api/v1/"
+
+
 def _wants_html(request: Request) -> bool:
+    if request.url.path.startswith(_API_PREFIX):
+        return False
     return "text/html" in request.headers.get("accept", "")
 
 

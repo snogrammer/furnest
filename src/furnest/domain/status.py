@@ -55,6 +55,8 @@ class Actor(StrEnum):
     DASHBOARD = "dashboard"
     DISCORD = "discord"
     SYSTEM = "system"
+    # The JSON API (Bearer token): the same rights as the dashboard.
+    API = "api"
 
 
 S = PropertyStatus
