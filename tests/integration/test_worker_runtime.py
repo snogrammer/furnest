@@ -6,10 +6,13 @@ import signal
 import threading
 import time
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from datetime import time as clock_time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -564,3 +567,16 @@ def test_nothing_new_starts_once_stopping(
     )
     assert runs == []
     assert _status(session_factory, job_id) is JobStatus.QUEUED
+
+
+def test_schedule_daily_fires_at_the_local_time(migrated_engine: Engine) -> None:
+    worker = Worker(Settings(), migrated_engine, JobRegistry())
+    chicago = ZoneInfo("America/Chicago")
+
+    worker.schedule_daily("digest", lambda _ctx: None, at=clock_time(8, 30), tz=chicago)
+
+    job = worker._scheduler.get_job("digest")
+    assert isinstance(job.trigger, CronTrigger)
+    after = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)  # 07:00 in Chicago
+    fire = job.trigger.get_next_fire_time(None, after)
+    assert fire == datetime(2026, 10, 6, 8, 30, tzinfo=chicago)

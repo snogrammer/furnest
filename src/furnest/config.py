@@ -25,10 +25,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from datetime import time
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Protocol
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
     AnyUrl,
@@ -124,6 +126,20 @@ class AppSettings(_Group):
     data_dir: Path = Path("/data")
     inquiry_mode: InquiryMode = InquiryMode.REVIEW
     timezone: str = "UTC"
+
+    @field_validator("timezone")
+    @classmethod
+    def _timezone_exists(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            msg = f"TIMEZONE {value!r} is not an IANA timezone name"
+            raise ValueError(msg) from exc
+        return value
+
+    @property
+    def tzinfo(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
 
 
 class DbSettings(_Group):
@@ -232,6 +248,12 @@ class DiscordSettings(_Group):
     # How far an interaction's signed timestamp may be from our clock, either way,
     # before ``POST /discord/interactions`` rejects it as a possible replay.
     interaction_max_age_seconds: PositiveInt = 300
+    # Local time (``TIMEZONE``) of the daily digest; unset means no digest.
+    digest_time: time | None = None
+    # How many of the day's new suggestions the digest lists.
+    digest_top: PositiveInt = 5
+    # Alert once a source has failed this many runs in a row; 0 turns alerts off.
+    alert_after_failures: Annotated[int, Field(ge=0)] = 3
 
     @field_validator("public_key")
     @classmethod

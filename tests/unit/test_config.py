@@ -1,7 +1,9 @@
 """Environment settings, ``.env.example`` coverage and runtime override precedence."""
 
 import re
+from datetime import time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -126,6 +128,10 @@ def test_dotenv_file_in_working_directory_is_read() -> None:
         ("DB_URL", "postgresql://db.example.com/furnest"),
         ("DISCORD_MAX_RETRIES", "-1"),
         ("DISCORD_REQUEST_TIMEOUT_SECONDS", "0"),
+        ("DISCORD_DIGEST_TIME", "25:00"),
+        ("DISCORD_DIGEST_TOP", "0"),
+        ("DISCORD_ALERT_AFTER_FAILURES", "-1"),
+        ("TIMEZONE", "Mars/Olympus_Mons"),
     ],
 )
 def test_invalid_values_are_rejected(
@@ -145,6 +151,26 @@ def test_discord_client_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert discord.request_timeout_seconds == 2.5
     assert discord.max_retries == 0
+
+
+def test_digest_and_alert_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_DIGEST_TIME", "08:30")
+    monkeypatch.setenv("DISCORD_DIGEST_TOP", "3")
+    monkeypatch.setenv("DISCORD_ALERT_AFTER_FAILURES", "0")
+    monkeypatch.setenv("TIMEZONE", "America/Chicago")
+
+    settings = Settings()
+
+    assert settings.discord.digest_time == time(8, 30)
+    assert settings.discord.digest_top == 3
+    assert settings.discord.alert_after_failures == 0
+    assert settings.app.tzinfo == ZoneInfo("America/Chicago")
+
+
+def test_digest_is_off_and_alerts_on_by_default() -> None:
+    discord = Settings().discord
+    assert discord.digest_time is None
+    assert discord.alert_after_failures == 3
 
 
 def test_secrets_are_not_exposed_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:

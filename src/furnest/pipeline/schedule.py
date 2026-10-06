@@ -23,6 +23,10 @@ One run (:class:`SourceRun`):
    passing the job's ``cancelled`` event so a timed-out run stores nothing late;
 3. records success on the ``sources`` row, which resets ``consecutive_failures``.
 
+``alert_after`` (``DISCORD_ALERT_AFTER_FAILURES``) goes to the store with every
+outcome, which queues the Discord alert when a source starts or stops failing
+(see :mod:`furnest.db.source_store`).
+
 Failures aren't caught here. The worker reports them to Sentry with the ``source``
 tag and calls :meth:`SourceRun.on_failure`, which bumps the failure counter and
 stores ``last_error``. It does the same for a timeout, so a stuck source shows up
@@ -101,12 +105,14 @@ class SourceRun:
         settings: SourcesSettings,
         store: SqlSourceStore,
         ingestor: ListingIngestor,
+        alert_after: int = 0,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._adapter = adapter
         self._settings = settings
         self._store = store
         self._ingestor = ingestor
+        self._alert_after = alert_after
         self._clock = clock
 
     @property
@@ -125,11 +131,19 @@ class SourceRun:
         if summary is None or ctx.cancelled.is_set():
             # No criteria to search with, or the worker already recorded a timeout.
             return
-        self._store.record_success(self.name, listings_found=summary.counts.found, at=self._clock())
+        self._store.record_success(
+            self.name,
+            listings_found=summary.counts.found,
+            at=self._clock(),
+            alert_after=self._alert_after,
+        )
 
     def on_failure(self, exc: BaseException) -> None:
         self._store.record_failure(
-            self.name, error=f"{type(exc).__name__}: {exc}", at=self._clock()
+            self.name,
+            error=f"{type(exc).__name__}: {exc}",
+            at=self._clock(),
+            alert_after=self._alert_after,
         )
 
 
@@ -140,6 +154,7 @@ def schedule_sources(
     session_factory: sessionmaker[Session],
     ingestor: ListingIngestor,
     *,
+    alert_after: int = 0,
     clock: Callable[[], datetime] = utcnow,
 ) -> list[str]:
     """Schedule every source that may run; returns their names.
@@ -158,7 +173,12 @@ def schedule_sources(
         if config.disabled_reason is not None or (config.enabled_pinned and not config.enabled):
             continue
         run = SourceRun(
-            source.adapter, settings=settings, store=store, ingestor=ingestor, clock=clock
+            source.adapter,
+            settings=settings,
+            store=store,
+            ingestor=ingestor,
+            alert_after=alert_after,
+            clock=clock,
         )
         worker.schedule(
             job_name(config.name),
@@ -184,6 +204,7 @@ class RunSourceNow:
         settings: SourcesSettings,
         session_factory: sessionmaker[Session],
         ingestor: ListingIngestor,
+        alert_after: int = 0,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._registry = registry
@@ -191,6 +212,7 @@ class RunSourceNow:
         self._factory = session_factory
         self._store = SqlSourceStore(session_factory)
         self._ingestor = ingestor
+        self._alert_after = alert_after
         self._clock = clock
 
     def __call__(self, ctx: JobContext) -> None:
@@ -209,6 +231,7 @@ class RunSourceNow:
             settings=self._settings,
             store=self._store,
             ingestor=self._ingestor,
+            alert_after=self._alert_after,
             clock=self._clock,
         )
         try:
@@ -226,6 +249,8 @@ def register_run_now(
     settings: SourcesSettings,
     session_factory: sessionmaker[Session],
     ingestor: ListingIngestor,
+    *,
+    alert_after: int = 0,
 ) -> None:
     """Register :class:`RunSourceNow` with a timeout that fits the slowest source."""
     adapters = (registry.get(name) for name in registry.names())
@@ -233,7 +258,11 @@ def register_run_now(
     jobs.register(
         RUN_SOURCE,
         RunSourceNow(
-            registry, settings=settings, session_factory=session_factory, ingestor=ingestor
+            registry,
+            settings=settings,
+            session_factory=session_factory,
+            ingestor=ingestor,
+            alert_after=alert_after,
         ),
         timeout=timedelta(seconds=max(timeouts, default=settings.run_timeout_seconds)),
     )

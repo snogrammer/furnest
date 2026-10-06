@@ -6,6 +6,12 @@ so the dashboard can list a source before it has ever run. The scheduler
 resolved adapter configs, why a source can't run
 (:meth:`SqlSourceStore.set_disabled_reasons`); the source health page
 (:mod:`furnest.web.routes.sources`) reads it back and sets the toggle.
+
+Recording an outcome can also queue a :data:`SOURCE_ALERT_JOB` in the same
+transaction (``alert_after``, from ``DISCORD_ALERT_AFTER_FAILURES``): ``failing`` on
+the run that brings ``consecutive_failures`` up to the threshold, and ``recovered``
+on the first success after that. Only the crossing alerts, so an outage posts one
+alert however long it lasts. :mod:`furnest.notify.alerts` posts them.
 """
 
 from collections.abc import Iterable, Mapping
@@ -18,9 +24,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.models import Source
 from furnest.db.session import session_scope
+from furnest.worker import queue
 
 # Long enough for a useful traceback summary, short enough for a table cell.
 MAX_ERROR_LENGTH = 2000
+
+# Queue job kind for a source alert; see :mod:`furnest.notify.alerts` for the payload.
+SOURCE_ALERT_JOB = "discord.source_alert"
+FAILING = "failing"
+RECOVERED = "recovered"
 
 
 class SourceNotFoundError(LookupError):
@@ -91,23 +103,49 @@ class SqlSourceStore:
         for name, reason in sorted(reasons.items()):
             self._update(name, disabled_reason=reason)
 
-    def record_success(self, name: str, *, listings_found: int, at: datetime) -> None:
-        self._update(
-            name,
-            last_run_at=at,
-            last_success_at=at,
-            consecutive_failures=0,
-            last_error=None,
-            listings_found=listings_found,
-        )
+    def record_success(
+        self, name: str, *, listings_found: int, at: datetime, alert_after: int = 0
+    ) -> None:
+        """Record a successful run; queue a ``recovered`` alert if it ends an alerted outage."""
+        with session_scope(self._session_factory) as session:
+            failures = session.scalar(
+                select(Source.consecutive_failures).where(Source.name == name)
+            )
+            if failures is None:
+                raise SourceNotFoundError(name)
+            session.execute(
+                update(Source)
+                .where(Source.name == name)
+                .values(
+                    last_run_at=at,
+                    last_success_at=at,
+                    consecutive_failures=0,
+                    last_error=None,
+                    listings_found=listings_found,
+                )
+            )
+            if alert_after > 0 and failures >= alert_after:
+                _enqueue_alert(session, name, RECOVERED, failures=failures)
 
-    def record_failure(self, name: str, *, error: str, at: datetime) -> None:
-        self._update(
-            name,
-            last_run_at=at,
-            consecutive_failures=Source.consecutive_failures + 1,
-            last_error=error[:MAX_ERROR_LENGTH],
+    def record_failure(self, name: str, *, error: str, at: datetime, alert_after: int = 0) -> None:
+        """Record a failed run; queue a ``failing`` alert on the ``alert_after``-th in a row."""
+        error = error[:MAX_ERROR_LENGTH]
+        statement = (
+            update(Source)
+            .where(Source.name == name)
+            .values(
+                last_run_at=at,
+                consecutive_failures=Source.consecutive_failures + 1,
+                last_error=error,
+            )
+            .returning(Source.consecutive_failures)
         )
+        with session_scope(self._session_factory) as session:
+            failures = session.scalar(statement)
+            if failures is None:
+                raise SourceNotFoundError(name)
+            if alert_after > 0 and failures == alert_after:
+                _enqueue_alert(session, name, FAILING, failures=failures, error=error)
 
     def _update(self, name: str, **values: object) -> None:
         statement = update(Source).where(Source.name == name).values(**values)
@@ -115,3 +153,7 @@ class SqlSourceStore:
             result = session.execute(statement)
             if result.rowcount == 0:  # type: ignore[attr-defined]
                 raise SourceNotFoundError(name)
+
+
+def _enqueue_alert(session: Session, name: str, event: str, **details: str | int) -> None:
+    queue.enqueue(session, SOURCE_ALERT_JOB, {"source": name, "event": event, **details})

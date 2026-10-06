@@ -281,6 +281,7 @@ def _filtered[*Ts](
     statuses: Iterable[PropertyStatus] | None,
     text: str | None,
     include_snoozed: bool,
+    changed_since: datetime | None = None,
 ) -> Select[*Ts]:
     """``statement`` over properties joined to their primary listing, filtered."""
     statement = statement.select_from(Property).outerjoin(
@@ -290,6 +291,8 @@ def _filtered[*Ts](
         statement = statement.where(Property.status.in_(list(statuses)))
     if not include_snoozed:
         statement = statement.where(_visible(now))
+    if changed_since is not None:
+        statement = statement.where(Property.status_changed_at >= changed_since)
     if text:
         statement = statement.where(
             or_(
@@ -838,11 +841,13 @@ class SqlPropertyStore:
         text: str | None = None,
         sort: PropertySort = PropertySort.SCORE,
         include_snoozed: bool = False,
+        changed_since: datetime | None = None,
     ) -> PropertyPage:
         """One page of properties with their primary listing, for the dashboard.
 
         Filters as :meth:`query` does, plus ``text``: a case-insensitive substring
-        of the listing title or the address (``%`` and ``_`` match themselves).
+        of the listing title or the address (``%`` and ``_`` match themselves), and
+        ``changed_since``: only properties whose status changed at or after it.
         Ties in ``sort`` fall back to newest first, so paging is stable.
         """
         statuses = None if statuses is None else list(statuses)
@@ -854,6 +859,7 @@ class SqlPropertyStore:
                 statuses=statuses,
                 text=text,
                 include_snoozed=include_snoozed,
+                changed_since=changed_since,
             )
 
         statement = (

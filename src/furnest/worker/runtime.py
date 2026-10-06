@@ -17,6 +17,7 @@ running after that are handed back to the queue without counting the attempt, an
 the process exits. A second signal skips the wait.
 """
 
+import datetime as dt
 import logging
 import random
 import signal
@@ -29,6 +30,8 @@ from datetime import UTC, timedelta
 from types import FrameType
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.base import BaseTrigger
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import Engine
 
@@ -133,14 +136,36 @@ class Worker:
         ``on_failure`` is called with the error after a run fails or times out, on the
         scheduler's thread, so it runs even while a timed-out handler is still stuck.
         """
-        run = _ScheduledRun(name, handler, timeout or self._default_timeout, source, on_failure)
-        self._scheduler.add_job(
-            self._run_scheduled,
+        self._add_scheduled(
+            _ScheduledRun(name, handler, timeout or self._default_timeout, source, on_failure),
             IntervalTrigger(
                 seconds=interval.total_seconds(), jitter=jitter.total_seconds() or None
             ),
+        )
+
+    def schedule_daily(
+        self,
+        name: str,
+        handler: Handler,
+        *,
+        at: dt.time,
+        tz: dt.tzinfo,
+        timeout: timedelta | None = None,
+    ) -> None:
+        """Run ``handler`` every day at ``at`` in ``tz``, with the same one-at-a-time
+        guarantee as :meth:`schedule`. A day the worker is down at ``at`` is skipped.
+        """
+        self._add_scheduled(
+            _ScheduledRun(name, handler, timeout or self._default_timeout, None, None),
+            CronTrigger(hour=at.hour, minute=at.minute, second=at.second, timezone=tz),
+        )
+
+    def _add_scheduled(self, run: _ScheduledRun, trigger: BaseTrigger) -> None:
+        self._scheduler.add_job(
+            self._run_scheduled,
+            trigger,
             args=(run,),
-            id=name,
+            id=run.name,
             max_instances=1,
             coalesce=True,
             misfire_grace_time=None,

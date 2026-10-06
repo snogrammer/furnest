@@ -100,6 +100,7 @@ def worker() -> None:
     from furnest.db.migrate import migration_status
     from furnest.db.session import make_session_factory
     from furnest.matching.amenities.llm import build_amenity_extractor
+    from furnest.notify.digest import schedule_digest
     from furnest.pipeline.ingest import ListingIngestor
     from furnest.pipeline.properties import PropertyPipeline, schedule_unsnooze
     from furnest.pipeline.schedule import register_run_now, schedule_sources
@@ -139,9 +140,15 @@ def worker() -> None:
             on_relisted=pipeline.relisted,
         )
         schedule_unsnooze(worker, pipeline, settings.pipeline)
+        schedule_digest(worker, factory, settings)
+        alert_after = settings.discord.alert_after_failures
         try:
-            schedule_sources(worker, sources, settings.sources, factory, ingestor)
-            register_run_now(jobs, sources, settings.sources, factory, ingestor)
+            schedule_sources(
+                worker, sources, settings.sources, factory, ingestor, alert_after=alert_after
+            )
+            register_run_now(
+                jobs, sources, settings.sources, factory, ingestor, alert_after=alert_after
+            )
         except SourceConfigError as exc:
             typer.echo(f"furnest worker: {exc}", err=True)
             raise typer.Exit(code=1) from exc
