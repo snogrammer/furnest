@@ -1,6 +1,7 @@
-{% macro card(row) %}{% set p = row.property %}{% set l = row.listing %}
+{% macro card(row, selectable=false) %}{% set p = row.property %}{% set l = row.listing %}
 <article class="property-card" id="property-{{ p.id }}">
   <header>
+    {% if selectable %}<input type="checkbox" class="select" name="ids" value="{{ p.id }}" form="bulk" aria-label="Select {% if l %}{{ l.title }}{% else %}property #{{ p.id }}{% endif %}">{% endif %}
     <h3><a href="/properties/{{ p.id }}">{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</a></h3>
     <span class="status status-{{ p.status.value }}">{{ status_label(p.status) }}</span>
   </header>

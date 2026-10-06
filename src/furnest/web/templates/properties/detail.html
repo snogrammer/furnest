@@ -19,10 +19,27 @@
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
   {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+  {% set moves = actions | rejectattr(0, "equalto", archived) | list %}
+  {% if actions %}
+  <div class="status-actions" role="group" aria-label="Change status">
+    {% if moves %}
+    <form method="post" action="/properties/{{ p.id }}/status" hx-boost="true">
+      {{ csrf_field(request) }}
+      {% for to, label in moves %}<button type="submit" name="to" value="{{ to.value }}">{{ label }}</button>{% endfor %}
+    </form>
+    {% endif %}
+    {% if actions | selectattr(0, "equalto", archived) | list %}
+    <form method="post" action="/properties/{{ p.id }}/status" hx-boost="true" hx-confirm="Archive this property? Archiving can't be undone.">
+      {{ csrf_field(request) }}
+      <button type="submit" name="to" value="{{ archived.value }}" class="secondary">Archive</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if can_deny %}
   <details class="deny"{% if reason %} open{% endif %}>
     <summary>Deny…</summary>
-    <form method="post" action="/properties/{{ p.id }}/deny" class="note-form">
+    <form method="post" action="/properties/{{ p.id }}/deny" class="note-form" hx-boost="true">
       {{ csrf_field(request) }}
       <div class="field">
         <label for="deny-reason">Reason <small class="muted">(optional, saved as a note; markdown)</small></label>

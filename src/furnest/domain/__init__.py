@@ -30,6 +30,7 @@ from furnest.domain.status import (
     Actor,
     InvalidTransitionError,
     PropertyStatus,
+    allowed_targets,
     check_transition,
 )
 
@@ -61,6 +62,7 @@ __all__ = [
     "PropertyStatus",
     "PropertyType",
     "RentPeriod",
+    "allowed_targets",
     "amenity_label",
     "check_transition",
     "diff_criteria",

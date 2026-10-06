@@ -21,9 +21,10 @@ into it, and out of it to anything but ``archived``. A relisted property goes ba
 to the state it left (``restore_to``, which the store reads from the audit trail),
 so a disappearance never erases a human decision or skips one.
 
-:func:`check_transition` applies the table and these guards. The store
-(:mod:`furnest.db.property_store`) calls it inside the transaction that writes the
-new status and its audit event.
+:func:`check_transition` applies the table and these guards, and :func:`allowed_targets`
+lists the moves that pass them (what the dashboard offers as buttons). The store
+(:mod:`furnest.db.property_store`) calls ``check_transition`` inside the transaction
+that writes the new status and its audit event.
 """
 
 from collections.abc import Mapping
@@ -122,3 +123,24 @@ def check_transition(
                 to,
                 f"a relisted property goes back to {restore_to or 'its previous state'}",
             )
+
+
+def allowed_targets(
+    current: PropertyStatus,
+    actor: Actor,
+    *,
+    restore_to: PropertyStatus | None = None,
+) -> tuple[PropertyStatus, ...]:
+    """Every status ``actor`` may move ``current`` to, in declaration order.
+
+    This is what a UI offers as buttons: :func:`check_transition` would accept each one.
+    """
+    allowed = []
+    for to in TRANSITIONS[current]:
+        try:
+            check_transition(current, to, actor, restore_to=restore_to)
+        except InvalidTransitionError:
+            continue
+        allowed.append(to)
+    order = list(PropertyStatus)
+    return tuple(sorted(allowed, key=order.index))

@@ -8,6 +8,11 @@ properties only show up on their own tab.
 The list view pages through one tab. The board view shows every tab but ``all``
 and ``archived`` as a column, each capped at :data:`PAGE_SIZE` cards with a link
 to the full list. Search, sort and the "include snoozed" switch apply to both.
+
+Status actions: the detail page offers a button for each move the state machine
+allows the dashboard (:func:`status_actions`), and the list view can deny or archive
+several properties at once (:func:`apply_bulk`). A bulk action moves each property in
+its own transaction and skips, with the reason, any it may not move.
 """
 
 from __future__ import annotations
@@ -20,8 +25,14 @@ from urllib.parse import urlencode
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.db.property_store import AuditEntry, PropertyRow, PropertySort, SqlPropertyStore
-from furnest.domain import PropertyStatus
+from furnest.db.property_store import (
+    AuditEntry,
+    PropertyNotFoundError,
+    PropertyRow,
+    PropertySort,
+    SqlPropertyStore,
+)
+from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, allowed_targets
 
 S = PropertyStatus
 
@@ -196,3 +207,75 @@ def audit_label(entry: AuditEntry) -> str:
     if entry.payload and "note_id" in entry.payload:
         label += " (reason in notes)"
     return label
+
+
+ACTION_LABELS: dict[PropertyStatus, str] = {
+    S.NEW: "Back to new",
+    S.SUGGESTED: "Suggest",
+    S.APPROVED: "Approve",
+    S.DENIED: "Deny",
+    S.INQUIRY_DRAFTED: "Inquiry drafted",
+    S.INQUIRY_SENT: "Inquiry sent",
+    S.IN_PROGRESS: "In progress",
+    S.RESPONDED: "Responded",
+    S.TOURING: "Touring",
+    S.APPLIED: "Applied",
+    S.WON: "Won",
+    S.LOST: "Lost",
+    S.ARCHIVED: "Archive",
+    S.UNAVAILABLE: "Unavailable",
+}
+
+
+def status_actions(status: PropertyStatus) -> list[tuple[PropertyStatus, str]]:
+    """The detail page's status buttons: every move the dashboard may make.
+
+    Deny is left out; it has its own form, with an optional reason.
+    """
+    return [
+        (to, ACTION_LABELS[to])
+        for to in allowed_targets(status, Actor.DASHBOARD)
+        if to is not S.DENIED
+    ]
+
+
+class BulkAction(StrEnum):
+    DENY = "deny"
+    ARCHIVE = "archive"
+
+
+@dataclass(frozen=True)
+class BulkResult:
+    action: BulkAction
+    moved: list[int]
+    # (property id, why it was not moved)
+    skipped: list[tuple[int, str]]
+
+    def notice(self) -> str:
+        verb = "Denied" if self.action is BulkAction.DENY else "Archived"
+        text = f"{verb} {len(self.moved)}."
+        if self.skipped:
+            reasons = "; ".join(f"#{pid}: {why}" for pid, why in self.skipped)
+            text += f" Skipped {len(self.skipped)} ({reasons})."
+        return text
+
+
+def apply_bulk(
+    store: SqlPropertyStore, ids: list[int], action: BulkAction, *, at: datetime
+) -> BulkResult:
+    """Deny or archive each property, as the dashboard, skipping those it can't move."""
+    moved: list[int] = []
+    skipped: list[tuple[int, str]] = []
+    for property_id in dict.fromkeys(ids):
+        try:
+            if action is BulkAction.DENY:
+                store.deny(property_id, actor=Actor.DASHBOARD, at=at)
+            else:
+                store.transition(property_id, S.ARCHIVED, actor=Actor.DASHBOARD, at=at)
+        except PropertyNotFoundError:
+            skipped.append((property_id, "not found"))
+        except InvalidTransitionError as e:
+            skipped.append((property_id, f"{status_label(e.current)}: {e.reason}"))
+        else:
+            moved.append(property_id)
+    return BulkResult(action, moved, skipped)

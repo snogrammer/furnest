@@ -22,9 +22,22 @@
   {% endfor %}
 </div>
 {% else %}
+{% if notice %}<p class="flash" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
 {% if d.rows %}
+<form id="bulk" class="bulk-toolbar" method="post" action="/properties/bulk" hx-target="#results" hx-push-url="false">
+  {{ csrf_field(request) }}
+  <input type="hidden" name="status" value="{{ f.status }}">
+  <input type="hidden" name="q" value="{{ f.q }}">
+  <input type="hidden" name="sort" value="{{ f.sort.value }}">
+  <input type="hidden" name="page" value="{{ d.page }}">
+  {% if f.snoozed %}<input type="hidden" name="snoozed" value="true">{% endif %}
+  <span class="muted">With selected:</span>
+  <button type="submit" name="action" value="deny" class="danger" hx-post="/properties/bulk">Deny</button>
+  <button type="submit" name="action" value="archive" class="secondary" hx-post="/properties/bulk" hx-confirm="Archive the selected properties? Archiving can't be undone.">Archive</button>
+</form>
 <ul class="property-list">
-  {% for row in d.rows %}<li>{{ card(row) }}</li>{% endfor %}
+  {% for row in d.rows %}<li>{{ card(row, selectable=true) }}</li>{% endfor %}
 </ul>
 {% if d.pages > 1 %}
 <nav class="pagination" aria-label="Pages">

@@ -9,6 +9,7 @@ from furnest.domain import (
     Actor,
     InvalidTransitionError,
     PropertyStatus,
+    allowed_targets,
     check_transition,
 )
 
@@ -131,3 +132,40 @@ def test_marking_unavailable_by_hand_says_why() -> None:
 
     assert excinfo.value.reason == "only the system marks a property unavailable"
     assert "approved to unavailable" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("current", "expected"),
+    [
+        (S.SUGGESTED, (S.APPROVED, S.DENIED, S.ARCHIVED)),
+        (S.DENIED, (S.APPROVED, S.ARCHIVED)),
+        (S.WON, (S.ARCHIVED,)),
+        (S.UNAVAILABLE, (S.ARCHIVED,)),
+        (S.ARCHIVED, ()),
+    ],
+)
+def test_allowed_targets_for_the_dashboard(
+    current: PropertyStatus, expected: tuple[PropertyStatus, ...]
+) -> None:
+    assert allowed_targets(current, Actor.DASHBOARD) == expected
+
+
+@pytest.mark.parametrize("current", list(S))
+def test_allowed_targets_agree_with_check_transition(current: PropertyStatus) -> None:
+    for actor in Actor:
+        targets = allowed_targets(current, actor, restore_to=S.APPROVED)
+        for to in S:
+            if to in targets:
+                check_transition(current, to, actor, restore_to=S.APPROVED)
+            else:
+                with pytest.raises(InvalidTransitionError):
+                    check_transition(current, to, actor, restore_to=S.APPROVED)
+        if actor is not Actor.SYSTEM:
+            assert S.UNAVAILABLE not in targets
+
+
+def test_allowed_targets_restore_a_relisted_property_for_the_system() -> None:
+    assert allowed_targets(S.UNAVAILABLE, Actor.SYSTEM, restore_to=S.TOURING) == (
+        S.TOURING,
+        S.ARCHIVED,
+    )

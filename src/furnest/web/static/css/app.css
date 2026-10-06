@@ -975,3 +975,58 @@ button.secondary {
   max-width: 42rem;
   overflow-wrap: anywhere;
 }
+
+/* Status changes: the detail page's buttons and the list view's bulk toolbar. */
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: var(--space);
+}
+
+.status-actions form,
+.bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-actions button,
+.bulk-toolbar button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-actions button.secondary,
+.bulk-toolbar button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+.bulk-toolbar {
+  margin-bottom: calc(var(--space) / 2);
+}
+
+.bulk-toolbar button.danger {
+  border-color: #b3261e;
+  background: #b3261e;
+  color: #ffffff;
+}
+
+.property-card input.select {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0.15rem 0 0;
+}
+
+.property-card header h3 {
+  flex: 1;
+}
