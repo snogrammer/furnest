@@ -20,12 +20,13 @@ from furnest.db.session import session_scope
 from furnest.notify.custom_ids import DiscordAction
 from furnest.notify.interactions import (
     EPHEMERAL,
-    INTERACTION_JOB,
     Interaction,
     InteractionType,
     ResponseType,
 )
+from furnest.notify.sync import MESSAGE_SYNC_JOB
 from furnest.web.app import create_app
+from furnest.web.discord_dispatch import InteractionDispatcher
 
 pytestmark = pytest.mark.integration
 
@@ -39,6 +40,8 @@ Post = Callable[..., Response]
 def client(monkeypatch: pytest.MonkeyPatch, migrated_engine: Engine) -> Iterator[TestClient]:
     monkeypatch.setenv("DISCORD_PUBLIC_KEY", KEY.verify_key.encode().hex())
     with TestClient(create_app(Settings(), engine=migrated_engine)) as client:
+        # The endpoint's own behavior, without the buttons (test_discord_buttons.py).
+        client.app.state.discord_dispatcher = InteractionDispatcher()  # type: ignore[attr-defined]
         yield client
 
 
@@ -83,7 +86,7 @@ def click(custom_id: str = "furnest:approve:42", **overrides: Any) -> dict[str, 
 
 def jobs(factory: sessionmaker[Session]) -> list[Job]:
     with session_scope(factory) as session:
-        return list(session.scalars(select(Job).where(Job.kind == INTERACTION_JOB)))
+        return list(session.scalars(select(Job).where(Job.kind == MESSAGE_SYNC_JOB)))
 
 
 def recorded(factory: sessionmaker[Session]) -> list[str]:
@@ -135,7 +138,7 @@ def test_signed_garbage_is_400(post: Post, raw: bytes) -> None:
     assert post(None, raw=raw).status_code == 400
 
 
-def test_button_click_is_acked_and_queued(
+def test_unhandled_button_click_is_acked_and_syncs_the_message(
     post: Post, session_factory: sessionmaker[Session]
 ) -> None:
     response = post(click())
@@ -144,11 +147,11 @@ def test_button_click_is_acked_and_queued(
     assert response.json() == {"type": ResponseType.DEFERRED_UPDATE_MESSAGE}
     assert recorded(session_factory) == ["1100000000000000001"]
     (job,) = jobs(session_factory)
-    interaction = Interaction.from_payload(job.payload)
-    assert interaction.action is DiscordAction.APPROVE
-    assert interaction.property_id == 42
-    assert interaction.user_id == "1400000000000000000"
-    assert interaction.token == "interaction-token"  # noqa: S105 - fake token under test
+    assert job.payload == {
+        "property_id": 42,
+        "channel_id": "1200000000000000000",
+        "message_id": "1300000000000000000",
+    }
 
 
 def test_replayed_interaction_is_a_no_op(

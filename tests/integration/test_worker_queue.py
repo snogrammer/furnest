@@ -245,3 +245,15 @@ def test_pending_finds_unfinished_jobs_by_kind_and_payload(
             assert found.id == wanted
     with session_scope(session_factory) as session:
         assert queue.pending(session, "run", source="c") is None
+
+
+def test_pending_matches_integer_payload_values(session_factory: sessionmaker[Session]) -> None:
+    with session_scope(session_factory) as session:
+        wanted = queue.enqueue(session, "inquire", {"property_id": 7}).id
+        queue.enqueue(session, "inquire", {"property_id": 8})
+
+    with session_scope(session_factory) as session:
+        found = queue.pending(session, "inquire", property_id=7)
+        assert found is not None
+        assert found.id == wanted
+        assert queue.pending(session, "inquire", property_id=9) is None

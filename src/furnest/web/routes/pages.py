@@ -40,6 +40,7 @@ from furnest.db.property_store import (
 from furnest.db.session import make_session_factory
 from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, beds_baths
 from furnest.domain.status import TRANSITIONS
+from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
 from furnest.web.csrf import require_csrf
 from furnest.web.html import render_markdown
@@ -61,13 +62,8 @@ from furnest.web.templating import templates
 
 
 def _source_namer(request: Request) -> Callable[[str], str]:
-    registry = request.app.state.source_registry
-
-    def source_name(name: str) -> str:
-        adapter = registry.get(name)
-        return adapter.display_name if adapter is not None else name
-
-    return source_name
+    registry: SourceRegistry = request.app.state.source_registry
+    return registry.display_name
 
 
 router = APIRouter(dependencies=[Depends(require_auth), Depends(require_csrf)])

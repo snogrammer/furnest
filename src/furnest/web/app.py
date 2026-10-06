@@ -39,6 +39,7 @@ from furnest.logging import get_logger
 from furnest.sources.registry import SourceRegistry, discover
 from furnest.web.auth import Authenticator, register_auth_handlers
 from furnest.web.csrf import CsrfMiddleware, CsrfSigner
+from furnest.web.discord_actions import register_buttons
 from furnest.web.discord_dispatch import InteractionDispatcher
 from furnest.web.errors import register_error_handlers
 from furnest.web.headers import SecurityHeadersMiddleware
@@ -83,7 +84,8 @@ def create_app(
     app.state.settings = settings
     app.state.authenticator = authenticator
     app.state.source_registry = source_registry or discover()
-    app.state.discord_dispatcher = InteractionDispatcher()
+    app.state.discord_dispatcher = dispatcher = InteractionDispatcher()
+    register_buttons(dispatcher, settings)
     app.state.csrf_signer = csrf_signer = CsrfSigner(authenticator.secret)
     app.state.login_limiter = SlidingWindowLimiter(
         settings.auth.login_max_attempts, settings.auth.login_window_seconds

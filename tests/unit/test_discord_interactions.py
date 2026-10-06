@@ -1,6 +1,5 @@
 """Interaction signatures, timestamp freshness, parsing and response bodies."""
 
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -9,19 +8,19 @@ from nacl.signing import SigningKey
 from furnest.notify.custom_ids import DiscordAction
 from furnest.notify.interactions import (
     EPHEMERAL,
-    INTERACTION_JOB,
+    MAX_TEXT_INPUT,
     Interaction,
     InteractionType,
     ResponseType,
     deferred_update,
     ephemeral,
-    interaction_not_handled,
     is_fresh,
+    modal,
+    paragraph_input,
     pong,
     verify_signature,
 )
 from furnest.web.discord_dispatch import InteractionDispatcher
-from furnest.worker.execution import JobContext
 
 pytestmark = pytest.mark.unit
 
@@ -169,10 +168,19 @@ def test_malformed_payload_raises(data: object) -> None:
         Interaction.from_json(data)
 
 
-def test_payload_round_trip() -> None:
-    interaction = Interaction.from_json(interaction_json(type=5))
+@pytest.mark.parametrize(
+    ("user", "expected"),
+    [
+        ({"id": "7", "username": "renter"}, "renter (7)"),
+        ({"id": "7", "username": "renter", "global_name": "Renter"}, "Renter (7)"),
+        ({"id": "7"}, "7"),
+        ({}, None),
+    ],
+)
+def test_actor_detail_names_the_clicking_user(user: dict[str, str], expected: str | None) -> None:
+    interaction = Interaction.from_json(interaction_json(member={"user": user}))
 
-    assert Interaction.from_payload(interaction.to_payload()) == interaction
+    assert interaction.actor_detail == expected
 
 
 def test_response_bodies() -> None:
@@ -187,13 +195,23 @@ def test_response_bodies() -> None:
     }
 
 
-def test_placeholder_job_handler_accepts_a_queued_interaction() -> None:
-    payload = Interaction.from_json(interaction_json()).to_payload()
-    ctx = JobContext(
-        job_id=1, kind=INTERACTION_JOB, payload=payload, attempt=1, deadline=datetime.now(UTC)
-    )
+def test_modal_wraps_each_input_in_an_action_row() -> None:
+    reason = paragraph_input("reason", "Why?", placeholder="…")
+    body = modal("furnest:deny:7", "x" * 60, [reason])
 
-    interaction_not_handled(ctx)  # logs only, until #36
+    assert body["type"] == ResponseType.MODAL
+    assert body["data"]["custom_id"] == "furnest:deny:7"
+    assert len(body["data"]["title"]) == 45
+    assert body["data"]["components"] == [{"type": 1, "components": [reason]}]
+    assert reason == {
+        "type": 4,
+        "custom_id": "reason",
+        "style": 2,
+        "label": "Why?",
+        "required": False,
+        "max_length": MAX_TEXT_INPUT,
+        "placeholder": "…",
+    }
 
 
 def test_dispatcher_refuses_a_second_handler_for_the_same_key() -> None:

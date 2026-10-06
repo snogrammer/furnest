@@ -43,6 +43,11 @@ audit event points at the note with ``payload["note_id"]``.
 
 A snooze isn't a status change, but who snoozed matters, so it is still written to
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
+
+:func:`transition_in`, :func:`deny_in` and :func:`snooze_in` do the same work as the
+store methods, but inside a session the caller already holds. The Discord
+interactions endpoint uses them, so a button's state change commits or rolls back
+together with the record of the interaction.
 """
 
 from __future__ import annotations
@@ -393,7 +398,7 @@ def _criteria_version_id(session: Session, version: int | None) -> int | None:
 
 
 # Nothing left to do on these, so there is nothing to snooze.
-_FINISHED = frozenset({PropertyStatus.ARCHIVED, PropertyStatus.WON, PropertyStatus.LOST})
+FINISHED = frozenset({PropertyStatus.ARCHIVED, PropertyStatus.WON, PropertyStatus.LOST})
 
 
 def _apply_transition(
@@ -451,6 +456,90 @@ def _audit_in_place(
     )
 
 
+def transition_in(
+    session: Session,
+    property_id: int,
+    to: PropertyStatus,
+    *,
+    actor: Actor,
+    at: datetime,
+    detail: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> PropertyState:
+    """:meth:`SqlPropertyStore.transition` inside the caller's ``session``."""
+    row = session.get(Property, property_id)
+    if row is None:
+        raise PropertyNotFoundError(property_id)
+    _apply_transition(session, row, to, actor=actor, at=at, detail=detail, payload=payload)
+    return _state(row)
+
+
+def deny_in(
+    session: Session,
+    property_id: int,
+    *,
+    actor: Actor,
+    at: datetime,
+    reason: str | None = None,
+    detail: str | None = None,
+) -> PropertyState:
+    """:meth:`SqlPropertyStore.deny` inside the caller's ``session``.
+
+    The note is written before the transition is checked, so both run in a savepoint:
+    a refused deny leaves no note behind even if the caller catches the error and
+    commits.
+    """
+    body = None if reason is None or not reason.strip() else note_body(reason)
+    row = session.get(Property, property_id)
+    if row is None:
+        raise PropertyNotFoundError(property_id)
+    with session.begin_nested():
+        payload = None
+        if body is not None:
+            note = _add_note(session, property_id, body, actor=actor, at=at, detail=detail)
+            payload = {"note_id": note.id}
+        _apply_transition(
+            session,
+            row,
+            PropertyStatus.DENIED,
+            actor=actor,
+            at=at,
+            detail=detail,
+            payload=payload,
+        )
+    return _state(row)
+
+
+def snooze_in(
+    session: Session,
+    property_id: int,
+    *,
+    until: datetime,
+    actor: Actor,
+    at: datetime,
+    detail: str | None = None,
+) -> PropertyState:
+    """:meth:`SqlPropertyStore.snooze` inside the caller's ``session``."""
+    if until <= at:
+        raise SnoozeError(property_id, "the snooze must end in the future")
+    row = session.get(Property, property_id)
+    if row is None:
+        raise PropertyNotFoundError(property_id)
+    if row.status in FINISHED:
+        raise SnoozeError(property_id, f"it is {row.status}")
+    row.snoozed_until = until
+    row.updated_at = at
+    _audit_in_place(
+        session,
+        row,
+        actor=actor,
+        at=at,
+        detail=detail,
+        payload={"snoozed_until": until.isoformat()},
+    )
+    return _state(row)
+
+
 class SqlPropertyStore:
     def __init__(
         self,
@@ -485,11 +574,9 @@ class SqlPropertyStore:
         property. Nothing is written unless the whole transition succeeds.
         """
         with session_scope(self._session_factory) as session:
-            row = session.get(Property, property_id)
-            if row is None:
-                raise PropertyNotFoundError(property_id)
-            _apply_transition(session, row, to, actor=actor, at=at, detail=detail, payload=payload)
-            return _state(row)
+            return transition_in(
+                session, property_id, to, actor=actor, at=at, detail=detail, payload=payload
+            )
 
     def deny(
         self,
@@ -505,25 +592,8 @@ class SqlPropertyStore:
         Raises like :meth:`transition`, and :class:`ValueError` if the reason is
         too long. Nothing is written unless the whole deny succeeds.
         """
-        body = None if reason is None or not reason.strip() else note_body(reason)
         with session_scope(self._session_factory) as session:
-            row = session.get(Property, property_id)
-            if row is None:
-                raise PropertyNotFoundError(property_id)
-            payload = None
-            if body is not None:
-                note = _add_note(session, property_id, body, actor=actor, at=at, detail=detail)
-                payload = {"note_id": note.id}
-            _apply_transition(
-                session,
-                row,
-                PropertyStatus.DENIED,
-                actor=actor,
-                at=at,
-                detail=detail,
-                payload=payload,
-            )
-            return _state(row)
+            return deny_in(session, property_id, actor=actor, at=at, reason=reason, detail=detail)
 
     def add_note(
         self,
@@ -640,25 +710,8 @@ class SqlPropertyStore:
         for a time that isn't in the future or a property with nothing left to do
         (archived, won or lost).
         """
-        if until <= at:
-            raise SnoozeError(property_id, "the snooze must end in the future")
         with session_scope(self._session_factory) as session:
-            row = session.get(Property, property_id)
-            if row is None:
-                raise PropertyNotFoundError(property_id)
-            if row.status in _FINISHED:
-                raise SnoozeError(property_id, f"it is {row.status}")
-            row.snoozed_until = until
-            row.updated_at = at
-            _audit_in_place(
-                session,
-                row,
-                actor=actor,
-                at=at,
-                detail=detail,
-                payload={"snoozed_until": until.isoformat()},
-            )
-            return _state(row)
+            return snooze_in(session, property_id, until=until, actor=actor, at=at, detail=detail)
 
     def unsnooze_expired(self, *, now: datetime) -> list[int]:
         """Clear every snooze that ended by ``now``; return the property ids.

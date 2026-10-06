@@ -27,6 +27,7 @@ from furnest.notify.custom_ids import DiscordAction, parse_custom_id
 from furnest.notify.embeds import (
     LIMITS,
     dashboard_url,
+    disabled_actions,
     embed_length,
     escape_markdown,
     match_message,
@@ -237,3 +238,40 @@ def test_dashboard_url_joins_without_double_slashes() -> None:
         dashboard_url("https://example.com/furnest", 1)
         == "https://example.com/furnest/properties/1"
     )
+
+
+AP, DN, IQ, SZ = (
+    DiscordAction.APPROVE,
+    DiscordAction.DENY,
+    DiscordAction.INQUIRE,
+    DiscordAction.SNOOZE,
+)
+
+
+@pytest.mark.parametrize(
+    ("status", "disabled"),
+    [
+        (PropertyStatus.NEW, {AP, IQ}),
+        (PropertyStatus.SUGGESTED, set()),
+        (PropertyStatus.APPROVED, {AP}),
+        (PropertyStatus.DENIED, {DN, IQ}),
+        (PropertyStatus.INQUIRY_DRAFTED, {AP, DN, IQ}),  # Approve would drop the draft
+        (PropertyStatus.INQUIRY_SENT, {AP, DN, IQ}),
+        (PropertyStatus.UNAVAILABLE, {AP, DN, IQ}),
+        (PropertyStatus.ARCHIVED, {AP, DN, IQ, SZ}),
+        (PropertyStatus.WON, {AP, DN, IQ, SZ}),
+        (PropertyStatus.LOST, {AP, DN, IQ, SZ}),
+    ],
+)
+def test_disabled_actions_follow_the_state_machine(
+    status: PropertyStatus, disabled: set[DiscordAction]
+) -> None:
+    assert disabled_actions(state(status=status)) == disabled
+
+
+def test_footer_shows_an_active_snooze() -> None:
+    snoozed = detail(property=state(snoozed_until=datetime(2026, 10, 4, 9, 0, tzinfo=UTC)))
+
+    footer = build(snoozed)["embeds"][0]["footer"]["text"]
+
+    assert footer == "furnest · suggested · snoozed until 2026-10-04"

@@ -27,8 +27,8 @@ import re
 from collections.abc import Callable, Collection
 from typing import Any
 
-from furnest.db.property_store import PropertyDetail
-from furnest.domain import PropertyStatus, beds_baths
+from furnest.db.property_store import FINISHED, PropertyDetail, PropertyState
+from furnest.domain import Actor, PropertyStatus, allowed_targets, beds_baths
 from furnest.notify.custom_ids import DiscordAction, encode_custom_id
 
 JsonObject = dict[str, Any]
@@ -62,6 +62,11 @@ BUTTONS: dict[DiscordAction, tuple[str, int]] = {
     DiscordAction.INQUIRE: ("Inquire", PRIMARY),
     DiscordAction.SNOOZE: ("Snooze", SECONDARY),
 }
+
+# Statuses the Approve button acts on.
+APPROVABLE = frozenset({PropertyStatus.SUGGESTED, PropertyStatus.DENIED})
+# Statuses the Inquire button acts on.
+INQUIRABLE = frozenset({PropertyStatus.SUGGESTED, PropertyStatus.APPROVED})
 
 _MARKDOWN = re.compile(r"([\\*_~`|>\[\]()#])")
 
@@ -123,7 +128,10 @@ def match_embed(
     fields.append(_field("Links", " · ".join(links)))
     embed["fields"] = fields
 
-    embed["footer"] = {"text": truncate(f"furnest · {_status_text(state.status)}", "footer")}
+    footer = f"furnest · {_status_text(state.status)}"
+    if state.snoozed_until is not None:
+        footer += f" · snoozed until {state.snoozed_until:%Y-%m-%d}"
+    embed["footer"] = {"text": truncate(footer, "footer")}
     embed["timestamp"] = state.status_changed_at.isoformat()
     return embed
 
@@ -143,6 +151,25 @@ def action_row(property_id: int, *, disabled: Collection[DiscordAction] = ()) ->
             for action, (label, style) in BUTTONS.items()
         ],
     }
+
+
+def disabled_actions(state: PropertyState) -> frozenset[DiscordAction]:
+    """The buttons that would do nothing for a property in ``state``'s status.
+
+    Approve works on a suggestion or a denied property. (The state machine also lets
+    a drafted inquiry go back to ``approved``, but a stale click mustn't throw a draft
+    away.) Deny follows the state machine for the Discord actor. Inquire works from
+    ``suggested`` (it approves first) and ``approved``. Snooze works until the
+    property is finished.
+    """
+    allowed = allowed_targets(state.status, Actor.DISCORD)
+    enabled = {
+        DiscordAction.APPROVE: state.status in APPROVABLE,
+        DiscordAction.DENY: PropertyStatus.DENIED in allowed,
+        DiscordAction.INQUIRE: state.status in INQUIRABLE,
+        DiscordAction.SNOOZE: state.status not in FINISHED,
+    }
+    return frozenset(action for action, on in enabled.items() if not on)
 
 
 def dashboard_url(base_url: str, property_id: int) -> str:

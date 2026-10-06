@@ -14,10 +14,9 @@ checked before it is trusted:
   ``discord_interactions`` table catches a repeat by its interaction id.
 
 Discord waits only 3 seconds for the response. The endpoint therefore answers with
-one of the small bodies built here (usually :func:`deferred_update`) and leaves slow
-work to the worker. The worker gets the interaction as an :data:`INTERACTION_JOB`
-job whose payload is :meth:`Interaction.to_payload`. The payload includes the
-interaction token, which is good for 15 minutes of follow-up edits to the message.
+one of the small bodies built here (usually :func:`deferred_update`, or
+:func:`modal` for Deny) and leaves slow work, such as editing the message, to the
+worker (:mod:`furnest.notify.sync`).
 
 Parsing is defensive. :meth:`Interaction.from_json` raises ``ValueError`` for
 anything that doesn't have the fields we rely on, and the route turns that into a 400.
@@ -27,25 +26,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
-from furnest.logging import get_logger
 from furnest.notify.custom_ids import DiscordAction, parse_custom_id
-
-if TYPE_CHECKING:
-    from furnest.worker.execution import JobContext
-
-log = get_logger(__name__)
 
 JsonObject = dict[str, Any]
 
-# Job kind the worker runs for an interaction that needs more than an ack.
-INTERACTION_JOB = "discord.interaction"
 # Message flag that shows a reply to the clicking user only.
 EPHEMERAL = 1 << 6
+# Component types and the text input style a modal uses.
+ACTION_ROW = 1
+TEXT_INPUT = 4
+PARAGRAPH = 2
+# Discord's caps on a modal's title and a text input's value, in characters.
+MAX_MODAL_TITLE = 45
+MAX_TEXT_INPUT = 4000
 
 
 class InteractionType(IntEnum):
@@ -100,6 +98,13 @@ class Interaction:
     # Text inputs of a submitted modal, by their custom_id.
     fields: dict[str, str] = field(default_factory=dict)
 
+    @property
+    def actor_detail(self) -> str | None:
+        """Who clicked, for the audit trail: ``"name (id)"``, or whichever part is known."""
+        if self.user_name and self.user_id:
+            return f"{self.user_name} ({self.user_id})"
+        return self.user_name or self.user_id
+
     @classmethod
     def from_json(cls, data: object) -> Interaction:
         if not isinstance(data, dict):
@@ -137,52 +142,6 @@ class Interaction:
             fields=_text_inputs(payload.get("components")),
         )
 
-    def to_payload(self) -> JsonObject:
-        """A JSON-safe dict for a queued job; :meth:`from_payload` reverses it."""
-        return {
-            "id": self.id,
-            "type": int(self.type),
-            "token": self.token,
-            "application_id": self.application_id,
-            "custom_id": self.custom_id,
-            "action": self.action.value if self.action else None,
-            "property_id": self.property_id,
-            "user_id": self.user_id,
-            "user_name": self.user_name,
-            "channel_id": self.channel_id,
-            "message_id": self.message_id,
-            "fields": dict(self.fields),
-        }
-
-    @classmethod
-    def from_payload(cls, payload: JsonObject) -> Interaction:
-        action = payload.get("action")
-        return cls(
-            id=payload["id"],
-            type=InteractionType(payload["type"]),
-            token=payload["token"],
-            application_id=payload["application_id"],
-            custom_id=payload.get("custom_id"),
-            action=DiscordAction(action) if action else None,
-            property_id=payload.get("property_id"),
-            user_id=payload.get("user_id"),
-            user_name=payload.get("user_name"),
-            channel_id=payload.get("channel_id"),
-            message_id=payload.get("message_id"),
-            fields=dict(payload.get("fields") or {}),
-        )
-
-
-def interaction_not_handled(ctx: JobContext) -> None:
-    """Placeholder :data:`INTERACTION_JOB` handler until the buttons do something (#36)."""
-    interaction = Interaction.from_payload(ctx.payload)
-    log.info(
-        "discord_interaction_skipped",
-        interaction_id=interaction.id,
-        action=interaction.action.value if interaction.action else None,
-        property_id=interaction.property_id,
-    )
-
 
 def pong() -> JsonObject:
     return {"type": ResponseType.PONG}
@@ -191,6 +150,35 @@ def pong() -> JsonObject:
 def deferred_update() -> JsonObject:
     """Ack a click or modal submit now and leave the message as it is; edits come later."""
     return {"type": ResponseType.DEFERRED_UPDATE_MESSAGE}
+
+
+def modal(custom_id: str, title: str, inputs: list[JsonObject]) -> JsonObject:
+    """Open a form; its submit comes back as a MODAL_SUBMIT with the same ``custom_id``."""
+    return {
+        "type": ResponseType.MODAL,
+        "data": {
+            "custom_id": custom_id,
+            "title": title[:MAX_MODAL_TITLE],
+            "components": [{"type": ACTION_ROW, "components": [item]} for item in inputs],
+        },
+    }
+
+
+def paragraph_input(
+    custom_id: str, label: str, *, required: bool = False, placeholder: str | None = None
+) -> JsonObject:
+    """A multi-line text input for :func:`modal`."""
+    item: JsonObject = {
+        "type": TEXT_INPUT,
+        "custom_id": custom_id,
+        "style": PARAGRAPH,
+        "label": label,
+        "required": required,
+        "max_length": MAX_TEXT_INPUT,
+    }
+    if placeholder is not None:
+        item["placeholder"] = placeholder
+    return item
 
 
 def ephemeral(content: str) -> JsonObject:

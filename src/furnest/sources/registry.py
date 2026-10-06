@@ -74,6 +74,11 @@ class SourceRegistry:
     def get(self, name: str) -> type[SourceAdapter] | None:
         return self._adapters.get(name)
 
+    def display_name(self, name: str) -> str:
+        """The adapter's display name, or ``name`` itself if no adapter has it."""
+        adapter = self.get(name)
+        return adapter.display_name if adapter is not None else name
+
     def names(self) -> list[str]:
         return sorted(self._adapters)
 

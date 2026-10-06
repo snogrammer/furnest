@@ -121,7 +121,14 @@ def worker() -> None:
             raise typer.Exit(code=1)
         factory = make_session_factory(engine)
         pipeline = PropertyPipeline(factory, settings=settings.pipeline)
-        jobs = default_registry(factory, pipeline)
+        try:
+            sources = discover()
+        except SourceConfigError as exc:
+            typer.echo(f"furnest worker: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        jobs = default_registry(
+            factory, pipeline, settings=settings, source_name=sources.display_name
+        )
         worker = Worker(settings, engine, jobs)
         ingestor = ListingIngestor(
             factory,
@@ -133,7 +140,6 @@ def worker() -> None:
         )
         schedule_unsnooze(worker, pipeline, settings.pipeline)
         try:
-            sources = discover()
             schedule_sources(worker, sources, settings.sources, factory, ingestor)
             register_run_now(jobs, sources, settings.sources, factory, ingestor)
         except SourceConfigError as exc:

@@ -58,14 +58,23 @@ def enqueue(
     return job
 
 
-def pending(session: Session, kind: str, **payload: str) -> Job | None:
+def pending(session: Session, kind: str, **payload: str | int) -> Job | None:
     """The oldest job of ``kind`` that hasn't finished yet and whose payload has these
-    string values, or ``None``. Lets the web process avoid queueing the same work twice.
+    string or integer values, or ``None``. Lets the web process avoid queueing the same
+    work twice.
     """
     statement = select(Job).where(
         Job.kind == kind,
         Job.status.in_([JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.FAILED]),
-        *(Job.payload[key].as_string() == value for key, value in payload.items()),
+        *(
+            (
+                Job.payload[key].as_string()
+                if isinstance(value, str)
+                else Job.payload[key].as_integer()
+            )
+            == value
+            for key, value in payload.items()
+        ),
     )
     return session.scalars(statement.order_by(Job.id).limit(1)).first()
 
