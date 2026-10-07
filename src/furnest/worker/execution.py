@@ -156,12 +156,12 @@ def default_registry(
     from furnest.pipeline import properties
     from furnest.pipeline.rerun import RERUN_CRITERIA, RerunCriteria
 
-    pipeline = pipeline or properties.PropertyPipeline(session_factory)
+    settings = settings or Settings()
+    pipeline = pipeline or properties.PropertyPipeline(session_factory, grouping=settings.grouping)
     registry = JobRegistry()
     listings = SqlListingStore(session_factory)
     rerun = RerunCriteria(session_factory, listings=listings.active, record=pipeline.record)
     registry.register(RERUN_CRITERIA, rerun)
-    settings = settings or Settings()
     registry.register(
         properties.NOTIFY,
         NotifyPost(session_factory, settings=settings, source_name=source_name),

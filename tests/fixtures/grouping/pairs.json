@@ -1,0 +1,62 @@
+[
+  {
+    "name": "same unit on two sources, reworded title",
+    "a": {"address": ["123 n main st #4b, springfield, il 62701, us", "123 n main st, 62701"], "lat": 39.7817, "lng": -89.6501, "beds": 2,
+          "phashes": ["00000000000000ff", "ffff000000000000"], "title": "Furnished 2BR near downtown, free parking",
+          "description": "Bright furnished two bedroom apartment with in-unit laundry and a deck. Free parking."},
+    "b": {"address": ["123 n main st #4b, springfield, il 62701, us", "123 n main st, 62701"], "lat": 39.78175, "lng": -89.65015, "beds": 2,
+          "phashes": ["00000000000001ff", "ffff000000000000", "0f0f0f0f0f0f0f0f"], "title": "2 bed furnished apt - downtown - free parking",
+          "description": "Bright furnished two bedroom apartment, in-unit laundry, deck. Free parking!"},
+    "matched": true
+  },
+  {
+    "name": "same address, unit only on one side",
+    "a": {"address": ["40 oak ave #2, springfield, il 62701, us", "40 oak ave, 62701"], "lat": 39.80, "lng": -89.60, "beds": 1,
+          "title": "Cozy furnished 1BR on Oak", "description": "Furnished one bedroom, utilities included."},
+    "b": {"address": ["40 oak ave, springfield, il 62701, us", "40 oak ave, 62701"], "lat": 39.80001, "lng": -89.60001, "beds": 1,
+          "title": "Furnished 1 bedroom on Oak Ave", "description": "Furnished one bedroom with utilities included."},
+    "matched": true
+  },
+  {
+    "name": "photos only, no address on either side",
+    "a": {"lat": 39.70, "lng": -89.70, "phashes": ["123456789abcdef0", "0fedcba987654321"], "title": "Monthly rental"},
+    "b": {"lat": 39.70002, "lng": -89.70002, "phashes": ["123456789abcdef1", "0fedcba987654321"], "title": "Furnished monthly stay"},
+    "matched": true
+  },
+  {
+    "name": "same building, different units",
+    "a": {"address": ["500 lake dr #101, springfield, il 62701, us", "500 lake dr, 62701"], "lat": 39.75, "lng": -89.65, "beds": 1,
+          "title": "Lake Drive furnished 1BR", "description": "Furnished unit at Lake Drive Residences."},
+    "b": {"address": ["500 lake dr #305, springfield, il 62701, us", "500 lake dr, 62701"], "lat": 39.75, "lng": -89.65, "beds": 1,
+          "title": "Lake Drive furnished 1BR", "description": "Furnished unit at Lake Drive Residences."},
+    "matched": false, "veto": "different units"
+  },
+  {
+    "name": "Zillow bed groups share address and photos",
+    "a": {"address": ["900 elm st, springfield, il 62701, us", "900 elm st, 62701"], "lat": 39.76, "lng": -89.66, "beds": 1,
+          "phashes": ["aaaaaaaaaaaaaaaa"], "title": "The Elm"},
+    "b": {"address": ["900 elm st, springfield, il 62701, us", "900 elm st, 62701"], "lat": 39.76, "lng": -89.66, "beds": 2,
+          "phashes": ["aaaaaaaaaaaaaaaa"], "title": "The Elm"},
+    "matched": false, "veto": "different bedroom counts"
+  },
+  {
+    "name": "neighbours: nearby, different addresses and photos",
+    "a": {"address": ["10 pine st, springfield, il 62701, us", "10 pine st, 62701"], "lat": 39.7700, "lng": -89.6400, "beds": 2,
+          "phashes": ["0000000000000000"], "title": "Furnished 2BR house", "description": "Whole house, furnished, yard."},
+    "b": {"address": ["14 pine st, springfield, il 62701, us", "14 pine st, 62701"], "lat": 39.7701, "lng": -89.6401, "beds": 2,
+          "phashes": ["ffffffffffffffff"], "title": "Furnished 2BR house", "description": "Whole house, furnished, yard."},
+    "matched": false
+  },
+  {
+    "name": "same ad copy, no address or photos: no anchor",
+    "a": {"lat": 39.7700, "lng": -89.6400, "title": "Furnished 2BR at The Grove", "description": "Furnished units at The Grove."},
+    "b": {"lat": 39.7700, "lng": -89.6400, "title": "Furnished 2BR at The Grove", "description": "Furnished units at The Grove."},
+    "matched": false
+  },
+  {
+    "name": "too far apart",
+    "a": {"address": ["1 main st, springfield, il 62701, us", "1 main st, 62701"], "lat": 39.70, "lng": -89.70},
+    "b": {"address": ["1 main st, springfield, il 62701, us", "1 main st, 62701"], "lat": 39.80, "lng": -89.70},
+    "matched": false, "veto": "too far apart"
+  }
+]

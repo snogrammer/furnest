@@ -59,6 +59,11 @@ class PropertyOut(_Out):
     allowed_transitions: list[PropertyStatus] = Field(
         description="Every status POST /transitions accepts for this property right now."
     )
+    merged_into_id: int | None = Field(
+        default=None,
+        description="Set when this property turned out to be the same unit as another and was "
+        "merged into it; its listings, notes and emails are there now.",
+    )
 
     @classmethod
     def build(cls, state: PropertyState) -> Self:
@@ -74,7 +79,12 @@ class PropertyOut(_Out):
             manual_contact_required=state.manual_contact_required,
             status_changed_at=state.status_changed_at,
             created_at=state.created_at,
-            allowed_transitions=list(allowed_targets(state.status, Actor.API)),
+            allowed_transitions=(
+                []
+                if state.merged_into_id is not None
+                else list(allowed_targets(state.status, Actor.API))
+            ),
+            merged_into_id=state.merged_into_id,
         )
 
 

@@ -352,3 +352,24 @@ def test_syncing_a_reposted_message_greys_out_every_button(
     body = json.loads(requests[0].content)
     assert all(b["disabled"] for b in body["components"][0]["components"])
     assert body["embeds"][0]["footer"]["text"].endswith(" · reposted")
+
+
+def test_a_merged_property_is_not_posted(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
+) -> None:
+    listing = NormalizedListing.model_validate(
+        {"source": "test", "source_id": "l2", "url": "https://example.com/l2", "title": "Loft"}
+    )
+    (listing_id,) = (
+        SqlListingStore(session_factory).upsert_batch("test", [listing], seen_at=T0).new_ids
+    )
+    survivor = store.ensure_for_listing(listing_id, at=T0).id
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == property_id).values(merged_into_id=survivor)
+        )
+    requests, factory = fake_discord()
+
+    poster(session_factory, factory)(notify(property_id))
+
+    assert requests == []

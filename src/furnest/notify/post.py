@@ -75,6 +75,10 @@ class NotifyPost:
             self._skip(property_id, "no such property")
             return
         state = detail.property
+        if state.merged_into_id is not None:
+            # Grouping queues a notification for the survivor if it needs one.
+            self._skip(property_id, f"merged into {state.merged_into_id}")
+            return
         if state.status is not PropertyStatus.SUGGESTED:
             self._skip(property_id, f"it is {state.status}")
             return

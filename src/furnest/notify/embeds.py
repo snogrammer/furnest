@@ -145,6 +145,8 @@ def match_embed(
         footer += f" · snoozed until {state.snoozed_until:%Y-%m-%d}"
     if superseded:
         footer += " · reposted"
+    if state.merged_into_id is not None:
+        footer += f" · merged into #{state.merged_into_id}"
     embed["footer"] = {"text": truncate(footer, "footer")}
     embed["timestamp"] = state.status_changed_at.isoformat()
     return embed

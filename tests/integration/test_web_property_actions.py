@@ -343,3 +343,61 @@ def test_bulk_needs_csrf(
 
     assert response.status_code == 403
     assert store.get(property_id).status is S.SUGGESTED  # type: ignore[union-attr]
+
+
+# --- Merged properties --------------------------------------------------------------
+
+
+def merge(session_factory: sessionmaker[Session], absorbed: int, into: int) -> None:
+    with session_scope(session_factory) as session:
+        session.execute(update(Property).where(Property.id == absorbed).values(merged_into_id=into))
+
+
+def test_a_merged_property_redirects_to_the_survivor(
+    authed_client: TestClient,
+    csrf: Csrf,
+    make_property: MakeProperty,
+    store: SqlPropertyStore,
+    session_factory: sessionmaker[Session],
+) -> None:
+    survivor, absorbed = make_property(S.SUGGESTED), make_property(S.SUGGESTED)
+    merge(session_factory, absorbed, survivor)
+    target = f"/properties/{survivor}"
+
+    page = authed_client.get(f"/properties/{absorbed}", headers=HTML, follow_redirects=False)
+    assert page.status_code == 303
+    assert page.headers["location"] == target
+
+    actions: list[tuple[str, dict[str, str | list[str]]]] = [
+        ("status", {"to": "approved"}),
+        ("deny", {"reason": "no"}),
+        ("notes", {"body": "hello"}),
+        ("inquire", {}),
+    ]
+    for path, data in actions:
+        response = post(authed_client, csrf, f"/properties/{absorbed}/{path}", data)
+        assert response.status_code == 303, path
+        assert response.headers["location"] == target, path
+    assert store.get(absorbed).status is S.SUGGESTED  # type: ignore[union-attr]
+    assert store.notes(absorbed) == []
+
+
+def test_bulk_skips_a_merged_property(
+    authed_client: TestClient,
+    csrf: Csrf,
+    make_property: MakeProperty,
+    session_factory: sessionmaker[Session],
+) -> None:
+    survivor, absorbed = make_property(S.SUGGESTED), make_property(S.SUGGESTED)
+    merge(session_factory, absorbed, survivor)
+
+    response = post(
+        authed_client,
+        csrf,
+        "/properties/bulk",
+        {"action": "archive", "ids": [str(absorbed), str(survivor)]},
+    )
+
+    assert response.status_code == 303
+    html = authed_client.get("/", headers=HTML).text
+    assert f"Listing {absorbed}" not in html

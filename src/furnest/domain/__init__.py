@@ -32,6 +32,7 @@ from furnest.domain.status import (
     PropertyStatus,
     allowed_targets,
     check_transition,
+    status_rank,
 )
 
 __all__ = [
@@ -74,5 +75,6 @@ __all__ = [
     "parse_period",
     "parse_price",
     "register_currency",
+    "status_rank",
     "to_monthly",
 ]

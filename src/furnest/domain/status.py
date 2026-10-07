@@ -146,3 +146,31 @@ def allowed_targets(
         allowed.append(to)
     order = list(PropertyStatus)
     return tuple(sorted(allowed, key=order.index))
+
+
+# How far along the pipeline each status is, least first. When two properties turn
+# out to be the same unit (furnest.db.grouping), the one furthest along survives, so
+# a merge never undoes a decision or skips the state machine. A person's decision
+# outranks the system's guesses, and getting further with the lister outranks it.
+# ``unavailable`` is ranked by the status it left; see the grouping store.
+_ADVANCEMENT = (
+    S.UNAVAILABLE,
+    S.NEW,
+    S.SUGGESTED,
+    S.ARCHIVED,
+    S.DENIED,
+    S.APPROVED,
+    S.INQUIRY_DRAFTED,
+    S.INQUIRY_SENT,
+    S.IN_PROGRESS,
+    S.RESPONDED,
+    S.TOURING,
+    S.APPLIED,
+    S.LOST,
+    S.WON,
+)
+
+
+def status_rank(status: PropertyStatus) -> int:
+    """How advanced ``status`` is: a higher rank is further along the pipeline."""
+    return _ADVANCEMENT.index(status)

@@ -7,6 +7,9 @@ as the adapter produced it. The other data columns are copies kept for querying.
 ``content_hash`` decides whether a re-seen listing changed. ``property_id`` groups
 listings under a property (``furnest.db.models.property``); it is NULL until the
 listing gets one, and goes back to NULL if the property is deleted.
+``address_key`` and ``street_key`` are the parsed address keys grouping looks
+candidates up by (``furnest.dedup.grouping.AddressKey``), set when the listing
+gets its property.
 
 A ``listing_images`` row carries the photo's perceptual hash once the worker has
 fetched it (``furnest.pipeline.images``). Hashes are shared by URL: every row with
@@ -30,7 +33,10 @@ from furnest.db.base import Base, UTCDateTime, utcnow
 
 class Listing(Base):
     __tablename__ = "listings"
-    __table_args__ = (UniqueConstraint("source", "source_id"),)
+    __table_args__ = (
+        UniqueConstraint("source", "source_id"),
+        Index("ix_listings_lat_lng", "lat", "lng"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[str] = mapped_column(String(64))
@@ -46,6 +52,8 @@ class Listing(Base):
     baths: Mapped[float | None] = mapped_column(Float)
     lat: Mapped[float | None] = mapped_column(Float)
     lng: Mapped[float | None] = mapped_column(Float)
+    address_key: Mapped[str | None] = mapped_column(Text, index=True)
+    street_key: Mapped[str | None] = mapped_column(Text, index=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
     content_hash: Mapped[str] = mapped_column(String(64))
     # The last amenity extraction, as sorted lists of Amenity values; NULL until extracted.

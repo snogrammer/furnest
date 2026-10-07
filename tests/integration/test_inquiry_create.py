@@ -437,3 +437,21 @@ def test_the_worker_registers_the_handler(session_factory: sessionmaker[Session]
     registration = registry.get(INQUIRY_CREATE)
     assert registration is not None
     assert isinstance(registration.handler, InquiryCreate)
+
+
+def test_a_merged_property_drafts_for_the_one_it_became(
+    session_factory: sessionmaker[Session],
+    make_property: Any,  # noqa: ANN401
+) -> None:
+    survivor, absorbed = make_property(S.APPROVED), make_property(S.APPROVED)
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == absorbed).values(merged_into_id=survivor)
+        )
+
+    InquiryCreate(session_factory, settings=_settings())(_ctx(absorbed))
+
+    assert len(_emails(session_factory, survivor)) == 1
+    assert _emails(session_factory, absorbed) == []
+    assert _status(session_factory, survivor) is S.INQUIRY_DRAFTED
+    assert _status(session_factory, absorbed) is S.APPROVED

@@ -8,6 +8,8 @@ the hooks :class:`~furnest.pipeline.ingest.ListingIngestor` and
 * :meth:`~PropertyPipeline.record` stores each match. A passing listing moves its
   ``new`` property to ``suggested`` and queues a :data:`NOTIFY` job. A property in
   any other state only gets the new score, so a re-run never regresses a decision.
+* :meth:`~PropertyPipeline.regroup` groups listings again once their photos are
+  hashed (``GROUPING_*``; see :mod:`furnest.db.grouping`).
 * :meth:`~PropertyPipeline.removed` moves a property to ``unavailable`` once all of
   its listings are gone, and :meth:`~PropertyPipeline.relisted` moves it back.
 * :meth:`~PropertyPipeline.snooze` hides a property for ``PIPELINE_SNOOZE_HOURS``,
@@ -25,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.config import PipelineSettings
+from furnest.config import GroupingSettings, PipelineSettings
 from furnest.db.base import utcnow
 from furnest.db.listing_store import StoredListing
 from furnest.db.property_store import NOTIFY, PropertyState, SqlPropertyStore
@@ -56,14 +58,20 @@ class PropertyPipeline:
         session_factory: sessionmaker[Session],
         *,
         settings: PipelineSettings | None = None,
+        grouping: GroupingSettings | None = None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        self.store = SqlPropertyStore(session_factory)
+        self.store = SqlPropertyStore(session_factory, grouping=grouping)
         self._settings = settings or PipelineSettings()
         self._clock = clock
 
     def record(self, stored: StoredListing, result: MatchResult) -> None:
         self.store.record_match(stored.id, result, at=self._clock())
+
+    def regroup(self, listing_ids: Sequence[int]) -> None:
+        merged = self.store.regroup(listing_ids, at=self._clock())
+        if merged:
+            log.info("properties_merged", property_ids=merged)
 
     def removed(self, listing_ids: Sequence[int]) -> None:
         moved = self.store.mark_gone(listing_ids, at=self._clock())

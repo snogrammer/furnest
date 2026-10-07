@@ -1,5 +1,6 @@
 """The images.hash job: cache by URL, failures recorded, scheduling gated on IMAGES_ENABLED."""
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -161,3 +162,53 @@ def test_not_scheduled_when_disabled(session_factory: sessionmaker[Session]) -> 
         is False
     )
     assert worker.scheduled == []
+
+
+def test_listings_that_gained_a_hash_are_handed_on(
+    session_factory: sessionmaker[Session],
+) -> None:
+    add(session_factory, "one", [A, BAD])
+    add(session_factory, "two", [B])
+    add(session_factory, "three", [BAD])
+    seen: list[list[int]] = []
+    fetcher = FakeFetcher({A: H1, B: H2})
+    images = SqlImageStore(session_factory)
+    hashing = HashListingImages(
+        session_factory,
+        fetcher,
+        settings=ImageSettings(),
+        on_hashed=lambda ids: seen.append(list(ids)),
+        clock=lambda: T0,
+    )
+
+    hashing.run()
+    # Nothing new: the hook isn't called.
+    hashing.run()
+
+    assert seen == [images.listings_with([A, B])]
+    assert len(seen[0]) == 2
+    assert images.listings_with([]) == []
+
+
+def test_the_hook_is_passed_through_scheduling(session_factory: sessionmaker[Session]) -> None:
+    class Capturing(FakeWorker):
+        def schedule(
+            self,
+            name: str,
+            handler: Handler,
+            *,
+            interval: timedelta,
+            timeout: timedelta | None = None,
+        ) -> None:
+            self.handler = handler
+
+    worker = Capturing()
+    seen: list[Sequence[int]] = []
+
+    def hook(ids: Sequence[int]) -> None:
+        seen.append(ids)
+
+    schedule_image_hashing(worker, session_factory, Settings(), on_hashed=hook)
+
+    assert isinstance(worker.handler, HashListingImages)
+    assert worker.handler._on_hashed is hook

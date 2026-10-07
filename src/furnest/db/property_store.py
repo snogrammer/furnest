@@ -1,8 +1,13 @@
 """SqlPropertyStore: properties, their status and the audit trail.
 
-Until listings are grouped (P7), every listing gets its own property through
-:meth:`SqlPropertyStore.ensure_for_listing`. A new property starts in ``new``, and
-its creation is the first audit event.
+A listing gets its property the first time it is matched (or through
+:meth:`SqlPropertyStore.ensure_for_listing`). With grouping on (``GROUPING_*``), it
+joins the property of another listing of the same unit when there is one
+(:mod:`furnest.db.grouping`), merging properties that turn out to be one unit;
+otherwise it gets a new property. A new property starts in ``new``, and its creation
+is the first audit event. A property merged into another keeps its row with
+``merged_into_id`` set: the views leave it out, its detail resolves to the survivor,
+and changing its status raises :class:`PropertyMergedError`.
 
 :meth:`SqlPropertyStore.transition` is the only way to change a property's status.
 In one transaction it checks the move against the state machine
@@ -16,7 +21,8 @@ read from the audit trail here.
 
 The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it:
 
-* :meth:`SqlPropertyStore.record_match` stores a listing's latest match. A passing
+* :meth:`SqlPropertyStore.record_match` stores a listing's latest match, if it is
+  the property's best (or replaces the result of the same listing). A passing
   match moves a ``new`` property to ``suggested`` and queues a :data:`NOTIFY` job in
   the same transaction. In every other state only the score changes, so re-running
   the criteria never undoes a decision a person made.
@@ -72,11 +78,21 @@ from pydantic import ValidationError
 from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from furnest.config import GroupingSettings
+from furnest.db.grouping import audit_property_ids, group_listing, resolve, set_address_keys
 from furnest.db.listing_store import PricePoint, price_points, stored_listing
 from furnest.db.models import AuditEvent, CriteriaVersion, JobStatus, Listing, Note, Property
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
-from furnest.domain import Actor, AddressParser, Money, NormalizedListing, PropertyStatus
+from furnest.dedup.grouping import AddressKey, GroupingThresholds
+from furnest.domain import (
+    Actor,
+    AddressParser,
+    Money,
+    NormalizedListing,
+    ParsedAddress,
+    PropertyStatus,
+)
 from furnest.domain.status import TRANSITIONS, check_transition
 from furnest.matching import MatchResult
 from furnest.worker import queue
@@ -98,6 +114,15 @@ class PropertyNotFoundError(LookupError):
     def __init__(self, property_id: int) -> None:
         super().__init__(f"no property with id {property_id}")
         self.property_id = property_id
+
+
+class PropertyMergedError(PropertyNotFoundError):
+    """The property was merged into ``merged_into``; act on that one instead."""
+
+    def __init__(self, property_id: int, merged_into: int) -> None:
+        LookupError.__init__(self, f"property {property_id} was merged into {merged_into}")
+        self.property_id = property_id
+        self.merged_into = merged_into
 
 
 class ListingNotFoundError(LookupError):
@@ -128,6 +153,8 @@ class PropertyState:
     created_at: datetime
     # The match message in Discord, once the notify job has posted it.
     discord_message_id: str | None = None
+    # Set once grouping merged this property into another.
+    merged_into_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +265,7 @@ def _state(row: Property) -> PropertyState:
         status_changed_at=row.status_changed_at,
         created_at=row.created_at,
         discord_message_id=row.discord_message_id,
+        merged_into_id=row.merged_into_id,
     )
 
 
@@ -260,6 +288,22 @@ def _summary(row: Listing) -> ListingSummary:
 def _visible(now: datetime) -> ColumnElement[bool]:
     """Not snoozed past ``now``."""
     return Property.snoozed_until.is_(None) | (Property.snoozed_until <= now)
+
+
+def _live() -> ColumnElement[bool]:
+    """Not merged into another property."""
+    return Property.merged_into_id.is_(None)
+
+
+def live_property(session: Session, property_id: int) -> Property:
+    """The property, or :class:`PropertyNotFoundError` / :class:`PropertyMergedError`."""
+    row = session.get(Property, property_id)
+    if row is None:
+        raise PropertyNotFoundError(property_id)
+    if row.merged_into_id is not None:
+        survivor = resolve(session, property_id)
+        raise PropertyMergedError(property_id, survivor.id if survivor else row.merged_into_id)
+    return row
 
 
 # Active listings first, then by id; the first one is the property's primary listing.
@@ -300,8 +344,10 @@ def _filtered[*Ts](
     changed_since: datetime | None = None,
 ) -> Select[*Ts]:
     """``statement`` over properties joined to their primary listing, filtered."""
-    statement = statement.select_from(Property).outerjoin(
-        Listing, Listing.id == _primary_listing_id()
+    statement = (
+        statement.select_from(Property)
+        .outerjoin(Listing, Listing.id == _primary_listing_id())
+        .where(_live())
     )
     if statuses is not None:
         statement = statement.where(Property.status.in_(list(statuses)))
@@ -340,10 +386,10 @@ def _entry(row: AuditEvent) -> AuditEntry:
 
 
 def _audit(session: Session, property_id: int) -> list[AuditEntry]:
-    """The property's audit trail, oldest first."""
+    """The property's audit trail, oldest first, with those of properties merged into it."""
     rows = session.scalars(
         select(AuditEvent)
-        .where(AuditEvent.property_id == property_id)
+        .where(AuditEvent.property_id.in_(audit_property_ids(session, property_id)))
         .order_by(AuditEvent.created_at, AuditEvent.id)
     )
     return [_entry(row) for row in rows]
@@ -535,9 +581,7 @@ def transition_in(
     payload: Mapping[str, Any] | None = None,
 ) -> PropertyState:
     """:meth:`SqlPropertyStore.transition` inside the caller's ``session``."""
-    row = session.get(Property, property_id)
-    if row is None:
-        raise PropertyNotFoundError(property_id)
+    row = live_property(session, property_id)
     _apply_transition(session, row, to, actor=actor, at=at, detail=detail, payload=payload)
     return _state(row)
 
@@ -558,9 +602,7 @@ def deny_in(
     commits.
     """
     body = None if reason is None or not reason.strip() else note_body(reason)
-    row = session.get(Property, property_id)
-    if row is None:
-        raise PropertyNotFoundError(property_id)
+    row = live_property(session, property_id)
     with session.begin_nested():
         payload = None
         if body is not None:
@@ -590,9 +632,7 @@ def snooze_in(
     """:meth:`SqlPropertyStore.snooze` inside the caller's ``session``."""
     if until <= at:
         raise SnoozeError(property_id, "the snooze must end in the future")
-    row = session.get(Property, property_id)
-    if row is None:
-        raise PropertyNotFoundError(property_id)
+    row = live_property(session, property_id)
     if row.status in FINISHED:
         raise SnoozeError(property_id, f"it is {row.status}")
     row.snoozed_until = until
@@ -614,9 +654,16 @@ class SqlPropertyStore:
         session_factory: sessionmaker[Session],
         *,
         address_parser: AddressParser | None = None,
+        grouping: GroupingSettings | None = None,
     ) -> None:
+        """``grouping`` turns on cross-source grouping; without it (or with it
+        disabled) every listing gets its own property."""
         self._session_factory = session_factory
         self._address_parser = address_parser or UsAddressParser()
+        self._grouping = grouping if grouping is not None and grouping.enabled else None
+        self._thresholds = (
+            None if self._grouping is None else GroupingThresholds.from_settings(self._grouping)
+        )
 
     def ensure_for_listing(
         self, listing_id: int, *, at: datetime, actor: Actor = Actor.SYSTEM
@@ -679,8 +726,7 @@ class SqlPropertyStore:
         """
         text = note_body(body)
         with session_scope(self._session_factory) as session:
-            if session.get(Property, property_id) is None:
-                raise PropertyNotFoundError(property_id)
+            live_property(session, property_id)
             note = _add_note(session, property_id, text, actor=actor, at=at, detail=detail)
             return _note_entry(note)
 
@@ -704,9 +750,17 @@ class SqlPropertyStore:
             if manual != row.manual_contact_required:
                 row.manual_contact_required = manual
                 _sync_message(session, row)
-            row.score = result.score
-            row.match_result = result.model_dump(mode="json")
-            row.criteria_version_id = _criteria_version_id(session, result.criteria_version)
+            # The property shows its best listing's match; a listing's newer result
+            # replaces its own older one even if lower.
+            if (
+                row.match_listing_id in (None, listing_id)
+                or row.score is None
+                or result.score > row.score
+            ):
+                row.score = result.score
+                row.match_result = result.model_dump(mode="json")
+                row.criteria_version_id = _criteria_version_id(session, result.criteria_version)
+                row.match_listing_id = listing_id
             row.updated_at = at
             if result.passed and row.status is PropertyStatus.NEW:
                 _apply_transition(
@@ -844,7 +898,9 @@ class SqlPropertyStore:
         Properties snoozed past ``now`` are left out unless ``include_snoozed``: this
         is the dashboard's default view.
         """
-        statement = select(Property).order_by(Property.created_at.desc(), Property.id.desc())
+        statement = (
+            select(Property).where(_live()).order_by(Property.created_at.desc(), Property.id.desc())
+        )
         if statuses is not None:
             statement = statement.where(Property.status.in_(list(statuses)))
         if not include_snoozed:
@@ -957,22 +1013,60 @@ class SqlPropertyStore:
         with session_scope(self._session_factory) as session:
             return _audit(session, property_id)
 
-    def _canonical_address(self, listing: NormalizedListing) -> str | None:
+    def regroup(self, listing_ids: Iterable[int], *, at: datetime) -> list[int]:
+        """Group ``listing_ids`` again, now that more is known about them (their photo
+        hashes); return the ids of the properties merged away. Listings without a
+        property are left for their first match."""
+        if self._grouping is None or self._thresholds is None:
+            return []
+        merged: list[int] = []
+        for listing_id in dict.fromkeys(listing_ids):
+            with session_scope(self._session_factory) as session:
+                listing_row = session.get(Listing, listing_id)
+                if listing_row is None or listing_row.property_id is None:
+                    continue
+                self._set_keys(listing_row)
+                outcome = group_listing(
+                    session,
+                    listing_row,
+                    thresholds=self._thresholds,
+                    max_candidates=self._grouping.max_candidates,
+                    at=at,
+                )
+                merged.extend(outcome.merged)
+        return merged
+
+    def _parsed(self, listing: NormalizedListing) -> ParsedAddress | None:
         address = listing.address
         if not any((address.line1, address.line2, address.city, address.postal_code)):
             return None
-        return self._address_parser.parse(address).canonical
+        return self._address_parser.parse(address)
+
+    def _set_keys(self, listing_row: Listing) -> ParsedAddress | None:
+        parsed = self._parsed(NormalizedListing.model_validate(listing_row.data))
+        set_address_keys(listing_row, None if parsed is None else AddressKey.of(parsed))
+        return parsed
 
     def _ensure(self, session: Session, listing_id: int, *, at: datetime, actor: Actor) -> Property:
         listing_row = session.get(Listing, listing_id)
         if listing_row is None:
             raise ListingNotFoundError(listing_id)
+        parsed = self._set_keys(listing_row)
         if listing_row.property_id is not None:
             return session.get_one(Property, listing_row.property_id)
-        listing = NormalizedListing.model_validate(listing_row.data)
+        if self._grouping is not None and self._thresholds is not None:
+            outcome = group_listing(
+                session,
+                listing_row,
+                thresholds=self._thresholds,
+                max_candidates=self._grouping.max_candidates,
+                at=at,
+            )
+            if outcome.property is not None:
+                return outcome.property
         row = Property(
             status=PropertyStatus.NEW,
-            address=self._canonical_address(listing),
+            address=None if parsed is None else parsed.canonical,
             lat=listing_row.lat,
             lng=listing_row.lng,
             manual_contact_required=_manual_contact(listing_row),

@@ -8,11 +8,17 @@ reason recorded and is not tried again; it never fails the run.
 
 Hashing runs on its own schedule rather than inside a source run, so a slow image
 host can't push a scrape past its run timeout. Photos are only ever held in memory.
+
+Hashes usually arrive after a listing's first match, when grouping had no photos to
+compare. After each run the ``on_hashed`` hook gets the ids of the listings that
+gained a hash, and the worker passes :meth:`PropertyPipeline.regroup
+<furnest.pipeline.properties.PropertyPipeline.regroup>`, so those listings are
+grouped again with their photos.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
@@ -45,6 +51,10 @@ class HashCounts:
     failed: int = 0
 
 
+def _ignore(_listing_ids: Sequence[int]) -> None:
+    pass
+
+
 class HashListingImages:
     def __init__(
         self,
@@ -52,11 +62,13 @@ class HashListingImages:
         fetcher: PhashFetcher,
         *,
         settings: ImageSettings,
+        on_hashed: Callable[[Sequence[int]], None] = _ignore,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._store = SqlImageStore(session_factory)
         self._fetcher = fetcher
         self._settings = settings
+        self._on_hashed = on_hashed
         self._clock = clock
 
     def __call__(self, ctx: JobContext) -> None:
@@ -67,12 +79,14 @@ class HashListingImages:
             limit=self._settings.batch_size, per_listing=self._settings.per_listing
         )
         hashed = cached = failed = 0
+        new_hashes: list[str] = []
         for url in urls:
             if ctx is not None and ctx.cancelled.is_set():
                 break
             known = self._store.cached(url)
             if known is not None:
                 self._store.record(url, phash=known, at=self._clock())
+                new_hashes.append(url)
                 cached += 1
                 continue
             try:
@@ -83,10 +97,13 @@ class HashListingImages:
                 failed += 1
                 continue
             self._store.record(url, phash=phash, at=self._clock())
+            new_hashes.append(url)
             hashed += 1
         counts = HashCounts(hashed=hashed, cached=cached, failed=failed)
         if urls:
             log.info("images_hashed", hashed=hashed, cached=cached, failed=failed)
+        if new_hashes:
+            self._on_hashed(self._store.listings_with(new_hashes))
         return counts
 
 
@@ -104,7 +121,11 @@ class Scheduler(Protocol):
 
 
 def schedule_image_hashing(
-    worker: Scheduler, session_factory: sessionmaker[Session], settings: Settings
+    worker: Scheduler,
+    session_factory: sessionmaker[Session],
+    settings: Settings,
+    *,
+    on_hashed: Callable[[Sequence[int]], None] = _ignore,
 ) -> bool:
     """Schedule the job if ``IMAGES_ENABLED`` is set; returns whether it did."""
     images = settings.images
@@ -115,7 +136,7 @@ def schedule_image_hashing(
     per_url = images.timeout_seconds + 60.0 / images.requests_per_minute
     worker.schedule(
         HASH_IMAGES,
-        HashListingImages(session_factory, fetcher, settings=images),
+        HashListingImages(session_factory, fetcher, settings=images, on_hashed=on_hashed),
         interval=timedelta(minutes=images.interval_minutes),
         timeout=timedelta(seconds=images.batch_size * per_url + 60),
     )

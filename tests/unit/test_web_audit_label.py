@@ -42,3 +42,28 @@ def entry(
 )
 def test_audit_label(event: AuditEntry, label: str) -> None:
     assert audit_label(event) == label
+
+
+def test_grouping_events_are_labelled() -> None:
+    def event(detail: str, payload: dict[str, Any], property_id: int = 1) -> AuditEntry:
+        return AuditEntry(
+            id=1,
+            property_id=property_id,
+            from_status=S.SUGGESTED,
+            to_status=S.SUGGESTED,
+            actor=Actor.SYSTEM,
+            actor_detail=detail,
+            payload=payload,
+            created_at=datetime(2026, 10, 5, tzinfo=UTC),
+        )
+
+    assert audit_label(event("grouped", {"listing_id": 7})) == "Listing #7 grouped here"
+    assert audit_label(event("merged", {"merged_into": 3})) == "Merged into #3"
+    assert (
+        audit_label(event("merged", {"merged_from": 2, "merged_status": "approved"}))
+        == "Merged #2 into this property (was approved)"
+    )
+    assert audit_label(event("merged", {"merged_from": 2})) == "Merged #2 into this property"
+    # On the survivor's timeline, the merged property's events say whose they are.
+    assert audit_label(event("grouped", {"listing_id": 7}, 2), 1) == "#2: Listing #7 grouped here"
+    assert audit_label(event("grouped", {"listing_id": 7}, 1), 1) == "Listing #7 grouped here"

@@ -47,6 +47,7 @@ from furnest.db.base import utcnow
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.email_store import draft_email, send_draft_in
 from furnest.db.email_template_store import SqlEmailTemplateStore
+from furnest.db.grouping import resolve
 from furnest.db.listing_store import stored_listing
 from furnest.db.models import Property
 from furnest.db.property_store import primary_listing, transition_in
@@ -131,7 +132,10 @@ class InquiryCreate:
         signature = self._templates.signature()
         mode = self._runtime.get(INQUIRY_MODE)
         with session_scope(self._session_factory) as session:
-            row = session.get(Property, property_id)
+            # A property merged since the job was queued: draft for the one it became.
+            row = resolve(session, property_id)
+            if row is not None:
+                property_id = row.id
             if row is None or row.status is not PropertyStatus.APPROVED:
                 log.info(
                     "inquiry_skipped",

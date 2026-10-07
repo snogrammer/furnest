@@ -40,6 +40,7 @@ from pydantic import (
     Field,
     HttpUrl,
     JsonValue,
+    NonNegativeFloat,
     PositiveFloat,
     SecretStr,
     StringConstraints,
@@ -380,6 +381,36 @@ class ImageSettings(_Group):
     requests_per_minute: PositiveFloat = 30.0
 
 
+class GroupingSettings(_Group):
+    """Cross-source grouping of listings into properties (``furnest.dedup.grouping``).
+
+    A listing joins an existing property when its weighted similarity to one of that
+    property's listings reaches ``match_threshold``. The score is a weighted mean of
+    the signals both listings have (address, distance, photos, title, description),
+    and needs at least ``min_signals`` of them. A different bedroom count or unit
+    always keeps two listings apart. Disabled, every listing gets its own property.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="GROUPING_")
+
+    enabled: bool = True
+    # Listings further apart than this are never the same unit; also the radius
+    # searched for candidate properties.
+    max_distance_m: PositiveFloat = 75.0
+    match_threshold: float = Field(default=0.75, gt=0, le=1)
+    min_signals: PositiveInt = 2
+    # Photos whose pHashes are at most this many bits apart count as the same photo.
+    phash_distance: PositiveInt = 8
+    # Candidate properties compared per listing, nearest first.
+    max_candidates: PositiveInt = 25
+    # Relative signal weights; 0 turns a signal off.
+    weight_address: NonNegativeFloat = 3.0
+    weight_distance: NonNegativeFloat = 1.0
+    weight_photos: NonNegativeFloat = 3.0
+    weight_title: NonNegativeFloat = 1.0
+    weight_description: NonNegativeFloat = 1.0
+
+
 # Adapter names: lower-case identifiers, also used as keys in SOURCES_ADAPTERS.
 ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
@@ -468,6 +499,7 @@ class Settings(BaseModel):
     geocoding: GeocodingSettings = Field(default_factory=GeocodingSettings)
     reverse_image: ReverseImageSettings = Field(default_factory=ReverseImageSettings)
     images: ImageSettings = Field(default_factory=ImageSettings)
+    grouping: GroupingSettings = Field(default_factory=GroupingSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 

@@ -430,3 +430,25 @@ def test_unknown_property_gets_an_ephemeral_reply(
 ) -> None:
     assert_ephemeral(post(click(action, 999)), "no longer exists")
     assert counts(session_factory) == (0, 0, 0)
+
+
+# --- Merged properties ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("action", ["approve", "deny", "inquire", "snooze"])
+def test_a_click_on_a_merged_property_points_at_the_survivor(
+    post: Post,
+    make_property: MakeProperty,
+    session_factory: sessionmaker[Session],
+    action: str,
+) -> None:
+    survivor, absorbed = make_property(), make_property()
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == absorbed).values(merged_into_id=survivor)
+        )
+    before = counts(session_factory)
+
+    assert_ephemeral(post(click(action, absorbed)), f"property #{survivor}")
+    assert_ephemeral(post(submit_deny(absorbed, "x")), f"property #{survivor}")
+    assert counts(session_factory) == before

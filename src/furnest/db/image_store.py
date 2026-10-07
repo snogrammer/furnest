@@ -81,6 +81,20 @@ class SqlImageStore:
             )
             return int(result.rowcount)  # type: ignore[attr-defined]
 
+    def listings_with(self, urls: Sequence[str]) -> list[int]:
+        """Ids of the listings that have a photo at one of ``urls``, ascending."""
+        if not urls:
+            return []
+        with session_scope(self._session_factory) as session:
+            return list(
+                session.scalars(
+                    select(ListingImage.listing_id)
+                    .where(ListingImage.url.in_(list(urls)))
+                    .distinct()
+                    .order_by(ListingImage.listing_id)
+                )
+            )
+
     def hashes(self, listing_id: int) -> Sequence[str]:
         """The listing's photo hashes in photo order, skipping photos without one."""
         with session_scope(self._session_factory) as session:

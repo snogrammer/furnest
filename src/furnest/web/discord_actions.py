@@ -37,6 +37,7 @@ from furnest.config import Settings
 from furnest.db.base import utcnow
 from furnest.db.models import Property
 from furnest.db.property_store import (
+    PropertyMergedError,
     PropertyNotFoundError,
     SnoozeError,
     deny_in,
@@ -74,6 +75,8 @@ class ButtonActions:
         row = session.get(Property, property_id)
         if row is None:
             return ephemeral(NOT_FOUND)
+        if row.merged_into_id is not None:
+            return ephemeral(_merged_text(row.merged_into_id))
         if row.status not in APPROVABLE:
             return _rejected(session, interaction, f"Can't approve this property: it is {_s(row)}.")
         # The state machine lets the Discord actor approve every APPROVABLE status.
@@ -93,6 +96,8 @@ class ButtonActions:
         row = session.get(Property, property_id)
         if row is None:
             return ephemeral(NOT_FOUND)
+        if row.merged_into_id is not None:
+            return ephemeral(_merged_text(row.merged_into_id))
         if PropertyStatus.DENIED not in allowed_targets(row.status, Actor.DISCORD):
             return _rejected(session, interaction, f"Can't deny this property: it is {_s(row)}.")
         return deny_modal(property_id)
@@ -107,6 +112,8 @@ class ButtonActions:
                 reason=interaction.fields.get(REASON_INPUT),
                 detail=interaction.actor_detail,
             )
+        except PropertyMergedError as e:
+            return ephemeral(_merged_text(e.merged_into))
         except PropertyNotFoundError:
             return ephemeral(NOT_FOUND)
         except InvalidTransitionError as e:
@@ -120,6 +127,8 @@ class ButtonActions:
         row = session.get(Property, property_id)
         if row is None:
             return ephemeral(NOT_FOUND)
+        if row.merged_into_id is not None:
+            return ephemeral(_merged_text(row.merged_into_id))
         if row.status not in INQUIRABLE:
             return _rejected(
                 session, interaction, f"Can't send an inquiry for this property: it is {_s(row)}."
@@ -144,6 +153,8 @@ class ButtonActions:
                 at=now,
                 detail=interaction.actor_detail,
             )
+        except PropertyMergedError as e:
+            return ephemeral(_merged_text(e.merged_into))
         except PropertyNotFoundError:
             return ephemeral(NOT_FOUND)
         except SnoozeError as e:
@@ -187,6 +198,13 @@ def _property_id(interaction: Interaction) -> int:
         msg = "interaction has no property id"
         raise ValueError(msg)
     return interaction.property_id
+
+
+def _merged_text(merged_into: int) -> str:
+    return (
+        f"This listing turned out to be the same unit as property #{merged_into} and was "
+        "merged into it. Use that property's message or the dashboard."
+    )
 
 
 def _s(row: Property) -> str:

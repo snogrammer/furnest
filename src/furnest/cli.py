@@ -123,7 +123,7 @@ def worker() -> None:
             )
             raise typer.Exit(code=1)
         factory = make_session_factory(engine)
-        pipeline = PropertyPipeline(factory, settings=settings.pipeline)
+        pipeline = PropertyPipeline(factory, settings=settings.pipeline, grouping=settings.grouping)
         try:
             sources = discover()
         except SourceConfigError as exc:
@@ -144,7 +144,7 @@ def worker() -> None:
         schedule_unsnooze(worker, pipeline, settings.pipeline)
         schedule_digest(worker, factory, settings)
         schedule_imap_poll(worker, factory, settings)
-        schedule_image_hashing(worker, factory, settings)
+        schedule_image_hashing(worker, factory, settings, on_hashed=pipeline.regroup)
         alert_after = settings.discord.alert_after_failures
         try:
             schedule_sources(

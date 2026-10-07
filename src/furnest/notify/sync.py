@@ -15,7 +15,9 @@ after 15 minutes, so a job the queue retries later still works.
 
 A message the property no longer points at was replaced by a repost (see
 :mod:`furnest.notify.post`). It is drawn with every button greyed out and marked as
-reposted, so only the newest message is live.
+reposted, so only the newest message is live. A property grouping merged into
+another is drawn the same way, marked as merged, with its link leading to the
+survivor.
 
 * Discord not configured: the job logs and does nothing.
 * Message deleted (404): logged and dropped, since there is nothing to edit.
@@ -77,11 +79,12 @@ class MessageSync:
             log.info("discord_sync_skipped", property_id=property_id, reason="not configured")
             return
         superseded = detail.property.discord_message_id not in (None, message_id)
+        inactive = superseded or detail.property.merged_into_id is not None
         payload = match_message(
             detail,
             base_url=self._base_url,
             source_name=self._source_name,
-            disabled=frozenset(DiscordAction) if superseded else disabled_actions(detail.property),
+            disabled=frozenset(DiscordAction) if inactive else disabled_actions(detail.property),
             superseded=superseded,
         )
         with client:

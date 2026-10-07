@@ -88,7 +88,7 @@ def set_removed(
 
 
 def link(session_factory: sessionmaker[Session], listing_id: int, property_id: int) -> None:
-    """Group a listing under a property by hand, as P7 will."""
+    """Group a listing under a property by hand, as grouping does."""
     with session_scope(session_factory) as session:
         session.execute(
             update(Listing).where(Listing.id == listing_id).values(property_id=property_id)

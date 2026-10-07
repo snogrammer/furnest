@@ -1,16 +1,22 @@
 """Properties and their audit trail; the logic is in ``furnest.db.property_store``.
 
 A property is the thing under review: one real unit, which one or more listings
-(``listings.property_id``) advertise. Until listings are grouped (P7) every
-property has exactly one listing. ``status`` is its place in the pipeline
-(:class:`~furnest.domain.PropertyStatus`) and only changes through
-``SqlPropertyStore.transition``, which writes an ``audit_events`` row in the same
-transaction. The first event of every property has ``from_status`` NULL: its
-creation.
+(``listings.property_id``) advertise. Listings of the same unit on different
+sources are grouped under one property (``furnest.db.grouping``). ``status`` is
+its place in the pipeline (:class:`~furnest.domain.PropertyStatus`) and only
+changes through ``SqlPropertyStore.transition``, which writes an ``audit_events``
+row in the same transaction. The first event of every property has ``from_status``
+NULL: its creation.
 
-``score``, ``match_result`` and ``criteria_version_id`` hold the latest match, and
-``snoozed_until``, ``manual_contact_required`` and the Discord message reference
-are set by the pipeline and the Discord integration.
+``score``, ``match_result`` and ``criteria_version_id`` hold the best match among
+its listings (``match_listing_id`` names that listing), and ``snoozed_until``,
+``manual_contact_required`` and the Discord message reference are set by the
+pipeline and the Discord integration.
+
+When grouping finds that two properties are the same unit, one is merged into the
+other: its listings, notes and emails move to the survivor and ``merged_into_id``
+points there. The merged row stays, with its own audit trail, so old links and
+Discord messages still resolve.
 
 A :class:`Note` is free-form markdown someone wrote about a property. Deny reasons
 are notes too; the deny's audit event names its note in ``payload["note_id"]``.
@@ -62,6 +68,9 @@ class Property(Base):
     score: Mapped[int | None]
     # The MatchResult as JSON.
     match_result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # The listing ``match_result`` came from. Not a foreign key: it is only a hint
+    # for which result a newer match replaces.
+    match_listing_id: Mapped[int | None]
     criteria_version_id: Mapped[int | None] = mapped_column(
         ForeignKey("criteria_versions.id", ondelete="SET NULL")
     )
@@ -69,6 +78,10 @@ class Property(Base):
     manual_contact_required: Mapped[bool] = mapped_column(default=False)
     discord_channel_id: Mapped[str | None] = mapped_column(String(32))
     discord_message_id: Mapped[str | None] = mapped_column(String(32))
+    # Set once this property has been merged into another (grouping).
+    merged_into_id: Mapped[int | None] = mapped_column(
+        ForeignKey("properties.id", ondelete="SET NULL"), index=True
+    )
     status_changed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)

@@ -258,7 +258,7 @@
     <ol class="timeline" reversed>
       {% for e in d.audit | reverse %}
       <li>
-        <strong>{{ audit_label(e) }}</strong>
+        <strong>{{ audit_label(e, p.id) }}</strong>
         <small class="muted">by {{ e.actor.value }}{% if e.actor_detail %} ({{ e.actor_detail }}){% endif %} · {{ when(e.created_at) }}</small>
       </li>
       {% endfor %}

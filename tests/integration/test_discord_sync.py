@@ -174,3 +174,27 @@ def test_worker_registers_the_sync_and_inquiry_handlers(
         job_id=2, kind=INQUIRY_CREATE, payload=payload, attempt=1, deadline=datetime.now(UTC)
     )
     inquiry.handler(job)  # logs only, until #42
+
+
+def test_a_merged_property_is_drawn_merged_with_its_buttons_off(
+    session_factory: sessionmaker[Session], property_id: int
+) -> None:
+    listing = NormalizedListing.model_validate(
+        {"source": "test", "source_id": "l2", "url": "https://example.com/l2", "title": "Loft"}
+    )
+    (listing_id,) = (
+        SqlListingStore(session_factory).upsert_batch("test", [listing], seen_at=T0).new_ids
+    )
+    survivor = SqlPropertyStore(session_factory).ensure_for_listing(listing_id, at=T0).id
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == property_id).values(merged_into_id=survivor)
+        )
+    ok = httpx2.Response(200, json={"id": MESSAGE, "channel_id": CHANNEL})
+    requests, factory = fake_discord(ok)
+
+    sync(session_factory, factory)(ctx(property_id))
+
+    payload = json.loads(requests[0].content)
+    assert all(b["disabled"] for b in payload["components"][0]["components"])
+    assert f"merged into #{survivor}" in payload["embeds"][0]["footer"]["text"]

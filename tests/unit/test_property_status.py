@@ -169,3 +169,24 @@ def test_allowed_targets_restore_a_relisted_property_for_the_system() -> None:
         S.TOURING,
         S.ARCHIVED,
     )
+
+
+def test_status_rank_orders_the_pipeline() -> None:
+    from furnest.domain import status_rank
+
+    assert sorted(PropertyStatus, key=status_rank) == [
+        PropertyStatus.UNAVAILABLE,
+        PropertyStatus.NEW,
+        PropertyStatus.SUGGESTED,
+        PropertyStatus.ARCHIVED,
+        PropertyStatus.DENIED,
+        PropertyStatus.APPROVED,
+        PropertyStatus.INQUIRY_DRAFTED,
+        PropertyStatus.INQUIRY_SENT,
+        PropertyStatus.IN_PROGRESS,
+        PropertyStatus.RESPONDED,
+        PropertyStatus.TOURING,
+        PropertyStatus.APPLIED,
+        PropertyStatus.LOST,
+        PropertyStatus.WON,
+    ]

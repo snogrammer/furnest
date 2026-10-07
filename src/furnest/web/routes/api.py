@@ -23,7 +23,12 @@ from fastapi.security import HTTPBearer
 from starlette.responses import Response
 
 from furnest.db.base import utcnow
-from furnest.db.property_store import PropertyNotFoundError, PropertySort, SqlPropertyStore
+from furnest.db.property_store import (
+    PropertyMergedError,
+    PropertyNotFoundError,
+    PropertySort,
+    SqlPropertyStore,
+)
 from furnest.db.session import make_session_factory
 from furnest.domain import Actor, InvalidTransitionError, PropertyStatus
 from furnest.web.api_models import (
@@ -81,6 +86,12 @@ def _not_found(property_id: int) -> HTTPException:
     return HTTPException(status_code=404, detail=f"no property with id {property_id}")
 
 
+def _merged(e: PropertyMergedError) -> HTTPException:
+    return HTTPException(
+        status_code=409, detail=f"property {e.property_id} was merged into {e.merged_into}"
+    )
+
+
 @router.get("/properties", response_model=PropertyPageOut)
 def list_properties(
     request: Request,
@@ -131,7 +142,7 @@ def list_listings(request: Request, property_id: int) -> list[ListingOut]:
     response_model=PropertyOut,
     responses={
         **_NOT_FOUND,
-        409: _error("The state machine forbids this transition"),
+        409: _error("The state machine forbids this transition, or the property was merged"),
     },
 )
 def transition(request: Request, property_id: int, body: TransitionIn) -> PropertyOut:
@@ -148,6 +159,8 @@ def transition(request: Request, property_id: int, body: TransitionIn) -> Proper
             state = store.deny(property_id, actor=Actor.API, at=utcnow(), reason=body.reason)
         else:
             state = store.transition(property_id, body.to, actor=Actor.API, at=utcnow())
+    except PropertyMergedError as e:
+        raise _merged(e) from None
     except PropertyNotFoundError:
         raise _not_found(property_id) from None
     except InvalidTransitionError as e:
@@ -161,12 +174,14 @@ def transition(request: Request, property_id: int, body: TransitionIn) -> Proper
     "/properties/{property_id}/notes",
     response_model=NoteOut,
     status_code=201,
-    responses=_NOT_FOUND,
+    responses={**_NOT_FOUND, 409: _error("The property was merged into another")},
 )
 def add_note(request: Request, property_id: int, body: NoteIn) -> NoteOut:
     """Add a markdown note to the property."""
     try:
         note = _store(request).add_note(property_id, body.body, actor=Actor.API, at=utcnow())
+    except PropertyMergedError as e:
+        raise _merged(e) from None
     except PropertyNotFoundError:
         raise _not_found(property_id) from None
     except ValueError as e:

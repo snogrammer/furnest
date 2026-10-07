@@ -46,6 +46,7 @@ from furnest.db.email_store import SqlEmailStore, StoredEmail
 from furnest.db.models import EmailDirection, Property
 from furnest.db.property_store import (
     MAX_NOTE_LENGTH,
+    PropertyMergedError,
     PropertyNotFoundError,
     PropertySort,
     PropertyState,
@@ -157,6 +158,8 @@ def _render_detail(
     detail = _store(request).detail(property_id)
     if detail is None:
         raise HTTPException(status_code=404)
+    if detail.property.merged_into_id is not None:
+        return _merged(PropertyMergedError(property_id, detail.property.merged_into_id))
     emails = SqlEmailStore(make_session_factory(request.app.state.engine)).for_property(property_id)
     status = detail.property.status
     inquiry = _open_inquiry(status, emails)
@@ -212,6 +215,11 @@ def property_detail(
     return _render_detail(request, property_id, notice=notice)
 
 
+def _merged(e: PropertyMergedError) -> Response:
+    """Send the browser to the property ``e``'s was merged into."""
+    return RedirectResponse(f"/properties/{e.merged_into}", status_code=303)
+
+
 def _by_hand(state: PropertyState, inquiry: StoredEmail) -> bool:
     """Whether the waiting inquiry is to be sent by hand, through the listing's site."""
     return state.manual_contact_required or inquiry.to_address is None
@@ -238,6 +246,8 @@ def add_note(
 ) -> Response:
     try:
         _store(request).add_note(property_id, body, actor=Actor.DASHBOARD, at=utcnow())
+    except PropertyMergedError as e:
+        return _merged(e)
     except PropertyNotFoundError:
         raise HTTPException(status_code=404) from None
     except ValueError as e:
@@ -253,6 +263,8 @@ def deny(
 ) -> Response:
     try:
         _store(request).deny(property_id, actor=Actor.DASHBOARD, at=utcnow(), reason=reason)
+    except PropertyMergedError as e:
+        return _merged(e)
     except PropertyNotFoundError:
         raise HTTPException(status_code=404) from None
     except InvalidTransitionError as e:
@@ -301,6 +313,8 @@ def inquire(request: Request, property_id: int) -> Response:
         row = session.get(Property, property_id)
         if row is None:
             raise HTTPException(status_code=404)
+        if row.merged_into_id is not None:
+            return _merged(PropertyMergedError(property_id, row.merged_into_id))
         status = row.status
         if status in INQUIRABLE:
             request_inquiry_in(session, property_id, actor=Actor.DASHBOARD, at=utcnow())
@@ -320,6 +334,8 @@ def change_status(
 ) -> Response:
     try:
         _store(request).transition(property_id, to, actor=Actor.DASHBOARD, at=utcnow())
+    except PropertyMergedError as e:
+        return _merged(e)
     except PropertyNotFoundError:
         raise HTTPException(status_code=404) from None
     except InvalidTransitionError as e:

@@ -559,3 +559,26 @@ def test_the_docs_page_loads_the_vendored_swagger_ui(authed_client: TestClient) 
 
 def test_the_nav_links_to_the_api_docs(authed_client: TestClient) -> None:
     assert 'href="/api/docs"' in authed_client.get("/", headers={"Accept": "text/html"}).text
+
+
+def test_a_merged_property_says_where_it_went_and_refuses_changes(
+    api: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    survivor, absorbed = seed(), seed()
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == absorbed).values(merged_into_id=survivor)
+        )
+
+    body = api.get(f"/api/v1/properties/{absorbed}").json()
+    assert body["property"]["merged_into_id"] == survivor
+    assert body["property"]["allowed_transitions"] == []
+    assert api.get(f"/api/v1/properties/{survivor}").json()["property"]["merged_into_id"] is None
+    listed = api.get("/api/v1/properties").json()
+    assert [item["property"]["id"] for item in listed["items"]] == [survivor]
+
+    moved = api.post(f"/api/v1/properties/{absorbed}/transitions", json={"to": "approved"})
+    assert moved.status_code == 409
+    assert moved.json()["detail"] == f"property {absorbed} was merged into {survivor}"
+    noted = api.post(f"/api/v1/properties/{absorbed}/notes", json={"body": "x"})
+    assert noted.status_code == 409

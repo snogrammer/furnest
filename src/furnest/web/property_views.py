@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.property_store import (
     AuditEntry,
+    PropertyMergedError,
     PropertyNotFoundError,
     PropertyRow,
     PropertySort,
@@ -183,12 +184,30 @@ def status_label(status: PropertyStatus) -> str:
     return status.value.replace("_", " ")
 
 
-def audit_label(entry: AuditEntry) -> str:
-    """One line for the detail page's timeline."""
+def audit_label(entry: AuditEntry, property_id: int | None = None) -> str:
+    """One line for the detail page's timeline of ``property_id``.
+
+    Events of a property merged into it are prefixed with that property's number.
+    """
+    label = _audit_text(entry)
+    if property_id is not None and entry.property_id != property_id:
+        return f"#{entry.property_id}: {label}"
+    return label
+
+
+def _audit_text(entry: AuditEntry) -> str:
     if entry.from_status is None:
         return f"Created as {status_label(entry.to_status)}"
     if entry.from_status == entry.to_status:
         payload = entry.payload or {}
+        if entry.actor_detail == "grouped":
+            return f"Listing #{payload.get('listing_id')} grouped here"
+        if entry.actor_detail == "merged" and "merged_into" in payload:
+            return f"Merged into #{payload['merged_into']}"
+        if entry.actor_detail == "merged" and "merged_from" in payload:
+            was = payload.get("merged_status")
+            suffix = f" (was {status_label(S(was))})" if was in set(S) else ""
+            return f"Merged #{payload['merged_from']} into this property{suffix}"
         if payload.get("unsnoozed"):
             return "Snooze ended"
         if "snoozed_until" in payload:
@@ -273,6 +292,8 @@ def apply_bulk(
                 store.deny(property_id, actor=Actor.DASHBOARD, at=at)
             else:
                 store.transition(property_id, S.ARCHIVED, actor=Actor.DASHBOARD, at=at)
+        except PropertyMergedError as e:
+            skipped.append((property_id, f"merged into #{e.merged_into}"))
         except PropertyNotFoundError:
             skipped.append((property_id, "not found"))
         except InvalidTransitionError as e:
