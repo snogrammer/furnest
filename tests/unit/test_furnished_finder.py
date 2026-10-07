@@ -369,11 +369,15 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
     registry = discover()
     assert registry.get("furnished_finder") is FurnishedFinder
 
-    (source,) = registry.configured(SourcesSettings())
+    by_name = {source.config.name: source for source in registry.configured(SourcesSettings())}
+    source = by_name["furnished_finder"]
     assert source.config.enabled is False
     assert source.config.disabled_reason == (
         'needs an API key: set "api_key" for furnished_finder in SOURCES_ADAPTERS'
     )
 
-    (keyed,) = registry.configured(settings(enabled=True))
-    assert (keyed.config.enabled, keyed.config.disabled_reason) == (True, None)
+    keyed = {s.config.name: s for s in registry.configured(settings(enabled=True))}
+    assert (
+        keyed["furnished_finder"].config.enabled,
+        keyed["furnished_finder"].config.disabled_reason,
+    ) == (True, None)

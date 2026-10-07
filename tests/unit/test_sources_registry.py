@@ -245,7 +245,7 @@ def test_default_fetch_detail_returns_the_listing() -> None:
 def test_discover_built_in_package_loads() -> None:
     registry = discover()
 
-    # No real adapters ship yet (#24 onwards); every name must still be valid.
+    # Every built-in name must resolve to its class.
     for name in registry.names():
         assert registry.get(name) is not None
 

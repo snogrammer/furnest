@@ -108,6 +108,106 @@ should be checked against the mapping above. To replace them with a real run's
 dataset, use `scripts/capture_fixture.py` with the dataset URL
 ([CONTRIBUTING.md](../CONTRIBUTING.md#refreshing-fixtures)).
 
+## Zillow (`zillow`)
+
+**Access:** the Apify data provider `igolaizola/zillow-scraper-ppe`, with Zillow's
+"Furnished" filter on. Needs an Apify API token (the same one Furnished Finder uses
+works). Off by default.
+
+```env
+SOURCES_ADAPTERS={"zillow": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 360, "max_results": 50}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API or feed | None for searching rentals. Zillow's partner APIs (Bridge) carry MLS and valuation data for approved partners, and its rental feeds only take listings in. `robots.txt` disallows `/api/` and `?searchQueryState=` search URLs. |
+| Direct HTTP scraping | `/homes/for_rent/` and `/<city>/rentals/` answer plain HTTP with a 403 and a PerimeterX "Access to this page has been denied" captcha page. |
+| Browser scraping | A browser gets the same PerimeterX "press & hold" challenge. Getting past it is bot-check bypassing, which furnest doesn't do (as for Furnished Finder). |
+| Third-party data provider | Many Apify actors scrape Zillow. The provider handles access, and furnest makes an authenticated API call. **Chosen.** |
+
+Among the Apify actors, `igolaizola/zillow-scraper-ppe` was picked because it
+searches by place name (like `search_locations`) and takes Zillow's rent filters as
+input, including **Furnished**, entire place vs room, beds, baths and move-in date.
+It is widely used (about 190 users a month, 5 stars) and cheap. Others were ruled
+out: the most used ones (`maxcopell/zillow-scraper`, `api-ninja/zillow-search-scraper`)
+take only raw search URLs, which robots.txt disallows and which would mean encoding
+Zillow's private query format. The dedicated rentals actor is rated 2.3 and also
+URL-only, and the rest have few users. If this actor disappears, swapping in another
+means changing `ACTOR` and the mapping in `sources/adapters/zillow/parse.py`.
+
+### How a run works
+
+1. Criteria become the actor's input: `operation: rent`, `search_locations`,
+   `furnished: true`, `space` (`entirePlace` when rooms are denied or not allowed,
+   `roomForRent` when only rooms are allowed), minimum beds (when above 0) and baths
+   (rounded down), and `moveInDate` from the latest move-in date when it's in the
+   future. Details are fetched. `maxItems` is `max_results`. **Price isn't sent:**
+   the actor documents its rent price filter as "per week" while its own rent
+   example uses monthly figures, and a wrong guess would silently drop matches, so
+   matching applies the price range.
+2. `ApifyAdapter` (`sources/apify.py`) runs the actor exactly as for Furnished Finder:
+   long-polled, Apify's timeout 60s inside ours, token in a header, no robots.txt.
+3. Each item is mapped (see below). An item that can't be mapped is logged and
+   skipped.
+
+### Degrading
+
+- No `api_key`: the source is disabled with a reason, and never scheduled.
+- No `search_locations`: each run fails with a message saying so.
+- A bad token, a forbidden actor, or a run that ends `FAILED`, `TIMED-OUT` or
+  `ABORTED` (which is how this actor reports a refused search): the run fails with the
+  reason and nothing is marked missing.
+- An empty dataset is a successful run with no listings. This actor has no "nothing
+  was scanned" row, unlike Furnished Finder's.
+
+### Field mapping
+
+A rent search returns `property` items (one home) and `propertyGroup` items (an
+apartment building, with `unitsGroup` summarising its units by bedroom count). A
+building becomes one listing per bedroom group, `<zpid or lotId>-<beds>bd`, priced at
+that group's lowest rent and sharing the building's address, coordinates, photos and
+URL. Groups without a bedroom count are skipped.
+
+| Actor field | `NormalizedListing` |
+| --- | --- |
+| `zpid` (buildings: `zpid` else `lotId`, plus `-<beds>bd`) | `source_id` |
+| `url`, else `hdpUrl`, else `https://www.zillow.com/homedetails/<zpid>_zpid/` | `url` (a building without a URL is skipped) |
+| `buildingName`, else `address.streetAddress`, else "N bd in City" | `title` |
+| `_details.description` | `description` |
+| `price.value` (buildings: `unitsGroup[].minPrice`) | `price`, monthly USD |
+| `address.streetAddress`, `.city`, `.state`, `.zipcode` | `address.line1`, `city`, `region`, `postal_code`; country `US` |
+| `location.latitude`, `.longitude` | `lat`, `lng` (both or neither) |
+| `bedrooms`, `bathrooms` | `beds` (0 is a studio), `baths` (nearest half) |
+| `livingArea` | `sqft` (0 means unknown) |
+| `isRoomForRent`, else `propertyType` (`singleFamily`, `condo`…) or `homeType` | `property_type`; a 0-bed apartment is a studio |
+| `_details.resoFacts` lists (`appliances`, `cooling`, `heating`, `laundryFeatures`, `parkingFeatures`, `interiorFeatures`, `communityFeatures`, `exteriorFeatures`, `otherFacts`) | `amenities`, lower-cased. A laundry feature that doesn't say laundry gets the word added ("In Unit" → "in unit laundry"). |
+| `availabilityDate` (in `_details`, `resoFacts` or the item) | `available_from`; "Now" is today |
+| `_details.resoFacts.leaseTerm` | `min_lease_months` when it names months ("6 months") |
+| `media.allPropertyPhotos.highResolution`, else `media.propertyPhotoLinks.highResolutionLink` | `images` |
+| everything except `propertyDisplayRules`, `attributionInfo`, `listingAgent`, `contact`; of `_details` only `description` and `resoFacts` | `raw`. The dropped blocks name agents and brokers. The rest of `_details` (price history, nearby homes, schools) is bulky and not about the rental. |
+
+Every listing is `furnished`, because the search asked for it. `contact` is
+`platform_only`, because Zillow routes renters through its own contact form.
+
+### Cost
+
+At the prices published in October 2026 (free tier), a run costs $0.0005 to start
+(per GB of memory) plus about $0.003 per listing: $0.0009 for the result and $0.002
+for its detail fetch. Fifty listings every six hours comes to about $0.60 a day,
+while 100 listings hourly would be about $7 a day.
+
+### Limitations
+
+The fixtures in `tests/fixtures/zillow/` were written from the actor's README and
+dataset view, not captured from a live run. The `_details` facts, availability date,
+lease term and `unitsGroup` shapes are the least certain, so check the first live run
+against the mapping above, and replace the fixtures with a captured dataset
+(`scripts/capture_fixture.py zillow <dataset URL>`). Zillow's furnished filter relies
+on what listers tick, so some furnished places are missed and the odd unfurnished one
+gets through. Matching's keyword checks on the description still apply.
+
 ## Candidates
 
 The sources below are planned or proposed and haven't been researched yet. Each
@@ -116,7 +216,7 @@ adapter's issue records its access options here when it's built, as above.
 | Source | Status |
 | --- | --- |
 | Furnished Finder | Built (above): Apify data provider. |
-| Zillow (furnished rentals) | Planned (#45). |
+| Zillow (furnished rentals) | Built (above): Apify data provider. |
 | Airbnb (monthly stays) | Planned (#46). |
 | Craigslist (housing, furnished) | Planned (#47). |
 | Blueground, Zumper, Apartments.com (furnished filter), HotPads, Kopa, Landing | Stub and document. |

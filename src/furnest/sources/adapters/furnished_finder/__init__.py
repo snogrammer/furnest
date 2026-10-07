@@ -4,8 +4,8 @@ Furnished Finder has no public API, and its search and property pages sit behind
 Cloudflare check: plain HTTP gets a 403, and even a real browser is asked to verify
 it's human. furnest doesn't try to get past that, so this adapter doesn't fetch the
 site. It runs the Apify actor
-``abotapi/furnishedfinder-scraper`` (:mod:`furnest.sources.apify`), which needs an
-Apify API token, and maps the items with :mod:`.parse`. ``docs/adapters.md`` has the
+``abotapi/furnishedfinder-scraper`` (through :class:`~furnest.sources.apify.ApifyAdapter`),
+which needs an Apify API token, and maps the items with :mod:`.parse`. ``docs/adapters.md`` has the
 research and the trade-offs.
 
 Configure it in ``SOURCES_ADAPTERS``::
@@ -26,13 +26,8 @@ skipped, so one odd listing doesn't fail the run.
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
-from dataclasses import replace
-from datetime import UTC, date, datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
-import httpx2
 from pydantic import ValidationError
 
 from furnest.domain import Criteria, NormalizedListing
@@ -44,76 +39,24 @@ from furnest.sources.adapters.furnished_finder.parse import (
     is_error_row,
     parse_item,
 )
-from furnest.sources.apify import run_actor
-from furnest.sources.base import AdapterConfig, Capabilities, SourceAdapter
+from furnest.sources.apify import ApifyAdapter
 from furnest.sources.errors import SourceError
-from furnest.sources.http import SourceHttpClient
 
 log = get_logger(__name__)
 
-# The actor gets this much less time than the whole run, so Apify stops it (and we
-# read why) before the worker's own run timeout fires.
-ACTOR_TIMEOUT_MARGIN_SECONDS = 60
-MIN_ACTOR_TIMEOUT_SECONDS = 60
 
-
-def _today() -> date:
-    return datetime.now(UTC).date()
-
-
-class FurnishedFinder(SourceAdapter):
+class FurnishedFinder(ApifyAdapter):
     name: ClassVar[str] = "furnished_finder"
     display_name: ClassVar[str] = "Furnished Finder"
-    capabilities: ClassVar[Capabilities] = Capabilities(has_api=True, requires_api_key=True)
+    actor: ClassVar[str] = ACTOR
+    site: ClassVar[str] = SITE
 
-    def __init__(
-        self,
-        config: AdapterConfig,
-        *,
-        transport: httpx2.BaseTransport | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
-        today: Callable[[], date] = _today,
-    ) -> None:
-        super().__init__(config)
-        self._transport = transport
-        self._clock = clock
-        self._sleep = sleep
-        self._today = today
-
-    def search(self, criteria: Criteria) -> list[NormalizedListing]:
-        config = self.config
-        if config.api_key is None:
-            msg = f'set "api_key" (an Apify API token) for {self.name} in SOURCES_ADAPTERS'
-            raise SourceError(msg, url=SITE)
-        if not config.search_locations:
-            msg = (
-                f'set "search_locations" (e.g. ["Springfield, IL"]) for {self.name} '
-                "in SOURCES_ADAPTERS"
-            )
-            raise SourceError(msg, url=SITE)
-
-        run_input = build_input(
-            criteria, locations=config.search_locations, max_results=config.max_results
+    def build_input(self, criteria: Criteria) -> dict[str, Any]:
+        return build_input(
+            criteria, locations=self.config.search_locations, max_results=self.config.max_results
         )
-        timeout = max(
-            MIN_ACTOR_TIMEOUT_SECONDS, config.run_timeout_seconds - ACTOR_TIMEOUT_MARGIN_SECONDS
-        )
-        http_config = replace(config, respect_robots=False)
-        with SourceHttpClient(
-            http_config, transport=self._transport, clock=self._clock, sleep=self._sleep
-        ) as http:
-            items = run_actor(
-                http,
-                ACTOR,
-                run_input,
-                token=config.api_key.get_secret_value(),
-                timeout_seconds=timeout,
-                clock=self._clock,
-            )
-        return self._parse(items)
 
-    def _parse(self, items: list[dict[str, object]]) -> list[NormalizedListing]:
+    def parse_items(self, items: list[dict[str, Any]]) -> list[NormalizedListing]:
         if empty := [item for item in items if is_error_row(item)]:
             where = sorted({str(item.get("searchLocation") or "?") for item in empty})
             msg = (

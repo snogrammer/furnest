@@ -61,6 +61,7 @@ from furnest.domain import (
     normalize_property_type,
     parse_price,
 )
+from furnest.sources.adapters._values import half, number, positive, text, whole
 
 SOURCE = "furnished_finder"
 ACTOR = "abotapi/furnishedfinder-scraper"
@@ -133,24 +134,24 @@ def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
     url = item.get("url")
     if not (isinstance(url, str) and url.startswith(f"{SITE}/")):
         url = f"{SITE}/property/{source_id}"
-    lat, lng = _number(item.get("latitude")), _number(item.get("longitude"))
+    lat, lng = number(item.get("latitude")), number(item.get("longitude"))
     if lat is None or lng is None:
         lat = lng = None
     return NormalizedListing(
         source=SOURCE,
         source_id=source_id,
         url=url,  # type: ignore[arg-type]
-        title=_text(item.get("name")),
+        title=text(item.get("name")),
         description=_description(item),
         price=_price(item),
         address=Address(
-            city=_text(item.get("city")) or None, region=_text(item.get("state")) or None
+            city=text(item.get("city")) or None, region=text(item.get("state")) or None
         ),
         lat=lat,
         lng=lng,
-        beds=_whole(item.get("bedroomCount")),
-        baths=_half(item.get("bathroomCount")),
-        sqft=_positive(item.get("squareFootage")),
+        beds=whole(item.get("bedroomCount")),
+        baths=half(item.get("bathroomCount")),
+        sqft=positive(item.get("squareFootage")),
         property_type=_property_type(item),
         furnished=True,
         amenities=_amenities(item),
@@ -172,45 +173,16 @@ def _source_id(item: dict[str, Any]) -> str:
     raise ValueError(msg)
 
 
-def _text(value: object) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
 def _description(item: dict[str, Any]) -> str:
     parts = (
-        _text(item.get(key))
+        text(item.get(key))
         for key in ("description", "spaceDescription", "neighborhoodDescription")
     )
     return "\n\n".join(part for part in parts if part)
 
 
-def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        number = float(value)
-    except ValueError:
-        return None
-    return number if math.isfinite(number) else None
-
-
-def _whole(value: object) -> int | None:
-    number = _number(value)
-    return int(number) if number is not None and number >= 0 else None
-
-
-def _half(value: object) -> float | None:
-    number = _number(value)
-    return round(number * 2) / 2 if number is not None and number >= 0 else None
-
-
-def _positive(value: object) -> int | None:
-    number = _whole(value)
-    return number if number else None
-
-
 def _price(item: dict[str, Any]) -> Price | None:
-    currency = _text(item.get("priceCurrency")).upper() or _USD
+    currency = text(item.get("priceCurrency")).upper() or _USD
     value = item.get("priceValue")
     if isinstance(value, int | float | str) and not isinstance(value, bool):
         try:
@@ -219,7 +191,7 @@ def _price(item: dict[str, Any]) -> Price | None:
             amount = Decimal(0)
         if amount > 0:
             return Price(amount=Money.from_major(amount, currency))
-    return parse_price(_text(item.get("priceFormatted")) or None, currency=currency)
+    return parse_price(text(item.get("priceFormatted")) or None, currency=currency)
 
 
 def _photos(item: dict[str, Any]) -> tuple[str, ...]:
@@ -230,7 +202,7 @@ def _photos(item: dict[str, Any]) -> tuple[str, ...]:
 def _property_type(item: dict[str, Any]) -> PropertyType:
     if item.get("propertyTypeClass") == "room":
         return PropertyType.ROOM
-    label = _text(item.get("propertyType"))
+    label = text(item.get("propertyType"))
     found = normalize_property_type(label)
     if found is PropertyType.OTHER and " - " in label:
         # "Room - Apartment", "Entire Unit - House": try each part.
@@ -248,7 +220,7 @@ def _amenities(item: dict[str, Any]) -> frozenset[str]:
         label = _AMENITY_OVERRIDES.get(key, _CAMEL_BOUNDARY.sub(" ", key.strip()))
         if label:
             tags.add(label.lower())
-    if laundry := _text(item.get("laundryType")):
+    if laundry := text(item.get("laundryType")):
         tags.add(laundry.lower())
     if item.get("utilitiesIncluded") is True:
         tags.add("utilities included")
@@ -258,17 +230,17 @@ def _amenities(item: dict[str, Any]) -> frozenset[str]:
 def _available_from(item: dict[str, Any], today: date) -> date | None:
     if item.get("isAvailableNow") is True:
         return today
-    text = _AVAILABLE_PREFIX.sub("", _text(item.get("availableOnDate")))
+    when = _AVAILABLE_PREFIX.sub("", text(item.get("availableOnDate")))
     for fmt in _DATE_FORMATS:
         try:
-            return datetime.strptime(text, fmt).date()
+            return datetime.strptime(when, fmt).date()
         except ValueError:
             continue
     return None
 
 
 def _lease_months(item: dict[str, Any]) -> int | None:
-    days = _whole(item.get("minimumStayDays", item.get("minimumStayInDays")))
+    days = whole(item.get("minimumStayDays", item.get("minimumStayInDays")))
     if not days:
         return None
     return max(1, math.ceil(days / DAYS_PER_MONTH))

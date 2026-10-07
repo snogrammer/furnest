@@ -1,0 +1,101 @@
+[
+  {
+    "_type": "property",
+    "zpid": 900000001,
+    "url": "https://www.zillow.com/homedetails/900000001_zpid/",
+    "hdpUrl": "https://www.zillow.com/homedetails/100-Example-St-Exampleville-XX-00001/900000001_zpid/",
+    "address": {
+      "streetAddress": "100 Example St",
+      "city": "Exampleville",
+      "state": "XX",
+      "zipcode": "00001"
+    },
+    "location": { "latitude": 40.0, "longitude": -100.0 },
+    "price": { "value": 2400, "pricePerSquareFoot": 2 },
+    "bedrooms": 2,
+    "bathrooms": 1.5,
+    "livingArea": 1150,
+    "propertyType": "singleFamily",
+    "listing": { "listingStatus": "forRent", "marketingStatus": "active" },
+    "daysOnZillow": 3,
+    "media": {
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/00000000000000000000000000000001-p_f.jpg"
+      },
+      "allPropertyPhotos": {
+        "highResolution": [
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000001-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000002-p_f.jpg"
+        ]
+      }
+    },
+    "propertyDisplayRules": {
+      "mls": { "brokerName": "Example Realty" },
+      "agent": { "agentName": "Jane Example" }
+    },
+    "_details": {
+      "description": "Fully furnished two-bedroom house with a fenced yard. Pets welcome.",
+      "availabilityDate": "2026-11-01",
+      "resoFacts": {
+        "appliances": ["Dishwasher", "Refrigerator"],
+        "cooling": ["Central Air"],
+        "laundryFeatures": ["In Unit"],
+        "parkingFeatures": ["Garage"],
+        "leaseTerm": "6 months",
+        "furnished": true
+      },
+      "attributionInfo": { "agentName": "Jane Example", "agentPhoneNumber": "555-0100" },
+      "priceHistory": [{ "date": "2026-10-04", "price": 2400, "event": "Listed for rent" }],
+      "nearbyHomes": [{ "zpid": 900000099 }]
+    }
+  },
+  {
+    "_type": "property",
+    "zpid": "900000002",
+    "address": {
+      "streetAddress": "200 Sample Ave APT 4",
+      "city": "Exampleville",
+      "state": "XX",
+      "zipcode": "00002"
+    },
+    "location": { "latitude": 40.1, "longitude": null },
+    "price": { "value": 0 },
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "livingArea": 0,
+    "propertyType": "apartment",
+    "media": {
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/00000000000000000000000000000003-p_f.jpg"
+      }
+    }
+  },
+  {
+    "_type": "propertyGroup",
+    "lotId": 500000001,
+    "buildingName": "The Example Lofts",
+    "url": "https://www.zillow.com/apartments/exampleville-xx/the-example-lofts/500000001/",
+    "address": {
+      "streetAddress": "300 Placeholder Blvd",
+      "city": "Exampleville",
+      "state": "XX",
+      "zipcode": "00003"
+    },
+    "location": { "latitude": 40.2, "longitude": -100.2 },
+    "unitsGroup": [
+      { "bedrooms": 0, "minPrice": 1650 },
+      { "bedrooms": 1, "minPrice": "$1,900+" },
+      { "minPrice": 2500 }
+    ],
+    "media": {
+      "allPropertyPhotos": {
+        "highResolution": ["https://photos.zillowstatic.com/fp/00000000000000000000000000000004-p_f.jpg"]
+      }
+    }
+  },
+  {
+    "_type": "property",
+    "address": { "streetAddress": "400 Nowhere Rd", "city": "Exampleville", "state": "XX" },
+    "price": { "value": 1800 }
+  }
+]
