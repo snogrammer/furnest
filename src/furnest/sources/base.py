@@ -75,6 +75,8 @@ class SourceAdapter(ABC):
     capabilities: ClassVar[Capabilities] = Capabilities()
     # Whether the adapter runs when neither env nor the dashboard says otherwise.
     default_enabled: ClassVar[bool] = False
+    # False for a registered placeholder (see furnest.sources.stub): it can't be enabled.
+    implemented: ClassVar[bool] = True
 
     def __init__(self, config: AdapterConfig) -> None:
         self.config = config

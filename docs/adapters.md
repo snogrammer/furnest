@@ -478,13 +478,27 @@ Finder bills its start fee even when the run fails. The account's usage is at
 
 ## Candidates
 
-The sources below are planned or proposed and haven't been researched yet. Each
-adapter's issue records its access options here when it's built, as above.
+Sources that are built, researched, or ruled out. The research for #48 was done on
+2026-10-07 with plain HTTP and a polite user agent, the same way as for the built
+adapters, and furnest doesn't get past bot checks (see Furnished Finder above).
 
-| Source | Status |
-| --- | --- |
-| Furnished Finder | Built (above): Apify data provider. |
-| Zillow (furnished rentals) | Built (above): Apify data provider. |
-| Airbnb (monthly stays) | Built (above): Apify data provider. |
-| Craigslist (housing, furnished) | Built (above): direct HTTP. |
-| Blueground, Zumper, Apartments.com (furnished filter), HotPads, Kopa, Landing | Stub and document. |
+The researched sources are registered as **stubs** in
+`sources/adapters/stubs.py`. A stub has a `sources` row and a row on `/sources`, but
+it is always disabled with the reason "not built yet". Pinning it on in
+`SOURCES_ADAPTERS` or giving it an `api_key` doesn't change that (`implemented =
+False`, see `sources/stub.py`). Its `capabilities` describe the planned route, and
+its docstring holds the TODO. To build one, delete its class from `stubs.py`, add
+`sources/adapters/<name>/`, and move its row here to Built with a section above.
+
+| Source | Status | Access method | API | robots.txt / terms | Difficulty |
+| --- | --- | --- | --- | --- | --- |
+| Furnished Finder | Built (above) | Apify data provider | None | Cloudflare Turnstile on every search page | Done |
+| Zillow (furnished rentals) | Built (above) | Apify data provider | Partner only (MLS, valuations) | PerimeterX "press & hold" check | Done |
+| Airbnb (monthly stays) | Built (above) | Apify data provider | None | robots.txt disallows search; terms forbid scraping | Done |
+| Craigslist (housing, furnished) | Built (above) | Direct HTTP | None (RSS blocked) | robots.txt allows `/search` and `/view`; terms forbid automated access | Done |
+| Landing (`landing`) | Stub; follow-up #118 | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth (`/api/public/markets`, `search`, `homes/{slug}`, `homes/{slug}/quote`; OpenAPI at `/api/public/openapi.json`) and an MCP server | robots.txt allows `/api/public` and disallows the HTML search pages (`/apartments/search*`, `/cities/`, `*start_date*`). The terms forbid spiders on the site, but `llms.txt` invites API use and asks for a rate limit, so use the API only | Easy |
+| Blueground (`blueground`) | Stub; follow-up #119 | Direct HTTP | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Easy to medium: map the JSON-LD `Apartment` list (beds, baths, coordinates, photo) and `window.__INITIAL_STATE__` (price, availability) |
+| Zumper (`zumper`) | Stub | Data provider (Apify, e.g. `memo23/zumper-cheerio`, `benthepythondev/zumper-rental-scraper`) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge" | Medium: compare the actors' furnished filters and output |
+| Apartments.com (`apartments_com`) | Stub | Data provider (Apify, e.g. `epctex/apartments-scraper`, about 1,000 users) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers | Medium: check that the actor's furnished filter maps onto criteria |
+| HotPads (`hotpads`) | Stub | Data provider (Apify, e.g. `benthepythondev/hotpads-rental-scraper`) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Medium. Much of its inventory is Zillow's, so measure what it adds after dedup first |
+| Kopa | Shut down (2026), not stubbed | — | — | The site is a farewell notice and robots.txt is `Disallow: /` | — |

@@ -1,5 +1,6 @@
 """Listing sources: the SourceAdapter contract, per-adapter config, the registry, the
-HTTP layer adapters make requests through, and the optional browser layer.
+HTTP layer adapters make requests through, the optional browser layer, and the base
+for stubs of sources not built yet.
 """
 
 from furnest.sources.base import AdapterConfig, Capabilities, SourceAdapter
@@ -14,6 +15,7 @@ from furnest.sources.http import SourceHttpClient
 from furnest.sources.ratelimit import TokenBucket
 from furnest.sources.registry import ConfiguredSource, SourceRegistry, discover
 from furnest.sources.robots import RobotsCache
+from furnest.sources.stub import StubAdapter
 
 __all__ = [
     "AdapterConfig",
@@ -28,6 +30,7 @@ __all__ = [
     "SourceError",
     "SourceHttpClient",
     "SourceRegistry",
+    "StubAdapter",
     "TokenBucket",
     "browser_unavailable_reason",
     "discover",

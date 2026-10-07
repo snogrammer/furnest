@@ -9,15 +9,18 @@ Every field falls back from the adapter's ``SOURCES_ADAPTERS`` entry to the glob
 3. otherwise the adapter's ``default_enabled``.
 
 An adapter that can't run is disabled whatever the above says, with the reason in
-``disabled_reason``: one with ``needs_browser`` while the browser layer is unavailable
-(see :func:`furnest.sources.browser.browser_unavailable_reason`), or one with
-``requires_api_key`` and no ``api_key`` in its ``SOURCES_ADAPTERS`` entry.
+``disabled_reason``: a stub that isn't built yet (``implemented`` false, see
+:mod:`furnest.sources.stub`), one with ``needs_browser`` while the browser layer is
+unavailable (see :func:`furnest.sources.browser.browser_unavailable_reason`), or one
+with ``requires_api_key`` and no ``api_key`` in its ``SOURCES_ADAPTERS`` entry.
 """
 
 from __future__ import annotations
 
 from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.sources.base import AdapterConfig, SourceAdapter
+
+NOT_BUILT_REASON = "not built yet: a stub, see Candidates in docs/adapters.md"
 
 
 class SourceConfigError(ValueError):
@@ -42,7 +45,9 @@ def resolve_config(
         enabled, pinned = adapter.default_enabled, False
 
     disabled_reason = None
-    if adapter.capabilities.needs_browser and browser_unavailable is not None:
+    if not adapter.implemented:
+        enabled, disabled_reason = False, NOT_BUILT_REASON
+    elif adapter.capabilities.needs_browser and browser_unavailable is not None:
         enabled, disabled_reason = False, f"needs a browser: {browser_unavailable}"
     elif adapter.capabilities.requires_api_key and overrides.api_key is None:
         enabled = False
