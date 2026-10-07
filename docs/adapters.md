@@ -13,7 +13,7 @@ adapter name), which falls back to the `SOURCES_*` defaults:
 | `interval_minutes`, `jitter_seconds`, `run_timeout_seconds` | Scheduling (see [ARCHITECTURE.md](ARCHITECTURE.md)). |
 | `requests_per_minute`, `max_retries`, `request_timeout_seconds`, `user_agent`, `proxy_url`, `respect_robots` | The HTTP layer. |
 | `max_results` | The most listings one run asks for, for sources that page or bill per result. |
-| `search_locations` | Per source only. Place names, for sources that search by city instead of by the criteria's areas. |
+| `search_locations` | Per source only. Place names, for sources that search by city instead of by the criteria's areas. For Craigslist, site names (`sfbay`). |
 | `api_key` | Per source only. Adapters whose capabilities say `requires_api_key` stay disabled without one, and the dashboard says why. |
 
 ## Furnished Finder (`furnished_finder`)
@@ -324,6 +324,101 @@ matching leans on the city and the area check. The actor has no entire-place vs 
 filter, so room-only or no-room criteria are applied by matching. A search returns at
 most about 240 results per place.
 
+## Craigslist (`craigslist`)
+
+**Access:** direct HTTP through `SourceHttpClient`, so robots.txt, the rate limit,
+retries and block detection all apply. No API key, no cost. Off by default.
+`search_locations` holds Craigslist **site names**, the subdomain of each region's
+site (`sfbay` for `sfbay.craigslist.org`), not place names.
+
+```env
+SOURCES_ADAPTERS={"craigslist": {"enabled": true, "search_locations": ["sfbay"], "interval_minutes": 120, "max_results": 50}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API or feed | No API. The per-search RSS feeds (`?format=rss`) answer 403 "Your request has been blocked". |
+| Direct HTTP scraping | Search (`/search/area/<site>?cat=apa&is_furnished=1`) and posting (`/view/d/<slug>/<token>`) pages answer plain HTTP with a 200 and no bot check. `robots.txt` allows both and disallows only `/reply`, `/fb/`, `/flag`, `/suggest`, `/mf`, `/mailflag` and `/eaf`. The results are in the page twice: a static list (URL, title, price, neighbourhood) and a JSON-LD ItemList (coordinates, beds, baths, city). **Chosen.** |
+| Reply relay | The poster's relay email is only shown by `/reply/...`, which robots.txt disallows and an hCaptcha guards. Not fetched. |
+| Third-party data provider | Apify actors exist, but nothing here is blocked, so a paid provider isn't needed. |
+
+Craigslist's terms of use forbid automated access in general, even though its
+robots.txt allows these pages. The adapter stays polite: off by default, newest-first
+searches only, the global `SOURCES_REQUESTS_PER_MINUTE` (6) unless overridden, each
+posting fetched once per worker process, and a stop at the first block.
+
+### How a run works
+
+1. Criteria pick the **categories**: apartments/housing (`apa`) and
+   sublets/temporary (`sub`), plus rooms/shared (`roo`) unless rooms are ruled out
+   (only `roo` when only rooms are allowed).
+2. Each site is searched in each category, newest first, with Craigslist's furnished
+   filter, the monthly price range in USD (whole dollars, rounded outwards), and
+   minimum beds and baths (baths rounded down; not sent for rooms). One request per
+   site and category.
+3. Rows are taken from the pages in turn, so a busy category doesn't crowd out the
+   others. Repeats are dropped, up to `max_results`.
+4. Each row is completed from its posting page. Postings are cached in the worker
+   process (up to 5,000 for 7 days), so a run fetches only postings it hasn't seen.
+   Price, title and coordinates come from the search row, fresh every run.
+5. Postings fetched per run are capped at what fits in 80% of
+   `run_timeout_seconds` at `requests_per_minute`, less the search requests: about
+   70 at the defaults. Rows past the cap are returned from the search row alone and
+   completed on a later run.
+
+### Degrading
+
+- No `search_locations`, or one that isn't a site name: each run fails with a
+  message saying so.
+- robots.txt disallowing a search, a 403, or a captcha or "blocked" page: the run
+  fails as blocked and nothing is marked missing.
+- A search page without the results list (a new layout, say): the run fails rather
+  than reading as "no listings", which would mark everything missing.
+- A posting that answers 404 or 410, or says it was deleted, flagged or expired: the
+  row is dropped.
+- A posting that fails any other way: the row is kept from the search page alone,
+  logged as `craigslist.detail_failed` or `craigslist.detail_unreadable`, and retried
+  next run.
+
+### Field mapping
+
+| Page | `NormalizedListing` |
+| --- | --- |
+| last part of the post URL (`/view/d/<slug>/<token>`) | `source_id` |
+| post URL | `url` |
+| row title | `title` |
+| `#postingbody` text, without the print-only QR block | `description` |
+| row price, with the `rent period` chip (daily, weekly, monthly; none is monthly) | `price`, USD |
+| posting JSON-LD `address`, else the search JSON-LD | `address` (street, city, state, ZIP) |
+| posting JSON-LD `latitude`/`longitude`, else the search JSON-LD | `lat`, `lng` (both or neither) |
+| `2BR / 1Ba` chip, else JSON-LD `numberOfBedrooms`/`numberOfBathroomsTotal` | `beds`, `baths` |
+| `750ft2` chip | `sqft` |
+| `private room`/`shared room` chip or the `roo` category; else the housing chip (`apartment`, `house`, `townhouse`, `condo`, `cottage/cabin`, `in-law`, ...); else the JSON-LD `@type` | `property_type`; a 0-bedroom apartment is a studio |
+| the other chips (`w/d in unit`, `laundry in bldg`, `cats are OK - purrr`, `no smoking`, `carport`, ...) | `amenities`, lower-cased; "laundry in bldg" and "w/d hookups" are reworded so the keyword extractor reads them right |
+| `available now` / `available oct 15` chip | `available_from`. "Now" is the posting date (so the listing doesn't change every run). A month and day take the posting's year, or the next year if that would be over 60 days before the posting. |
+| gallery photos (`_600x450.jpg`, up to 20) | `images` |
+| an email address written in the description | `contact.email`; otherwise `contact.platform_only` |
+| category, price as shown, neighbourhood, both JSON-LD blocks, the chips, post id, posting date | `raw` |
+
+Every listing is `furnished`, since the search asks for it.
+
+### Limitations
+
+- No relay email, so most listings go down the manual-contact path ("Contact on
+  Craigslist").
+- A search page holds about 350 rows and the adapter reads only the first page of
+  each, newest first.
+- Location isn't sent: Craigslist searches a whole site, and matching applies the
+  criteria's areas, ZIPs and neighbourhoods.
+- Craigslist filters on the price as posted, whatever the rent period, so a weekly
+  price below the minimum can come through. Matching compares monthly amounts.
+- The posting cache lives in the worker process. After a restart every posting is
+  fetched again, so the first run may complete only part of them.
+- The fixtures (`tests/fixtures/craigslist/`) are sanitized live captures from
+  2026-10-07. A layout change shows up as a failed run, not as an empty one.
+
 ## Data providers and self-hosted alternatives (#111)
 
 Furnished Finder, Zillow and Airbnb all go through Apify, which costs money, so #111
@@ -391,5 +486,5 @@ adapter's issue records its access options here when it's built, as above.
 | Furnished Finder | Built (above): Apify data provider. |
 | Zillow (furnished rentals) | Built (above): Apify data provider. |
 | Airbnb (monthly stays) | Built (above): Apify data provider. |
-| Craigslist (housing, furnished) | Planned (#47). |
+| Craigslist (housing, furnished) | Built (above): direct HTTP. |
 | Blueground, Zumper, Apartments.com (furnished filter), HotPads, Kopa, Landing | Stub and document. |
