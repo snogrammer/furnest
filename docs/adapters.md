@@ -103,9 +103,14 @@ comes to about $0.85 a day, while 100 listings hourly would be about $8 a day.
 ### Limitations
 
 The fixtures in `tests/fixtures/furnished_finder/` were written from the actor's
-published schema and example, not captured from a live run. The first live run
-should be checked against the mapping above. To replace them with a real run's
-dataset, use `scripts/capture_fixture.py` with the dataset URL
+published schema and example, not captured from a live run. A live capture on
+2026-10-07 (#111) failed three times in a row with "No resolvable locations or URLs
+were provided": the actor's log showed its geocoder rejecting requests ("Switched to
+the backup connection pool after repeated rejections", then "No coordinates for
+location"), for both `"Austin, TX"` and the slug `us--tx--austin`. That is the actor's
+side, not the input, and **each failed run was still billed the $0.08 start**. Try
+again later, check the first successful run against the mapping above, and replace
+the fixtures with its dataset using `scripts/capture_fixture.py`
 ([CONTRIBUTING.md](../CONTRIBUTING.md#refreshing-fixtures)).
 
 ## Zillow (`zillow`)
@@ -174,16 +179,16 @@ URL. Groups without a bedroom count are skipped.
 | --- | --- |
 | `zpid` (buildings: `zpid` else `lotId`, plus `-<beds>bd`) | `source_id` |
 | `url`, else `hdpUrl`, else `https://www.zillow.com/homedetails/<zpid>_zpid/` | `url` (a building without a URL is skipped) |
-| `buildingName`, else `address.streetAddress`, else "N bd in City" | `title` |
+| `buildingName`, else `title` (live building items name the building here), else `address.streetAddress`, else "N bd in City" | `title` |
 | `_details.description` | `description` |
 | `price.value` (buildings: `unitsGroup[].minPrice`) | `price`, monthly USD |
 | `address.streetAddress`, `.city`, `.state`, `.zipcode` | `address.line1`, `city`, `region`, `postal_code`; country `US` |
 | `location.latitude`, `.longitude` | `lat`, `lng` (both or neither) |
 | `bedrooms`, `bathrooms` | `beds` (0 is a studio), `baths` (nearest half) |
 | `livingArea` | `sqft` (0 means unknown) |
-| `isRoomForRent`, else `propertyType` (`singleFamily`, `condo`…) or `homeType` | `property_type`; a 0-bed apartment is a studio |
+| `isRoomForRent` on the item, its `rental` block or the unit group, else `propertyType` (`singleFamily`, `condo`…) or `homeType` | `property_type`; a 0-bed apartment is a studio |
 | `_details.resoFacts` lists (`appliances`, `cooling`, `heating`, `laundryFeatures`, `parkingFeatures`, `interiorFeatures`, `communityFeatures`, `exteriorFeatures`, `otherFacts`) | `amenities`, lower-cased. A laundry feature that doesn't say laundry gets the word added ("In Unit" → "in unit laundry"). |
-| `availabilityDate` (in `_details`, `resoFacts` or the item) | `available_from`; "Now" is today |
+| `availabilityDate` (in `_details`, `resoFacts` or the item) | `available_from`; "Now" is today. Live runs send `resoFacts.availabilityDate` as epoch milliseconds (midnight UTC). |
 | `_details.resoFacts.leaseTerm` | `min_lease_months` when it names months ("6 months") |
 | `media.allPropertyPhotos.highResolution`, else `media.propertyPhotoLinks.highResolutionLink` | `images` |
 | everything except `propertyDisplayRules`, `attributionInfo`, `listingAgent`, `contact`; of `_details` only `description` and `resoFacts` | `raw`. The dropped blocks name agents and brokers. The rest of `_details` (price history, nearby homes, schools) is bulky and not about the rental. |
@@ -196,15 +201,18 @@ Every listing is `furnished`, because the search asked for it. `contact` is
 At the prices published in October 2026 (free tier), a run costs $0.0005 to start
 (per GB of memory) plus about $0.003 per listing: $0.0009 for the result and $0.002
 for its detail fetch. Fifty listings every six hours comes to about $0.60 a day,
-while 100 listings hourly would be about $7 a day.
+while 100 listings hourly would be about $7 a day. A live run of 10 listings on
+2026-10-07 cost $0.03.
 
 ### Limitations
 
-The fixtures in `tests/fixtures/zillow/` were written from the actor's README and
-dataset view, not captured from a live run. The `_details` facts, availability date,
-lease term and `unitsGroup` shapes are the least certain, so check the first live run
-against the mapping above, and replace the fixtures with a captured dataset
-(`scripts/capture_fixture.py zillow <dataset URL>`). Zillow's furnished filter relies
+`tests/fixtures/zillow/dataset_live.json` is a sanitized, trimmed capture of a live
+run (2026-10-07, #111). It showed three gaps in the README-based mapping, now fixed:
+building names are in `title`, not `buildingName`; availability dates are epoch
+milliseconds; and `isRoomForRent` sits under `rental` and on each unit group. Live
+building items carry no baths or square footage per unit group, so those stay
+unknown. `dataset_items.json` is still written from the README, for the edge cases.
+Zillow's furnished filter relies
 on what listers tick, so some furnished places are missed and the odd unfurnished one
 gets through. Matching's keyword checks on the description still apply.
 
@@ -270,8 +278,8 @@ another means changing `ACTOR` and the mapping in `sources/adapters/airbnb/parse
 | `url` (under `https://www.airbnb.com/`), else `https://www.airbnb.com/rooms/<id>` | `url` |
 | `title` without the " - Apartments for Rent in … - Airbnb" suffix, else `subDescription.title` | `title` |
 | `description` | `description` |
-| `price.breakDown.totalBeforeTaxes.price`, else `price.amount` per `price.qualifier` | `price`, USD (see below) |
-| `subDescription.title` ("Entire rental unit in City, State, United States") | `address.city`, `region`; outside the US only the city |
+| `price.breakDown.totalBeforeTaxes.price`, else `price.price` (else `price.amount`) per `price.qualifier` | `price`, USD (see below) |
+| `locationSubtitle` ("City, State, United States"), else the place in `subDescription.title` | `address.city`, `region`; outside the US only the city |
 | `coordinates.latitude`, `.longitude` | `lat`, `lng` (both or neither) |
 | `subDescription.items` ("Studio", "2 bedrooms", "1.5 shared baths", "Half-bath") | `beds` (0 is a studio), `baths` (nearest half) |
 | `roomType` ("Private room", "Shared room", "Hotel room"), else the kind in `subDescription.title` ("Entire condo", "rental unit" → apartment) | `property_type`; a 0-bedroom apartment, condo or unknown is a studio |
@@ -287,6 +295,13 @@ would pay. Without a total, the quoted rate is kept with its period ("$95 night"
 nightly, "$2,100 month" monthly; no qualifier means nightly) and `Price.monthly`
 converts it with the usual factors. Taxes are never included.
 
+Live month-long searches (2026-10-07) came back without `totalBeforeTaxes`. They
+quote `price.price` with `qualifier: "monthly"` ("$4,336 monthly, originally
+$5,555"), which is Airbnb's own monthly price for the stay after its discounts, so
+that is what the listing gets. `breakDown.total` is left alone because it isn't
+consistent: sometimes it is the undiscounted price and sometimes the discounted
+price plus fees.
+
 Every listing is `furnished` (Airbnb stays are), and `contact` is `platform_only`,
 because hosts are reached through Airbnb's messages.
 
@@ -295,19 +310,76 @@ because hosts are reached through Airbnb's messages.
 At the prices published in October 2026 (free tier), a run costs $0.0001 to start
 plus $0.004 per listing ($0.0005 to $0.002 on paid Apify plans). Fifty listings every
 six hours comes to about $0.80 a day, while 100 listings hourly would be about $10 a
-day.
+day. A live run of 10 listings on 2026-10-07 cost $0.04.
 
 ### Limitations
 
-The fixtures in `tests/fixtures/airbnb/` were written from the actor's README and
-output example, not captured from a live run. The price breakdown of a monthly stay
-and the `images` shape are the least certain, so check the first live run against
-the mapping above, and replace the fixtures with a captured dataset
-(`scripts/capture_fixture.py airbnb <dataset URL>`). Airbnb gives no street address
+`tests/fixtures/airbnb/dataset_live.json` is a sanitized, trimmed capture of a live
+run (2026-10-07, #111). It showed that prices come in `price.price` (not `amount`)
+and that only `locationSubtitle` names the country, and both are now mapped. The
+`images` shape matched. `dataset_items.json` is still written from the README, for
+the edge cases. Airbnb gives no street address
 or square footage, and coordinates are approximate until booking, so location
 matching leans on the city and the area check. The actor has no entire-place vs room
 filter, so room-only or no-room criteria are applied by matching. A search returns at
 most about 240 results per place.
+
+## Data providers and self-hosted alternatives (#111)
+
+Furnished Finder, Zillow and Airbnb all go through Apify, which costs money, so #111
+looked for free self-hosted tools to use instead.
+
+**The constraint.** These three sources are behind a provider for a reason: Furnished
+Finder shows a Cloudflare Turnstile check, Zillow a PerimeterX "press & hold" check,
+and Airbnb's robots.txt disallows its search. furnest doesn't get past bot checks or
+ignore robots.txt itself (decided on #24). A self-hosted scraper runs on our own
+machine and fetches the sites from it, so it hits the same blocks. What the Apify
+actors charge for is mostly the access itself (their proxies and anti-bot handling),
+and self-hosting doesn't replace that.
+
+| Tool | What it is | License | Hosting and API | For FF / Zillow / Airbnb |
+| --- | --- | --- | --- | --- |
+| [Maxun](https://github.com/getmaxun/maxun) | No-code web data platform. You record a "robot" in a browser, or describe one in plain language, and it runs on a schedule. | AGPL-3.0 | Docker Compose (several services). Has a REST API to run robots and read their data, plus an SDK, CLI and MCP server. | No. It fetches from our host. No anti-bot handling beyond a real browser; proxies are bring-your-own. |
+| [Crawlee](https://crawlee.dev) | Apify's open-source crawling library (Node and Python), which most Apify actors are built on. | Apache-2.0 | A library: we would write and run the crawler. No hosted API. | No, same reason. Running a Store actor's code locally still fetches from our host, without Apify Proxy. |
+| [Crawl4AI](https://github.com/unclecode/crawl4ai) | Playwright crawler that turns pages into LLM-ready markdown or structured data. | Apache-2.0 | A library, or a Docker server with a REST API. | No, same reason. |
+| [Firecrawl](https://github.com/firecrawl/firecrawl) (self-hosted) | Scrape and crawl API that returns markdown or JSON. | AGPL-3.0 | Docker Compose with a REST API. The hosted service's anti-bot layer isn't part of the self-hosted build. | No, same reason. |
+| [Scrapy](https://scrapy.org) + scrapy-playwright | The standard Python scraping framework. | BSD-3 | A library. | No, same reason. furnest's own `sources/http.py` and `sources/browser.py` already cover this ground. |
+
+**Outcome.** Apify stays the backend for these three sources. Its free plan includes
+$5 of usage a month (it doesn't roll over), and the next section shows how to stay
+inside that. The search left something useful behind: provider-backed adapters no
+longer depend on Apify directly.
+
+**The provider seam.** `sources/provider.py` defines `DataProvider`, a backend with a
+`name` and `run(http, job, run_input, *, token, timeout_seconds, clock) -> items`. It
+also defines `ProviderAdapter`, the adapter half that used to be `ApifyAdapter`: it
+checks the `api_key` and `search_locations`, keeps the provider's timeout 60s inside
+the run's, turns off robots.txt for the API call, and hands the items and the input
+to the subclass. `ApifyProvider` (`sources/apify.py`) is the only backend today, and
+`ApifyAdapter` is just `ProviderAdapter` on Apify. A self-hosted backend would be
+another `DataProvider`, for example a `MaxunProvider` whose `run` starts a robot
+through Maxun's API and reads its rows. It would also need a base-URL setting, added
+when the first one lands. A source that can be fetched politely and uses it subclasses
+`ProviderAdapter` with its own `build_input` and `parse_items`, because each job has
+its own input and output shape. For such sources, compare it against a plain HTTP or
+browser adapter, which needs no extra service. A provider earns its keep when it
+saves writing a parser.
+
+### Staying inside Apify's free credit
+
+Approximate cost of one run of `max_results` 20 at October 2026 free-tier prices,
+checked against the live runs on 2026-10-07:
+
+| Source | One run | Daily for a month | Every 2 days for a month |
+| --- | --- | --- | --- |
+| Zillow | $0.06 ($0.0005 start, $0.0029 a listing) | $1.80 | $0.90 |
+| Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
+| Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
+
+All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,
+and so do all three at `"interval_minutes": 2880` (about $4). Note that Furnished
+Finder bills its start fee even when the run fails. The account's usage is at
+`https://console.apify.com/billing`.
 
 ## Candidates
 

@@ -1,0 +1,1308 @@
+[
+  {
+    "_details": {
+      "zpid": 100000001,
+      "description": "The advertised rate of $9,021/month is the lowest available price, based on a 1 month(s) stay with a move-in date of November 29, 2026.\n\nRates vary depending on the duration of stay, season, and other parameters. For exact pricing and additional pricing components, please visit our website and enter your desired…",
+      "resoFacts": {
+        "__typename": "RESOFacts",
+        "aboveGradeFinishedArea": null,
+        "accessibilityFeatures": null,
+        "additionalFeeInfo": null,
+        "additionalParcelsDescription": null,
+        "appliances": [
+          "Dishwasher",
+          "Microwave Oven",
+          "Range Oven",
+          "Refrigerator"
+        ],
+        "architecturalStyle": null,
+        "associationAmenities": [
+          "Fitness Center"
+        ],
+        "associationFeeIncludes": null,
+        "attic": null,
+        "availabilityDate": 1798848000000,
+        "basement": null,
+        "basementYN": null,
+        "bathroomsFloat": 3,
+        "bathroomsFull": 3,
+        "bathroomsHalf": 0,
+        "bathroomsOneQuarter": null,
+        "bathroomsPartial": null,
+        "bathroomsThreeQuarter": null,
+        "bedrooms": 4,
+        "belowGradeFinishedArea": null,
+        "bodyType": null,
+        "builderModel": null,
+        "builderName": null,
+        "buildingArea": null,
+        "buildingAreaSource": null,
+        "buyerAgencyCompensation": null,
+        "buyerAgencyCompensationType": null,
+        "canRaiseHorses": false,
+        "carportParkingCapacity": null,
+        "cityRegion": "Exampleville",
+        "commonWalls": null,
+        "communityFeatures": [
+          "Fitness Center",
+          "Smoke Free"
+        ],
+        "compensationBasedOn": null,
+        "constructionMaterials": [],
+        "contingency": null,
+        "cooling": null,
+        "coveredParkingCapacity": null,
+        "cropsIncludedYN": null,
+        "cumulativeDaysOnMarket": null,
+        "developmentStatus": null,
+        "doorFeatures": null,
+        "electric": null,
+        "elementarySchool": null,
+        "elementarySchoolDistrict": null,
+        "elevation": null,
+        "elevationUnits": null,
+        "entryLevel": null,
+        "entryLocation": null,
+        "exclusions": null,
+        "exteriorFeatures": [
+          "Barbecue",
+          "CO Detector",
+          "Cable Satellite",
+          "Fire Detector",
+          "Garden"
+        ],
+        "feesAndDues": [],
+        "fencing": null,
+        "fireplaceFeatures": null,
+        "fireplaces": null,
+        "flooring": null,
+        "foundationArea": null,
+        "foundationDetails": [],
+        "frontageLength": null,
+        "frontageType": null,
+        "furnished": true,
+        "garageParkingCapacity": null,
+        "gas": null,
+        "greenBuildingVerificationType": null,
+        "greenEnergyEfficient": null,
+        "greenEnergyGeneration": null,
+        "greenIndoorAirQuality": null,
+        "greenSustainability": null,
+        "greenWaterConservation": null,
+        "hasAdditionalParcels": false,
+        "hasAssociation": null,
+        "hasAttachedGarage": null,
+        "hasAttachedProperty": false,
+        "hasCarport": null,
+        "hasCooling": null,
+        "hasElectricOnProperty": null,
+        "hasFireplace": true,
+        "hasGarage": false,
+        "hasHeating": true,
+        "hasHomeWarranty": false,
+        "hasLandLease": false,
+        "hasOpenParking": null,
+        "hasPrivatePool": null,
+        "hasSpa": false,
+        "hasView": false,
+        "hasWaterfrontView": null,
+        "heating": [
+          "Fireplace",
+          "Forced Air"
+        ],
+        "highSchool": null,
+        "homeType": "Apartment",
+        "horseAmenities": null,
+        "horseYN": null,
+        "inclusions": null,
+        "incomeIncludes": null,
+        "interiorFeatures": null,
+        "irrigationWaterRightsAcresFloat": null,
+        "irrigationWaterRightsYN": null,
+        "isNewConstruction": null,
+        "isSeniorCommunity": null,
+        "landLeaseAmount": null,
+        "landLeaseExpirationDate": null,
+        "laundryFeatures": null,
+        "leaseTerm": "1 Month",
+        "levels": null,
+        "listAOR": null,
+        "listingId": null,
+        "listingTerms": null,
+        "livingArea": "2,669 sqft",
+        "livingAreaRange": null,
+        "livingAreaRangeUnits": null,
+        "lotFeatures": [
+          "Garden"
+        ],
+        "lotSize": null,
+        "lotSizeDimensions": null,
+        "mainLevelBathroomsFloat": null,
+        "mainLevelBedrooms": null,
+        "media": [],
+        "middleOrJuniorSchool": null,
+        "municipality": null,
+        "offerReviewDate": null,
+        "onMarketDate": 1791331200000,
+        "openParkingCapacity": null,
+        "otherEquipment": null,
+        "otherParking": [
+          "Contact manager"
+        ],
+        "otherStructures": null,
+        "ownership": null,
+        "ownershipType": null,
+        "parcelNumber": "0",
+        "parkName": null,
+        "parkingCapacity": 1,
+        "parkingFeatures": [
+          "Covered"
+        ],
+        "patioAndPorchFeatures": [
+          "Covered"
+        ],
+        "poolFeatures": null,
+        "pricePerSquareFoot": 3,
+        "propertyCondition": null,
+        "propertySubType": [
+          "Apartment"
+        ],
+        "roadSurfaceType": null,
+        "roofType": null,
+        "rooms": [],
+        "securityFeatures": null,
+        "sewer": null,
+        "spaFeatures": null,
+        "specialListingConditions": null,
+        "stories": null,
+        "subAgencyCompensation": null,
+        "subAgencyCompensationType": null,
+        "subdivisionName": null,
+        "taxAnnualAmount": null,
+        "taxAssessedValueFloat": null,
+        "tenantPays": null,
+        "topography": null,
+        "totalActualRent": null,
+        "transactionBrokerCompensation": null,
+        "transactionBrokerCompensationType": null,
+        "utilities": null,
+        "vegetation": null,
+        "view": [
+          "None"
+        ],
+        "virtualTour": null,
+        "waterBodyName": null,
+        "waterSource": null,
+        "waterView": null,
+        "waterViewYN": null,
+        "waterfrontFeatures": null,
+        "windowFeatures": null,
+        "woodedAreaFloat": null,
+        "yearBuilt": null,
+        "yearBuiltEffective": null,
+        "zoning": null,
+        "zoningDescription": null
+      },
+      "homeStatus": "FOR_RENT",
+      "hdpUrl": "/homedetails/123-Example-St-ID0000000P-Exampleville-XX-00001/100000001_zpid/"
+    },
+    "_type": "property",
+    "address": {
+      "buildingId": "0",
+      "city": "Exampleville",
+      "state": "TX",
+      "streetAddress": "123 Example St",
+      "zipcode": "00001"
+    },
+    "bathrooms": 3,
+    "bedrooms": 4,
+    "bestGuessTimeZone": "America/Chicago",
+    "country": "usa",
+    "currency": "usd",
+    "daysOnZillow": 0,
+    "factsAndFeatures": {
+      "fullBathroomCount": 3,
+      "halfBathroomCount": 0
+    },
+    "groupType": "apartmentComplex",
+    "hasFloorPlan": false,
+    "hdpUrl": "https://www.zillow.com/homedetails/123-Example-St-ID0000000P-Exampleville-XX-00001/100000001_zpid/",
+    "hdpView": {
+      "hdpUrl": "/homedetail/MobileAppHDPShopperPlatformServicePage.htm?fromApp=true&p=android&variant=FOR_RENT#zpid=100000001&homeDetailsVariant=FOR_RENT&webviewLayout=doubleScroll&showFactsAndFeatures=true&fromApp=true&gmaps=true&streetview=true",
+      "listingStatus": "forRent",
+      "price": 9021
+    },
+    "isFeatured": true,
+    "isPreforeclosureAuction": false,
+    "isShowcaseListing": false,
+    "isUnmappable": false,
+    "listing": {
+      "listingStatus": "forRent",
+      "listingSubType": {},
+      "marketingStatus": "active",
+      "palsId": "0",
+      "providerListingID": "0"
+    },
+    "listingDateTimeOnZillow": 1791373168361,
+    "livingArea": 2669,
+    "location": {
+      "latitude": 30.27,
+      "longitude": -97.73
+    },
+    "media": {
+      "allPropertyPhotos": {
+        "highResolution": [
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000001-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000002-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000003-p_f.jpg"
+        ]
+      },
+      "hasApprovedThirdPartyVirtualTour": false,
+      "hasIMX": false,
+      "hasVRModel": false,
+      "hasVideos": false,
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/00000000000000000000000000000004-p_f.jpg"
+      },
+      "thirdPartyPhotoLinks": {}
+    },
+    "price": {
+      "pricePerSquareFoot": 3,
+      "value": 9021
+    },
+    "propertyHasLasViolation": false,
+    "propertyType": "apartment",
+    "region": {},
+    "rental": {
+      "areApplicationsAccepted": false,
+      "baseRent": 9021,
+      "hasVirtualTour": false,
+      "isBuildToRent": false,
+      "isRentByBed": false,
+      "isRoomForRent": false,
+      "listPriceIncludesRequiredMonthlyFees": false,
+      "marketingTreatments": [
+        "trustedListing",
+        "paid",
+        "singleFamilyPaid",
+        "feedConnectSingleFamilyFlatFee"
+      ]
+    },
+    "ssid": "0",
+    "url": "https://www.zillow.com/homedetails/100000001_zpid/",
+    "zillowOwnedProperty": {
+      "isZillowOwned": false
+    },
+    "zpid": 100000001
+  },
+  {
+    "_details": {
+      "zpid": 100000002,
+      "description": "Affordable luxury right here in Exampleville, TX! Select your 1-, 2- or 3-bedroom apartment and create a living space that reflects your individual style. Enjoy your fully equipped kitchen; washer/dryer connections; great living spaces; walk-in closets; a private patio/balcony; and more! It doesn't stop there! Relax by the…",
+      "resoFacts": {
+        "__typename": "RESOFacts",
+        "aboveGradeFinishedArea": null,
+        "accessibilityFeatures": [
+          "Disabled Access"
+        ],
+        "additionalFeeInfo": null,
+        "additionalParcelsDescription": null,
+        "appliances": [
+          "Dishwasher",
+          "Garbage Disposal",
+          "Microwave Oven",
+          "Refrigerator",
+          "Washer Dryer Hookups"
+        ],
+        "architecturalStyle": null,
+        "associationAmenities": [
+          "Clubhouse",
+          "Dog Park",
+          "Fitness Center"
+        ],
+        "associationFeeIncludes": null,
+        "attic": null,
+        "availabilityDate": null,
+        "basement": null,
+        "basementYN": null,
+        "bathroomsFloat": 1,
+        "bathroomsFull": 1,
+        "bathroomsHalf": null,
+        "bathroomsOneQuarter": null,
+        "bathroomsPartial": null,
+        "bathroomsThreeQuarter": null,
+        "bedrooms": 1,
+        "belowGradeFinishedArea": null,
+        "bodyType": null,
+        "builderModel": null,
+        "builderName": null,
+        "buildingArea": null,
+        "buildingAreaSource": null,
+        "buyerAgencyCompensation": null,
+        "buyerAgencyCompensationType": null,
+        "canRaiseHorses": false,
+        "carportParkingCapacity": null,
+        "cityRegion": "Exampleville",
+        "commonWalls": null,
+        "communityFeatures": [
+          "Clubhouse",
+          "Fitness Center",
+          "Gated",
+          "Playground",
+          "Pool"
+        ],
+        "compensationBasedOn": null,
+        "constructionMaterials": [],
+        "contingency": null,
+        "cooling": [
+          "Air Conditioner",
+          "Central Air"
+        ],
+        "coveredParkingCapacity": null,
+        "cropsIncludedYN": null,
+        "cumulativeDaysOnMarket": null,
+        "developmentStatus": null,
+        "doorFeatures": null,
+        "electric": null,
+        "elementarySchool": null,
+        "elementarySchoolDistrict": null,
+        "elevation": null,
+        "elevationUnits": null,
+        "entryLevel": null,
+        "entryLocation": null,
+        "exclusions": null,
+        "exteriorFeatures": [
+          "24 Hour Emergency Maintenance",
+          "Barbecue",
+          "Energy Efficient Construction",
+          "Energy Star Appliances",
+          "Gated Community",
+          "Pet Friendly",
+          "Picnic Pavilion",
+          "Playground",
+          "Private Entrance",
+          "Self Cleaning Oven",
+          "Sensory Impaired",
+          "Splash Pad"
+        ],
+        "feesAndDues": [
+          {
+            "fee": "$16",
+            "name": null,
+            "phone": null,
+            "type": "Application"
+          },
+          {
+            "fee": "$0",
+            "name": null,
+            "phone": null,
+            "type": "Administrative"
+          },
+          {
+            "fee": "$0",
+            "name": null,
+            "phone": null,
+            "type": "Administrative"
+          },
+          {
+            "fee": "$25 monthly",
+            "name": null,
+            "phone": null,
+            "type": "Pet"
+          },
+          {
+            "fee": "$300 one time",
+            "name": null,
+            "phone": null,
+            "type": "Pet"
+          },
+          {
+            "fee": "$25 monthly",
+            "name": null,
+            "phone": null,
+            "type": "Pet"
+          },
+          {
+            "fee": "$300 one time",
+            "name": null,
+            "phone": null,
+            "type": "Pet"
+          },
+          {
+            "fee": "$100",
+            "name": null,
+            "phone": null,
+            "type": "Parking"
+          }
+        ],
+        "fencing": null,
+        "fireplaceFeatures": null,
+        "fireplaces": null,
+        "flooring": null,
+        "foundationArea": null,
+        "foundationDetails": [],
+        "frontageLength": null,
+        "frontageType": null,
+        "furnished": true,
+        "garageParkingCapacity": null,
+        "gas": null,
+        "greenBuildingVerificationType": null,
+        "greenEnergyEfficient": null,
+        "greenEnergyGeneration": null,
+        "greenIndoorAirQuality": null,
+        "greenSustainability": null,
+        "greenWaterConservation": null,
+        "hasAdditionalParcels": false,
+        "hasAssociation": null,
+        "hasAttachedGarage": null,
+        "hasAttachedProperty": false,
+        "hasCarport": null,
+        "hasCooling": true,
+        "hasElectricOnProperty": null,
+        "hasFireplace": null,
+        "hasGarage": true,
+        "hasHeating": true,
+        "hasHomeWarranty": false,
+        "hasLandLease": false,
+        "hasOpenParking": null,
+        "hasPrivatePool": null,
+        "hasSpa": false,
+        "hasView": false,
+        "hasWaterfrontView": null,
+        "heating": [
+          "Central"
+        ],
+        "highSchool": null,
+        "homeType": "Apartment",
+        "horseAmenities": null,
+        "horseYN": null,
+        "inclusions": null,
+        "incomeIncludes": null,
+        "interiorFeatures": [
+          "Ceiling Fan(s)",
+          "Closet Organizers"
+        ],
+        "irrigationWaterRightsAcresFloat": null,
+        "irrigationWaterRightsYN": null,
+        "isNewConstruction": null,
+        "isSeniorCommunity": null,
+        "landLeaseAmount": null,
+        "landLeaseExpirationDate": null,
+        "laundryFeatures": [
+          "Hookups"
+        ],
+        "leaseTerm": "Application Fee: $16.00 per adult, \nUtilities INCLUDED in rent: \nWater: Yes, \nSewer: Yes, \nTrash: Yes",
+        "levels": null,
+        "listAOR": null,
+        "listingId": null,
+        "listingTerms": null,
+        "livingArea": "723 sqft",
+        "livingAreaRange": null,
+        "livingAreaRangeUnits": null,
+        "lotFeatures": null,
+        "lotSize": null,
+        "lotSizeDimensions": null,
+        "mainLevelBathroomsFloat": null,
+        "mainLevelBedrooms": null,
+        "media": [],
+        "middleOrJuniorSchool": null,
+        "municipality": null,
+        "offerReviewDate": null,
+        "onMarketDate": 1791331200000,
+        "openParkingCapacity": null,
+        "otherEquipment": null,
+        "otherParking": [
+          "Contact manager"
+        ],
+        "otherStructures": [
+          "Garage(s)"
+        ],
+        "ownership": null,
+        "ownershipType": null,
+        "parcelNumber": "0",
+        "parkName": null,
+        "parkingCapacity": 0,
+        "parkingFeatures": [
+          "Garage"
+        ],
+        "patioAndPorchFeatures": null,
+        "poolFeatures": [
+          "Pool"
+        ],
+        "pricePerSquareFoot": 1,
+        "propertyCondition": null,
+        "propertySubType": [
+          "Apartment"
+        ],
+        "roadSurfaceType": null,
+        "roofType": null,
+        "rooms": [],
+        "securityFeatures": [
+          "Gated Community"
+        ],
+        "sewer": null,
+        "spaFeatures": null,
+        "specialListingConditions": null,
+        "stories": null,
+        "subAgencyCompensation": null,
+        "subAgencyCompensationType": null,
+        "subdivisionName": null,
+        "taxAnnualAmount": null,
+        "taxAssessedValueFloat": null,
+        "tenantPays": null,
+        "topography": null,
+        "totalActualRent": null,
+        "transactionBrokerCompensation": null,
+        "transactionBrokerCompensationType": null,
+        "utilities": [
+          "Garbage",
+          "Sewage",
+          "Water"
+        ],
+        "vegetation": null,
+        "view": [],
+        "virtualTour": null,
+        "waterBodyName": null,
+        "waterSource": null,
+        "waterView": null,
+        "waterViewYN": null,
+        "waterfrontFeatures": null,
+        "windowFeatures": [
+          "Blinds",
+          "Window Coverings"
+        ],
+        "woodedAreaFloat": null,
+        "yearBuilt": null,
+        "yearBuiltEffective": null,
+        "zoning": null,
+        "zoningDescription": null
+      },
+      "homeStatus": "FOR_RENT",
+      "hdpUrl": "/homedetails/123-Example-St-21939-Exampleville-XX-00001/100000002_zpid/"
+    },
+    "_type": "propertyGroup",
+    "address": {
+      "buildingId": "0",
+      "city": "Exampleville",
+      "state": "TX",
+      "streetAddress": "123 Example St",
+      "zipcode": "00001"
+    },
+    "bestGuessTimeZone": "America/Chicago",
+    "country": "usa",
+    "currency": "usd",
+    "groupType": "apartmentComplex",
+    "hdpUrl": "https://www.zillow.com/homedetails/123-Example-St-21939-Exampleville-XX-00001/100000002_zpid/",
+    "isFeatured": true,
+    "isShowcaseListing": false,
+    "isUnmappable": false,
+    "listingDateTimeOnZillow": 1791369945286,
+    "listingStatus": "forRent",
+    "location": {
+      "latitude": 30.39,
+      "longitude": -97.65
+    },
+    "matchingHomeCount": 16,
+    "maxBaseRent": 1325,
+    "maxPrice": 1325,
+    "media": {
+      "allPropertyPhotos": {
+        "highResolution": [
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000005-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000006-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000007-p_f.jpg"
+        ]
+      },
+      "hasApprovedThirdPartyVirtualTour": false,
+      "hasIMX": false,
+      "hasVRModel": false,
+      "hasVideos": false,
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/00000000000000000000000000000008-p_f.jpg"
+      },
+      "thirdPartyPhotoLinks": {}
+    },
+    "minBaseRent": 935,
+    "minPrice": 935,
+    "providerListingID": "0",
+    "rental": {
+      "areApplicationsAccepted": false,
+      "isBuildToRent": false,
+      "isRoomForRent": false,
+      "listPriceIncludesRequiredMonthlyFees": false,
+      "marketingTreatments": [
+        "trustedListing",
+        "paid",
+        "multiFamilySalesListing",
+        "paidOrUnpaidMultifamily",
+        "paidMultifamily",
+        "multifamilyPinnaclePackage"
+      ]
+    },
+    "title": "Example Heights",
+    "unitsGroup": [
+      {
+        "bedrooms": 1,
+        "isRoomForRent": false,
+        "minPrice": 935
+      },
+      {
+        "bedrooms": 2,
+        "isRoomForRent": false,
+        "minPrice": 1025
+      },
+      {
+        "bedrooms": 3,
+        "isRoomForRent": false,
+        "minPrice": 1325
+      }
+    ],
+    "url": "https://www.zillow.com/homedetails/100000002_zpid/",
+    "zpid": 100000002
+  },
+  {
+    "_details": {
+      "zpid": 100000003,
+      "description": "Come home to Example Point where your experience is our number one priority! Our friendly and professional staff will do everything they can to make you feel at home in one of our spacious apartments. Though with standard features like a full-sized washer and dryer, custom two-toned paint, central heating and air…",
+      "resoFacts": {
+        "__typename": "RESOFacts",
+        "aboveGradeFinishedArea": null,
+        "accessibilityFeatures": null,
+        "additionalFeeInfo": null,
+        "additionalParcelsDescription": null,
+        "appliances": [
+          "Dryer",
+          "Microwave Oven",
+          "Washer"
+        ],
+        "architecturalStyle": null,
+        "associationAmenities": [
+          "Clubhouse",
+          "Fitness Center",
+          "Maintenance",
+          "Management"
+        ],
+        "associationFeeIncludes": null,
+        "attic": null,
+        "availabilityDate": 1791849600000,
+        "basement": null,
+        "basementYN": null,
+        "bathroomsFloat": 1,
+        "bathroomsFull": 1,
+        "bathroomsHalf": null,
+        "bathroomsOneQuarter": null,
+        "bathroomsPartial": null,
+        "bathroomsThreeQuarter": null,
+        "bedrooms": 1,
+        "belowGradeFinishedArea": null,
+        "bodyType": null,
+        "builderModel": null,
+        "builderName": null,
+        "buildingArea": null,
+        "buildingAreaSource": null,
+        "buyerAgencyCompensation": null,
+        "buyerAgencyCompensationType": null,
+        "canRaiseHorses": false,
+        "carportParkingCapacity": null,
+        "cityRegion": "Exampleville",
+        "commonWalls": null,
+        "communityFeatures": [
+          "Clubhouse",
+          "Fitness Center",
+          "Gated",
+          "Pool"
+        ],
+        "compensationBasedOn": null,
+        "constructionMaterials": [],
+        "contingency": null,
+        "cooling": [
+          "Air Conditioner"
+        ],
+        "coveredParkingCapacity": null,
+        "cropsIncludedYN": null,
+        "cumulativeDaysOnMarket": null,
+        "developmentStatus": null,
+        "doorFeatures": null,
+        "electric": null,
+        "elementarySchool": null,
+        "elementarySchoolDistrict": null,
+        "elevation": null,
+        "elevationUnits": null,
+        "entryLevel": null,
+        "entryLocation": null,
+        "exclusions": null,
+        "exteriorFeatures": [
+          "Amazon Package Hub",
+          "Barbecue",
+          "Flexible Rent Payments",
+          "Fully-Equipped Kitchens",
+          "Furnished Apartments *CORT Furniture",
+          "Gated Community",
+          "Linen Closets*",
+          "Package Receiving",
+          "Pet-Friendly Community"
+        ],
+        "feesAndDues": [],
+        "fencing": null,
+        "fireplaceFeatures": null,
+        "fireplaces": null,
+        "flooring": null,
+        "foundationArea": null,
+        "foundationDetails": [],
+        "frontageLength": null,
+        "frontageType": null,
+        "furnished": true,
+        "garageParkingCapacity": null,
+        "gas": null,
+        "greenBuildingVerificationType": null,
+        "greenEnergyEfficient": null,
+        "greenEnergyGeneration": null,
+        "greenIndoorAirQuality": null,
+        "greenSustainability": null,
+        "greenWaterConservation": null,
+        "hasAdditionalParcels": false,
+        "hasAssociation": null,
+        "hasAttachedGarage": null,
+        "hasAttachedProperty": false,
+        "hasCarport": null,
+        "hasCooling": true,
+        "hasElectricOnProperty": null,
+        "hasFireplace": true,
+        "hasGarage": false,
+        "hasHeating": true,
+        "hasHomeWarranty": false,
+        "hasLandLease": false,
+        "hasOpenParking": null,
+        "hasPrivatePool": null,
+        "hasSpa": false,
+        "hasView": false,
+        "hasWaterfrontView": null,
+        "heating": [
+          "Fireplace"
+        ],
+        "highSchool": null,
+        "homeType": "Apartment",
+        "horseAmenities": null,
+        "horseYN": null,
+        "inclusions": null,
+        "incomeIncludes": null,
+        "interiorFeatures": [
+          "Ceiling Fan(s)",
+          "Large Closet(s)*",
+          "Vaulted Ceiling(s)"
+        ],
+        "irrigationWaterRightsAcresFloat": null,
+        "irrigationWaterRightsYN": null,
+        "isNewConstruction": null,
+        "isSeniorCommunity": null,
+        "landLeaseAmount": null,
+        "landLeaseExpirationDate": null,
+        "laundryFeatures": [
+          "In Unit"
+        ],
+        "leaseTerm": "12 Months",
+        "levels": null,
+        "listAOR": null,
+        "listingId": null,
+        "listingTerms": null,
+        "livingArea": "699 sqft",
+        "livingAreaRange": null,
+        "livingAreaRangeUnits": null,
+        "lotFeatures": null,
+        "lotSize": null,
+        "lotSizeDimensions": null,
+        "mainLevelBathroomsFloat": null,
+        "mainLevelBedrooms": null,
+        "media": [
+          {
+            "mediaCategory": "unbrandedVirtualTour",
+            "mediaURL": "https://example.com/tour"
+          }
+        ],
+        "middleOrJuniorSchool": null,
+        "municipality": null,
+        "offerReviewDate": null,
+        "onMarketDate": 1791244800000,
+        "openParkingCapacity": null,
+        "otherEquipment": null,
+        "otherParking": [
+          "Contact manager"
+        ],
+        "otherStructures": null,
+        "ownership": null,
+        "ownershipType": null,
+        "parcelNumber": "0",
+        "parkName": null,
+        "parkingCapacity": 0,
+        "parkingFeatures": [],
+        "patioAndPorchFeatures": [
+          "Patio"
+        ],
+        "poolFeatures": [
+          "Pool"
+        ],
+        "pricePerSquareFoot": 1,
+        "propertyCondition": null,
+        "propertySubType": [
+          "Apartment"
+        ],
+        "roadSurfaceType": null,
+        "roofType": null,
+        "rooms": [],
+        "securityFeatures": [
+          "Gated Community"
+        ],
+        "sewer": null,
+        "spaFeatures": null,
+        "specialListingConditions": null,
+        "stories": 2,
+        "subAgencyCompensation": null,
+        "subAgencyCompensationType": null,
+        "subdivisionName": null,
+        "taxAnnualAmount": null,
+        "taxAssessedValueFloat": null,
+        "tenantPays": null,
+        "topography": null,
+        "totalActualRent": null,
+        "transactionBrokerCompensation": null,
+        "transactionBrokerCompensationType": null,
+        "utilities": null,
+        "vegetation": null,
+        "view": [],
+        "virtualTour": null,
+        "waterBodyName": null,
+        "waterSource": null,
+        "waterView": null,
+        "waterViewYN": null,
+        "waterfrontFeatures": null,
+        "windowFeatures": null,
+        "woodedAreaFloat": null,
+        "yearBuilt": 1983,
+        "yearBuiltEffective": 2008,
+        "zoning": null,
+        "zoningDescription": null
+      },
+      "homeStatus": "FOR_RENT",
+      "hdpUrl": "/homedetails/123-Example-St-APT-1303-Exampleville-XX-00001/100000003_zpid/"
+    },
+    "_type": "propertyGroup",
+    "address": {
+      "buildingId": "0",
+      "city": "Exampleville",
+      "state": "TX",
+      "streetAddress": "123 Example St",
+      "zipcode": "00001"
+    },
+    "bestGuessTimeZone": "America/Chicago",
+    "country": "usa",
+    "currency": "usd",
+    "groupType": "apartmentComplex",
+    "hdpUrl": "https://www.zillow.com/homedetails/123-Example-St-APT-1303-Exampleville-XX-00001/100000003_zpid/",
+    "isFeatured": true,
+    "isShowcaseListing": false,
+    "isUnmappable": false,
+    "listingDateTimeOnZillow": 1791332162168,
+    "listingStatus": "forRent",
+    "location": {
+      "latitude": 30.33,
+      "longitude": -97.68
+    },
+    "matchingHomeCount": 33,
+    "maxBaseRent": 1206,
+    "maxPrice": 1206,
+    "media": {
+      "allPropertyPhotos": {
+        "highResolution": [
+          "https://photos.zillowstatic.com/fp/00000000000000000000000000000009-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/0000000000000000000000000000000a-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/0000000000000000000000000000000b-p_f.jpg"
+        ]
+      },
+      "hasApprovedThirdPartyVirtualTour": false,
+      "hasIMX": false,
+      "hasVRModel": false,
+      "hasVideos": false,
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/0000000000000000000000000000000c-p_f.jpg"
+      },
+      "thirdPartyPhotoLinks": {}
+    },
+    "minBaseRent": 811,
+    "minPrice": 811,
+    "providerListingID": "0",
+    "rental": {
+      "areApplicationsAccepted": false,
+      "isBuildToRent": false,
+      "isRoomForRent": false,
+      "listPriceIncludesRequiredMonthlyFees": false,
+      "marketingTreatments": [
+        "trustedListing",
+        "paid",
+        "multiFamilySalesListing",
+        "paidOrUnpaidMultifamily",
+        "paidMultifamily",
+        "multifamilyPinnaclePackage"
+      ]
+    },
+    "title": "Example Point Apartments",
+    "totalRequiredMonthlyMaxFee": 8,
+    "totalRequiredMonthlyMinFee": 8,
+    "unitsGroup": [
+      {
+        "bedrooms": 1,
+        "isRoomForRent": false,
+        "minPrice": 811
+      },
+      {
+        "bedrooms": 2,
+        "isRoomForRent": false,
+        "minPrice": 1061
+      }
+    ],
+    "url": "https://www.zillow.com/homedetails/100000003_zpid/",
+    "zpid": 100000003
+  },
+  {
+    "_details": {
+      "zpid": 100000004,
+      "description": "Step inside this high-floor luxury residence and let the floor-to-ceiling windows lead you toward sweeping city, lake, river, and hill views. Continue into the sleek kitchen featuring stone countertops, a gas cooktop, built-in appliances, and expansive island. Refrigerator, washer, and dryer are included for…",
+      "resoFacts": {
+        "__typename": "RESOFacts",
+        "aboveGradeFinishedArea": null,
+        "accessibilityFeatures": null,
+        "additionalFeeInfo": null,
+        "additionalParcelsDescription": null,
+        "appliances": [
+          "Built-In Oven(s)",
+          "Dishwasher",
+          "Dryer",
+          "Garbage Disposal",
+          "Microwave Oven",
+          "Refrigerator",
+          "Washer"
+        ],
+        "architecturalStyle": null,
+        "associationAmenities": [
+          "Dog Park",
+          "Fitness Center"
+        ],
+        "associationFeeIncludes": null,
+        "attic": null,
+        "availabilityDate": 1792540800000,
+        "basement": null,
+        "basementYN": null,
+        "bathroomsFloat": 1,
+        "bathroomsFull": 1,
+        "bathroomsHalf": 0,
+        "bathroomsOneQuarter": null,
+        "bathroomsPartial": null,
+        "bathroomsThreeQuarter": null,
+        "bedrooms": 1,
+        "belowGradeFinishedArea": null,
+        "bodyType": null,
+        "builderModel": null,
+        "builderName": null,
+        "buildingArea": null,
+        "buildingAreaSource": null,
+        "buyerAgencyCompensation": null,
+        "buyerAgencyCompensationType": null,
+        "canRaiseHorses": false,
+        "carportParkingCapacity": null,
+        "cityRegion": "Exampleville",
+        "commonWalls": null,
+        "communityFeatures": [
+          "Fitness Center",
+          "Gated",
+          "Lake",
+          "Pool"
+        ],
+        "compensationBasedOn": null,
+        "constructionMaterials": [],
+        "contingency": null,
+        "cooling": [
+          "Air Conditioner",
+          "Central Air"
+        ],
+        "coveredParkingCapacity": null,
+        "cropsIncludedYN": null,
+        "cumulativeDaysOnMarket": null,
+        "developmentStatus": null,
+        "doorFeatures": null,
+        "electric": null,
+        "elementarySchool": null,
+        "elementarySchoolDistrict": null,
+        "elevation": null,
+        "elevationUnits": null,
+        "entryLevel": null,
+        "entryLocation": null,
+        "exclusions": null,
+        "exteriorFeatures": [
+          "Balcony",
+          "Barbecue",
+          "Concierge",
+          "Gated Community",
+          "Google Fiber",
+          "Lighting",
+          "Nest Thermostat",
+          "Primary Bedroom On Main",
+          "Property Manager On-Site"
+        ],
+        "feesAndDues": [
+          {
+            "fee": "$3,250",
+            "name": null,
+            "phone": null,
+            "type": "Deposit"
+          }
+        ],
+        "fencing": null,
+        "fireplaceFeatures": null,
+        "fireplaces": null,
+        "flooring": [
+          "Tile",
+          "Wood"
+        ],
+        "foundationArea": null,
+        "foundationDetails": [],
+        "frontageLength": null,
+        "frontageType": null,
+        "furnished": true,
+        "garageParkingCapacity": null,
+        "gas": null,
+        "greenBuildingVerificationType": null,
+        "greenEnergyEfficient": null,
+        "greenEnergyGeneration": null,
+        "greenIndoorAirQuality": null,
+        "greenSustainability": null,
+        "greenWaterConservation": null,
+        "hasAdditionalParcels": false,
+        "hasAssociation": null,
+        "hasAttachedGarage": null,
+        "hasAttachedProperty": false,
+        "hasCarport": null,
+        "hasCooling": true,
+        "hasElectricOnProperty": null,
+        "hasFireplace": null,
+        "hasGarage": true,
+        "hasHeating": true,
+        "hasHomeWarranty": false,
+        "hasLandLease": false,
+        "hasOpenParking": null,
+        "hasPrivatePool": null,
+        "hasSpa": true,
+        "hasView": true,
+        "hasWaterfrontView": null,
+        "heating": [
+          "Central"
+        ],
+        "highSchool": null,
+        "homeType": "Condo",
+        "horseAmenities": null,
+        "horseYN": null,
+        "inclusions": null,
+        "incomeIncludes": null,
+        "interiorFeatures": [
+          "Bar",
+          "Breakfast Bar",
+          "Double Vanity",
+          "Elevator",
+          "High Ceilings",
+          "Primary Bedroom on Main",
+          "Recessed Lighting",
+          "Sauna",
+          "Stone Counters",
+          "Walk-In Closet(s)"
+        ],
+        "irrigationWaterRightsAcresFloat": null,
+        "irrigationWaterRightsYN": null,
+        "isNewConstruction": null,
+        "isSeniorCommunity": null,
+        "landLeaseAmount": null,
+        "landLeaseExpirationDate": null,
+        "laundryFeatures": [
+          "In Unit",
+          "Laundry Closet"
+        ],
+        "leaseTerm": "12 Months",
+        "levels": null,
+        "listAOR": null,
+        "listingId": null,
+        "listingTerms": null,
+        "livingArea": "837 sqft",
+        "livingAreaRange": null,
+        "livingAreaRangeUnits": null,
+        "lotFeatures": null,
+        "lotSize": null,
+        "lotSizeDimensions": null,
+        "mainLevelBathroomsFloat": null,
+        "mainLevelBedrooms": null,
+        "media": [],
+        "middleOrJuniorSchool": null,
+        "municipality": null,
+        "offerReviewDate": null,
+        "onMarketDate": 1791244800000,
+        "openParkingCapacity": null,
+        "otherEquipment": null,
+        "otherParking": [
+          "Contact manager"
+        ],
+        "otherStructures": [
+          "Garage(s)"
+        ],
+        "ownership": null,
+        "ownershipType": null,
+        "parcelNumber": "0",
+        "parkName": null,
+        "parkingCapacity": 1,
+        "parkingFeatures": [
+          "Assigned",
+          "Covered",
+          "Garage"
+        ],
+        "patioAndPorchFeatures": [
+          "Covered",
+          "Patio"
+        ],
+        "poolFeatures": [
+          "None",
+          "Pool"
+        ],
+        "pricePerSquareFoot": 4,
+        "propertyCondition": null,
+        "propertySubType": [
+          "Condo"
+        ],
+        "roadSurfaceType": null,
+        "roofType": null,
+        "rooms": [],
+        "securityFeatures": null,
+        "sewer": null,
+        "spaFeatures": [
+          "Sauna",
+          "Spa"
+        ],
+        "specialListingConditions": null,
+        "stories": 1,
+        "subAgencyCompensation": null,
+        "subAgencyCompensationType": null,
+        "subdivisionName": null,
+        "taxAnnualAmount": 10329,
+        "taxAssessedValueFloat": 631090,
+        "tenantPays": null,
+        "topography": null,
+        "totalActualRent": null,
+        "transactionBrokerCompensation": null,
+        "transactionBrokerCompensationType": null,
+        "utilities": null,
+        "vegetation": null,
+        "view": [
+          "City View",
+          "hill",
+          "Lake",
+          "River"
+        ],
+        "virtualTour": null,
+        "waterBodyName": null,
+        "waterSource": null,
+        "waterView": null,
+        "waterViewYN": null,
+        "waterfrontFeatures": null,
+        "windowFeatures": null,
+        "woodedAreaFloat": null,
+        "yearBuilt": 2019,
+        "yearBuiltEffective": null,
+        "zoning": null,
+        "zoningDescription": null
+      },
+      "homeStatus": "FOR_RENT",
+      "hdpUrl": "/homedetails/123-Example-St-2605-Exampleville-XX-00001/100000004_zpid/"
+    },
+    "_type": "property",
+    "address": {
+      "buildingId": "0",
+      "city": "Exampleville",
+      "state": "TX",
+      "streetAddress": "123 Example St",
+      "zipcode": "00001"
+    },
+    "bathrooms": 1,
+    "bedrooms": 1,
+    "bestGuessTimeZone": "America/Chicago",
+    "country": "usa",
+    "currency": "usd",
+    "daysOnZillow": 0,
+    "factsAndFeatures": {
+      "fullBathroomCount": 1,
+      "halfBathroomCount": 0
+    },
+    "groupType": "apartmentComplex",
+    "hasFloorPlan": false,
+    "hdpUrl": "https://www.zillow.com/homedetails/123-Example-St-2605-Exampleville-XX-00001/100000004_zpid/",
+    "hdpView": {
+      "hdpUrl": "/homedetail/MobileAppHDPShopperPlatformServicePage.htm?fromApp=true&p=android&variant=FOR_RENT#zpid=100000004&homeDetailsVariant=FOR_RENT&webviewLayout=doubleScroll&showFactsAndFeatures=true&fromApp=true&gmaps=true&streetview=true",
+      "listingStatus": "forRent",
+      "price": 3250
+    },
+    "isFeatured": false,
+    "isPreforeclosureAuction": false,
+    "isShowcaseListing": false,
+    "isUnmappable": false,
+    "listing": {
+      "listingStatus": "forRent",
+      "listingSubType": {},
+      "marketingStatus": "active",
+      "palsId": "0",
+      "providerListingID": "0"
+    },
+    "listingDateTimeOnZillow": 1791317836176,
+    "livingArea": 837,
+    "location": {
+      "latitude": 30.26,
+      "longitude": -97.74
+    },
+    "media": {
+      "allPropertyPhotos": {
+        "highResolution": [
+          "https://photos.zillowstatic.com/fp/0000000000000000000000000000000d-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/0000000000000000000000000000000e-p_f.jpg",
+          "https://photos.zillowstatic.com/fp/0000000000000000000000000000000f-p_f.jpg"
+        ]
+      },
+      "hasApprovedThirdPartyVirtualTour": false,
+      "hasIMX": false,
+      "hasVRModel": false,
+      "hasVideos": false,
+      "propertyPhotoLinks": {
+        "highResolutionLink": "https://photos.zillowstatic.com/fp/00000000000000000000000000000010-p_f.jpg"
+      },
+      "thirdPartyPhotoLinks": {}
+    },
+    "price": {
+      "pricePerSquareFoot": 4,
+      "value": 3250
+    },
+    "propertyHasLasViolation": false,
+    "propertyType": "condo",
+    "region": {},
+    "rental": {
+      "areApplicationsAccepted": false,
+      "baseRent": 3250,
+      "hasVirtualTour": false,
+      "isBuildToRent": false,
+      "isRentByBed": false,
+      "isRoomForRent": false,
+      "listPriceIncludesRequiredMonthlyFees": false
+    },
+    "ssid": "0",
+    "taxAssessment": {
+      "taxAssessedValue": 631090,
+      "taxAssessmentYear": "2025"
+    },
+    "url": "https://www.zillow.com/homedetails/100000004_zpid/",
+    "yearBuilt": 2019,
+    "zillowOwnedProperty": {
+      "isZillowOwned": false
+    },
+    "zpid": 100000004
+  }
+]

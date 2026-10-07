@@ -14,8 +14,10 @@ name        ``Jane Example``            JSON keys (``firstName``, ``landlordName
                                         ``name`` inside a ``host``/``reviewer``/...
                                         object or a ``Person``), then every other
                                         occurrence of those values, plus ``redact``
-address     ``123 Example St``          regex for ``<number> <Name> <St|Ave|...>``;
-                                        JSON keys like ``streetAddress``
+address     ``123 Example St``          regex for ``<number> <Name> <St|Ave|...>``,
+                                        and its hyphenated form in URL paths
+                                        (``123-Example-St``); JSON keys like
+                                        ``streetAddress``
 coordinate  rounded to 2 decimals       JSON keys ``lat``/``latitude``/``lng``/...
 ==========  ==========================  =============================================
 
@@ -71,6 +73,13 @@ _ADDRESS = re.compile(
     rf"(?:{_STREET_TYPES})\b\.?"
     r"(?:,?[ \t]+(?:Apt|Apartment|Unit|Suite|Ste|#)\.?[ \t]*#?[A-Za-z0-9-]+)?"
 )
+# The same in a URL path, where listing sites put the address as a hyphenated slug
+# ("/homedetails/70-Main-St-2605-Exampleville-XX-00001/123_zpid/").
+_ADDRESS_SLUG = re.compile(
+    r"(?<=/)\d{1,6}-(?:[NSEW]-)?(?:(?:[A-Z][\w']*|\d+(?:st|nd|rd|th))-){1,4}"
+    rf"(?:{_STREET_TYPES})(?=[-/?#])"
+)
+ADDRESS_SLUG_PLACEHOLDER = "123-Example-St"
 _SCRIPT_JSON = re.compile(
     r"(<script\b[^>]*\btype=[\"']application/(?:ld\+)?json[\"'][^>]*>)(.*?)(</script>)",
     re.IGNORECASE | re.DOTALL,
@@ -196,6 +205,9 @@ class _Pass:
         text = _EMAIL.sub(self._email, text)
         text = _PHONE.sub(self._phone, text)
         text = _ADDRESS.sub(lambda m: self._replace(m, "address", ADDRESS_PLACEHOLDER), text)
+        text = _ADDRESS_SLUG.sub(
+            lambda m: self._replace(m, "address", ADDRESS_SLUG_PLACEHOLDER), text
+        )
         names = self._names()
         if names is not None:
             text = names.sub(lambda m: self._replace(m, "name", NAME_PLACEHOLDER), text)

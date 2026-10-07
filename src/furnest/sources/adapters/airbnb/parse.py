@@ -26,8 +26,10 @@ actor field                            NormalizedListing
 ``url`` (else ``/rooms/<id>``)         ``url``
 ``title`` (else ``subDescription``)    ``title``, without the " - … - Airbnb" suffix
 ``description``                        ``description``
-``price``                              ``price``, per month or per quoted period, USD
-``subDescription.title``               ``address`` city and region, US places only
+``price`` (``.price``, else            ``price``, per month or per quoted period, USD
+``.amount``; or the stay total)
+``locationSubtitle`` (else             ``address`` city and region, US places only
+``subDescription.title``)
 ``coordinates``                        ``lat``, ``lng``
 ``subDescription.items``               ``beds`` ("Studio" is 0), ``baths``
 ``roomType``, ``subDescription``       ``property_type``
@@ -168,7 +170,9 @@ def parse_item(item: dict[str, Any], *, window: StayWindow) -> NormalizedListing
         title=_title(item, sub),
         description=text(item.get("description")),
         price=_price(_object(item.get("price")), window),
-        address=_address(place),
+        # Live items name the country only in ``locationSubtitle``
+        # ("Exampleville, Texas, United States"); ``subDescription`` stops at the state.
+        address=_address(text(item.get("locationSubtitle"))) or _address(place) or Address(),
         lat=lat,
         lng=lng,
         beds=beds,
@@ -220,10 +224,10 @@ def _kind_and_place(title: str) -> tuple[str, str]:
     return (kind, place) if found else (title, "")
 
 
-def _address(place: str) -> Address:
+def _address(place: str) -> Address | None:
     parts = [part.strip() for part in place.split(",") if part.strip()]
     if not parts:
-        return Address()
+        return None
     if len(parts) >= 3 and parts[-1].lower() in _US:
         return Address(city=parts[0], region=parts[-2])
     # US-first: a region outside the US isn't a US state, so only the city is kept.
@@ -273,7 +277,11 @@ def _price(price: dict[str, Any], window: StayWindow) -> Price | None:
     if total is not None and window.nights > 0:
         monthly = total.amount.amount_minor * MONTHLY_FACTOR[RentPeriod.NIGHTLY] / window.nights
         return Price(amount=Money(amount_minor=int(monthly + Fraction(1, 2)), currency=_USD))
-    quoted = parse_price(text(price.get("amount")) or None, currency=_USD)
+    # Live items quote in ``price`` ("$4,336", after any discount); the README says
+    # ``amount``.
+    quoted = parse_price(
+        text(price.get("price")) or text(price.get("amount")) or None, currency=_USD
+    )
     if quoted is None:
         return None
     period = parse_period(text(price.get("qualifier"))) or RentPeriod.NIGHTLY

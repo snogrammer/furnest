@@ -49,7 +49,7 @@ log = get_logger(__name__)
 class FurnishedFinder(ApifyAdapter):
     name: ClassVar[str] = "furnished_finder"
     display_name: ClassVar[str] = "Furnished Finder"
-    actor: ClassVar[str] = ACTOR
+    job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:

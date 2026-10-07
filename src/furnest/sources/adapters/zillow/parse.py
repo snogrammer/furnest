@@ -28,16 +28,20 @@ actor field                               NormalizedListing
 ``zpid`` (else ``lotId``)                 ``source_id``
 ``url`` (else ``hdpUrl``, else            ``url``
 ``/homedetails/<zpid>_zpid/``)
-``buildingName``, ``address``             ``title`` ("N bd in City" when neither)
+``buildingName`` (else ``title``),       ``title`` ("N bd in City" when none)
+``address``
 ``_details.description``                  ``description``
 ``price.value`` / ``unitsGroup.minPrice`` ``price`` per month, USD
 ``address`` (street, city, state, zip)    ``address`` (US)
 ``location.latitude``, ``.longitude``     ``lat``, ``lng``
 ``bedrooms``, ``bathrooms``               ``beds``, ``baths`` (to the nearest half)
 ``livingArea``                            ``sqft``
-``propertyType`` / ``homeType``           ``property_type``
+``propertyType`` / ``homeType``           ``property_type`` (a room when
+                                          ``isRoomForRent`` is set on the item,
+                                          its ``rental`` or the unit group)
 ``_details.resoFacts`` feature lists      ``amenities``, as the words Zillow uses
-``_details`` availability date            ``available_from``
+``resoFacts.availabilityDate`` (epoch     ``available_from``
+ms, or a date string)
 ``_details.resoFacts.leaseTerm``          ``min_lease_months`` when it names months
 ``media`` photos                          ``images``
 ========================================  ===========================================
@@ -51,7 +55,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -185,6 +189,7 @@ def _parse_group(item: dict[str, Any], *, today: date) -> list[NormalizedListing
                 beds=beds,
                 price=_money(group.get("minPrice", group.get("price"))),
                 today=today,
+                room=group.get("isRoomForRent"),
             )
         )
     if not listings:
@@ -201,6 +206,7 @@ def _listing(
     beds: int | None,
     price: Price | None,
     today: date,
+    room: object = None,
 ) -> NormalizedListing:
     details = _object(item.get("_details"))
     facts = _object(details.get("resoFacts"))
@@ -222,7 +228,7 @@ def _listing(
         beds=beds,
         baths=half(item.get("bathrooms")),
         sqft=positive(item.get("livingArea")),
-        property_type=_property_type(item, beds),
+        property_type=_property_type(item, beds, room=room),
         furnished=True,
         amenities=_amenities(facts),
         available_from=_available_from(item, details, facts, today),
@@ -288,7 +294,8 @@ def _address(item: dict[str, Any]) -> Address:
 
 
 def _title(item: dict[str, Any], address: Address, beds: int | None) -> str:
-    if name := text(item.get("buildingName")):
+    # Live building items carry the name in ``title``; the README says ``buildingName``.
+    if name := text(item.get("buildingName")) or text(item.get("title")):
         return name
     if address.line1:
         return address.line1
@@ -296,8 +303,9 @@ def _title(item: dict[str, Any], address: Address, beds: int | None) -> str:
     return f"{size} in {address.city}" if address.city else size
 
 
-def _property_type(item: dict[str, Any], beds: int | None) -> PropertyType:
-    if item.get("isRoomForRent") is True:
+def _property_type(item: dict[str, Any], beds: int | None, *, room: object) -> PropertyType:
+    flags = (item.get("isRoomForRent"), _dig(item, "rental", "isRoomForRent"), room)
+    if any(flag is True for flag in flags):
         return PropertyType.ROOM
     for key in ("propertyType", "homeType"):
         label = text(item.get(key))
@@ -332,12 +340,22 @@ def _available_from(
         facts.get("availabilityDate"),
         item.get("availabilityDate"),
     ):
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            # resoFacts gives epoch milliseconds at midnight UTC.
+            return _epoch_ms_date(value)
         when = text(value)
         if when.lower() in {"now", "available now"}:
             return today
         if found := _date(when):
             return found
     return None
+
+
+def _epoch_ms_date(value: float) -> date | None:
+    try:
+        return datetime.fromtimestamp(value / 1000, UTC).date()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _date(when: str) -> date | None:

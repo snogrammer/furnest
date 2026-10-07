@@ -35,7 +35,7 @@ The script is for manual use only. It refuses to run when `CI` is set, and nothi
 3. It writes the result to `tests/fixtures/<adapter>/<name>`. The default name comes from the URL path. An existing file is only replaced with `--force`.
 4. It prints how many values of each kind it replaced.
 
-**Sources behind a data provider.** Furnished Finder, Zillow and Airbnb are captured from Apify. Run the actor once in the Apify console, then capture that run's dataset:
+**Sources behind a data provider.** Furnished Finder, Zillow and Airbnb are captured from Apify. Run the actor once with a small `max_results` (in the Apify console, or by starting a run with the adapter's own `build_input`), then capture that run's dataset:
 
 ```sh
 uv run python scripts/capture_fixture.py furnished_finder \
@@ -50,4 +50,5 @@ The script takes the token from the adapter's `api_key` in `SOURCES_ADAPTERS` an
 - Names in free text (a description signed "Thanks, Rosalind") are only caught if you pass them with `--redact Rosalind`. You can pass `--redact` more than once.
 - Check listing titles, photo URLs and free-text fields for anything that identifies a person or an exact address.
 - Shorten the file to the items the tests need, and replace real city names with placeholders such as `Exampleville, XX` where a test doesn't depend on them.
+- Listing ids, photo URLs, map and street-view links (they carry exact coordinates), parcel numbers and named landmarks in descriptions can all lead back to an exact address. Replace them with placeholders. The sanitizer catches street addresses in URL slugs (`/70-Main-St-…/`) but not the rest.
 - Update the fixture folder's `README.md` with where the file came from and when.

@@ -22,29 +22,25 @@ Requests go through the adapter's :class:`~furnest.sources.http.SourceHttpClient
 (rate limit, retries, block detection), built with ``respect_robots`` off:
 robots.txt is for crawlers, and this is an authenticated API call.
 
-:class:`ApifyAdapter` is the adapter half: it checks the config (an API token and
-``search_locations``), runs :attr:`~ApifyAdapter.actor` on the input a subclass
-builds, and hands the items back to the subclass to map. Each provider-backed
-source is then just its input builder and its item mapping.
+:class:`ApifyProvider` is Apify as a :class:`~furnest.sources.provider.DataProvider`,
+where a job is an actor. :class:`ApifyAdapter` is a
+:class:`~furnest.sources.provider.ProviderAdapter` on Apify: a subclass sets
+:attr:`~ApifyAdapter.job` to the actor and writes its input builder and item mapping.
 """
 
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
 from collections.abc import Callable, Mapping
-from dataclasses import replace
-from datetime import UTC, date, datetime
 from typing import Any, ClassVar
 from urllib.parse import quote
 
 import httpx2
 
-from furnest.domain import Criteria, NormalizedListing
 from furnest.logging import get_logger
-from furnest.sources.base import AdapterConfig, Capabilities, SourceAdapter
 from furnest.sources.errors import SourceError
 from furnest.sources.http import SourceHttpClient
+from furnest.sources.provider import DataProvider, JsonObject, ProviderAdapter
 
 log = get_logger(__name__)
 
@@ -52,12 +48,6 @@ APIFY_API = "https://api.apify.com/v2"
 # Longest Apify lets one request wait for a run to finish.
 MAX_WAIT_SECONDS = 60
 _TERMINAL = frozenset({"SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"})
-# The actor gets this much less time than the whole run, so Apify stops it (and we
-# read why) before the worker's own run timeout fires.
-ACTOR_TIMEOUT_MARGIN_SECONDS = 60
-MIN_ACTOR_TIMEOUT_SECONDS = 60
-
-JsonObject = dict[str, Any]
 
 
 def run_actor(
@@ -146,81 +136,35 @@ def _data(response: httpx2.Response, what: str) -> JsonObject:
     return data
 
 
-# --- The adapter base ---------------------------------------------------------------
+# --- Apify as a data provider ---------------------------------------------------------
 
 
-def _today() -> date:
-    return datetime.now(UTC).date()
+class ApifyProvider:
+    """Apify as a :class:`~furnest.sources.provider.DataProvider`: a job is an actor."""
 
+    name = "Apify"
 
-class ApifyAdapter(SourceAdapter):
-    """A source read through an Apify actor that searches by place name.
-
-    Subclasses set :attr:`actor` (``"user/name"``) and :attr:`site` (the source's
-    origin, used in error messages) and implement :meth:`build_input` and
-    :meth:`parse_items`. The token comes from the adapter's ``api_key``, the places
-    from its ``search_locations``.
-    """
-
-    actor: ClassVar[str]
-    site: ClassVar[str]
-    capabilities: ClassVar[Capabilities] = Capabilities(has_api=True, requires_api_key=True)
-
-    def __init__(
+    def run(
         self,
-        config: AdapterConfig,
+        http: SourceHttpClient,
+        job: str,
+        run_input: Mapping[str, Any],
         *,
-        transport: httpx2.BaseTransport | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
-        today: Callable[[], date] = _today,
-    ) -> None:
-        super().__init__(config)
-        self._transport = transport
-        self._clock = clock
-        self._sleep = sleep
-        self._today = today
-
-    @abstractmethod
-    def build_input(self, criteria: Criteria) -> dict[str, Any]:
-        """The actor's input for ``criteria`` and this adapter's config."""
-
-    @abstractmethod
-    def parse_items(
-        self, items: list[JsonObject], run_input: Mapping[str, Any]
-    ) -> list[NormalizedListing]:
-        """The run's dataset items as listings. Raise :class:`SourceError` to fail the run.
-
-        ``run_input`` is what :meth:`build_input` sent, for a mapping that depends on the
-        search (the stay dates an Airbnb price covers, say).
-        """
-
-    def search(self, criteria: Criteria) -> list[NormalizedListing]:
-        config = self.config
-        if config.api_key is None:
-            msg = f'set "api_key" (an Apify API token) for {self.name} in SOURCES_ADAPTERS'
-            raise SourceError(msg, url=self.site)
-        if not config.search_locations:
-            msg = (
-                f'set "search_locations" (e.g. ["Springfield, IL"]) for {self.name} '
-                "in SOURCES_ADAPTERS"
-            )
-            raise SourceError(msg, url=self.site)
-
-        run_input = self.build_input(criteria)
-        timeout = max(
-            MIN_ACTOR_TIMEOUT_SECONDS, config.run_timeout_seconds - ACTOR_TIMEOUT_MARGIN_SECONDS
+        token: str,
+        timeout_seconds: int,
+        clock: Callable[[], float],
+    ) -> list[JsonObject]:
+        return run_actor(
+            http, job, run_input, token=token, timeout_seconds=timeout_seconds, clock=clock
         )
-        http_config = replace(config, respect_robots=False)
-        with SourceHttpClient(
-            http_config, transport=self._transport, clock=self._clock, sleep=self._sleep
-        ) as http:
-            items = run_actor(
-                http,
-                self.actor,
-                run_input,
-                token=config.api_key.get_secret_value(),
-                timeout_seconds=timeout,
-                clock=self._clock,
-            )
-        return self.parse_items(items, run_input)
+
+
+APIFY = ApifyProvider()
+
+
+class ApifyAdapter(ProviderAdapter):
+    """A source read through an Apify actor. Subclasses set :attr:`job` to the actor
+    (``"user/name"``) and :attr:`site`, and implement ``build_input`` and
+    ``parse_items`` (see :class:`~furnest.sources.provider.ProviderAdapter`)."""
+
+    provider: ClassVar[DataProvider] = APIFY

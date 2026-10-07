@@ -11,7 +11,9 @@ JSON returned by the Apify actor `abotapi/furnishedfinder-scraper`, which the
   `GET /v2/actor-runs/{id}` in each status the client handles.
 
 These were written from the actor's published output schema and example, not captured
-from a live run. Every place, coordinate, id and name is a placeholder
+from a live run. A capture on 2026-10-07 (#111) failed on the actor's side (its
+geocoder found no coordinates for any location), so there is no live dataset yet;
+see `docs/adapters.md`. Every place, coordinate, id and name is a placeholder
 (`Exampleville, XX`, `Jane Example`), and the review is there to check that reviewer
 names are dropped from `raw`. If a live run shows a field mapped wrongly, replace the
 item with a sanitized copy of the real one and keep the placeholders.

@@ -1,0 +1,1345 @@
+[
+  {
+    "id": "900000001",
+    "coordinates": {
+      "latitude": 30.37,
+      "longitude": -97.65
+    },
+    "descriptionOriginalLanguage": "en",
+    "metaDescription": "Oct 7, 2026 · Entire home · ✨ Spacious Exampleville 4BR | Tech Hub + Comfort & Flexibility  ✓ 4BR / 2.5BA home — sleeps 8 ✓ King + queen beds with premium comfort 🛏️ ✓ Fully equipp...",
+    "seoTitle": "Executive 4BR King and Queens 2 living spaces - Houses for Rent in Exampleville, Texas, United States - Airbnb",
+    "sharingConfigTitle": "Home in Exampleville · ★5.0 · 4 bedrooms · 4 beds · 2.5 baths",
+    "thumbnail": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000001.jpeg",
+    "url": "https://www.airbnb.com/rooms/900000001?locale=en-US&currency=USD&check_in=2026-10-07&check_out=2026-11-07",
+    "propertyType": "Entire home",
+    "roomType": "Entire home/apt",
+    "homeTier": 1,
+    "personCapacity": 8,
+    "rating": {
+      "accuracy": 5,
+      "checking": 4.9,
+      "cleanliness": 5,
+      "communication": 5,
+      "location": 4.8,
+      "value": 4.8,
+      "guestSatisfaction": 5,
+      "reviewsCount": 10
+    },
+    "location": "Exampleville",
+    "host": {
+      "id": "1000",
+      "name": "Jane Example",
+      "profileImage": "https://example.com/host.jpg",
+      "isSuperHost": true,
+      "isVerified": true,
+      "highlights": [],
+      "about": "",
+      "ratingCount": 110,
+      "ratingAverage": 4.87,
+      "hostDetails": [
+        "Response rate: 100%",
+        "Responds within an hour"
+      ],
+      "timeAsHost": {
+        "months": 11,
+        "years": 2
+      }
+    },
+    "coHosts": [
+      {
+        "id": "1001",
+        "name": "Jane Example",
+        "profilePictureUrl": "https://example.com/cohost.jpg"
+      },
+      {
+        "id": "1002",
+        "name": "Jane Example",
+        "profilePictureUrl": "https://example.com/cohost.jpg"
+      },
+      {
+        "id": "1003",
+        "name": "Jane Example",
+        "profilePictureUrl": "https://example.com/cohost.jpg"
+      }
+    ],
+    "locationSubtitle": "Exampleville, Texas, United States",
+    "title": "Executive 4BR King and Queens 2 living spaces",
+    "description": "✨ Spacious Exampleville 4BR | Tech Hub + Comfort & Flexibility✓ 4BR / 2.5BA home — sleeps 8✓ King + queen beds with premium comfort 🛏️✓ Fully equipped kitchen + full size in-home laundry ✓ Fast WiFi + dedicated workspace ✓ Fenced yard + pet-friendly (2 pets) 🐾✓ Near a chip plant, employers & the university ✓ Easy access to the mall + the arena…",
+    "subDescription": {
+      "title": "Entire home in Exampleville, Texas",
+      "items": [
+        "8 guests",
+        "4 bedrooms",
+        "4 beds",
+        "2.5 baths"
+      ]
+    },
+    "isAvailable": true,
+    "price": {
+      "label": "$6,883 monthly, originally $9,026",
+      "qualifier": "monthly",
+      "price": "$6,883",
+      "originalPrice": "$9,026",
+      "discountedPrice": "$6,883",
+      "breakDown": {
+        "basePrice": {
+          "description": "Average monthly price",
+          "price": "$9,026.00"
+        },
+        "basePriceBreakdown": [],
+        "serviceFee": null,
+        "taxes": null,
+        "total": {
+          "price": "$9,026",
+          "description": "Total (calculated price, may vary)"
+        },
+        "totalBeforeTaxes": null,
+        "cleaningFee": null,
+        "specialOffer": null,
+        "earlyBirdDiscount": null
+      }
+    },
+    "images": [
+      {
+        "caption": "Comfortable and stylish living room with a roomy leather sectional, contemporary décor, and plenty of natural light—ideal for relaxing or entertaining!",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000002.jpeg",
+        "orientation": "LANDSCAPE"
+      },
+      {
+        "caption": "This boho decor is cute and functional. Enjoy streaming your favorite TV shows on this smart TV!",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000003.jpeg",
+        "orientation": "LANDSCAPE"
+      },
+      {
+        "caption": "Beautiful gathering space with comfortable seating and high ceilings. Unwind with friends here before heading out for dinner and enjoying the nightlife nearby.",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000004.jpeg",
+        "orientation": "LANDSCAPE"
+      }
+    ],
+    "breadcrumbs": [
+      {
+        "linkRoute": "/",
+        "linkText": "Airbnb",
+        "searchText": "Airbnb"
+      },
+      {
+        "linkRoute": "/united-states/stays",
+        "linkText": "United States",
+        "searchText": "United States"
+      },
+      {
+        "linkRoute": "/texas-united-states/stays",
+        "linkText": "Texas",
+        "searchText": "Texas"
+      },
+      {
+        "linkRoute": "/example-county-xx/stays",
+        "linkText": "Example County",
+        "searchText": "Example County"
+      },
+      {
+        "linkRoute": "/exampleville-xx/stays",
+        "linkText": "Exampleville",
+        "searchText": "Exampleville"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "In north Exampleville near the greenbelt",
+        "subtitle": "A quiet north Exampleville neighborhood with parks and a greenbelt about a 10-min walk away",
+        "icon": "SYSTEM_LOCATION",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Fenced yard, parking, and laundry",
+        "subtitle": "A fully fenced backyard, driveway and garage parking, and in-unit washer and dryer",
+        "icon": "SYSTEM_FLOWER",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Clean, spacious, and well hosted",
+        "subtitle": "Guests highlight how clean and spacious the home feels, and praise Jane Example as a responsive host",
+        "icon": "SYSTEM_CLEAN",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      }
+    ],
+    "houseRules": {
+      "general": []
+    },
+    "amenities": [
+      {
+        "title": "Scenic views",
+        "values": [
+          {
+            "title": "Garden view",
+            "subtitle": "",
+            "icon": "SYSTEM_FLOWER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Bathroom",
+        "values": [
+          {
+            "title": "Bathtub",
+            "subtitle": "",
+            "icon": "SYSTEM_BATHTUB",
+            "available": true
+          },
+          {
+            "title": "Hair dryer",
+            "subtitle": "",
+            "icon": "SYSTEM_HAIRDRYER",
+            "available": true
+          },
+          {
+            "title": "Cleaning products",
+            "subtitle": "",
+            "icon": "SYSTEM_CLEANING_SUPPLIES",
+            "available": true
+          },
+          {
+            "title": "Shampoo",
+            "subtitle": "",
+            "icon": "SYSTEM_SHAMPOO",
+            "available": true
+          },
+          {
+            "title": "Conditioner",
+            "subtitle": "",
+            "icon": "SYSTEM_SHAMPOO",
+            "available": true
+          },
+          {
+            "title": "Body soap",
+            "subtitle": "",
+            "icon": "SYSTEM_SOAP",
+            "available": true
+          },
+          {
+            "title": "Hot water",
+            "subtitle": "",
+            "icon": "SYSTEM_HOT_WATER",
+            "available": true
+          },
+          {
+            "title": "Shower gel",
+            "subtitle": "",
+            "icon": "SYSTEM_SOAP",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Bedroom and laundry",
+        "values": [
+          {
+            "title": "Free washer – In unit",
+            "subtitle": "",
+            "icon": "SYSTEM_WASHER",
+            "available": true
+          },
+          {
+            "title": "Free dryer – In unit",
+            "subtitle": "",
+            "icon": "SYSTEM_DRYER",
+            "available": true
+          },
+          {
+            "title": "Essentials",
+            "subtitle": "Towels, bed sheets, soap, and toilet paper",
+            "icon": "SYSTEM_TOILETRIES",
+            "available": true
+          },
+          {
+            "title": "Hangers",
+            "subtitle": "",
+            "icon": "SYSTEM_HANGERS",
+            "available": true
+          },
+          {
+            "title": "Bed linens",
+            "subtitle": "",
+            "icon": "SYSTEM_BLANKETS",
+            "available": true
+          },
+          {
+            "title": "Extra pillows and blankets",
+            "subtitle": "",
+            "icon": "SYSTEM_PILLOW",
+            "available": true
+          },
+          {
+            "title": "Iron",
+            "subtitle": "",
+            "icon": "SYSTEM_IRON",
+            "available": true
+          },
+          {
+            "title": "Clothing storage: walk-in closet",
+            "subtitle": "",
+            "icon": "SYSTEM_WARDROBE",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Entertainment",
+        "values": [
+          {
+            "title": "TV",
+            "subtitle": "",
+            "icon": "SYSTEM_TV",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Heating and cooling",
+        "values": [
+          {
+            "title": "Central air conditioning",
+            "subtitle": "",
+            "icon": "SYSTEM_SNOWFLAKE",
+            "available": true
+          },
+          {
+            "title": "Ceiling fan",
+            "subtitle": "",
+            "icon": "SYSTEM_FAN_CEILING",
+            "available": true
+          },
+          {
+            "title": "Central heating",
+            "subtitle": "",
+            "icon": "SYSTEM_THERMOMETER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Home safety",
+        "values": [
+          {
+            "title": "Smoke alarm",
+            "subtitle": "",
+            "icon": "SYSTEM_DETECTOR_SMOKE",
+            "available": true
+          },
+          {
+            "title": "Carbon monoxide alarm",
+            "subtitle": "",
+            "icon": "SYSTEM_DETECTOR_CO",
+            "available": true
+          },
+          {
+            "title": "Fire extinguisher",
+            "subtitle": "",
+            "icon": "SYSTEM_FIRE_EXTINGUISHER",
+            "available": true
+          },
+          {
+            "title": "First aid kit",
+            "subtitle": "",
+            "icon": "SYSTEM_FIRST_AID_KIT",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Internet and office",
+        "values": [
+          {
+            "title": "Wifi",
+            "subtitle": "",
+            "icon": "SYSTEM_WI_FI",
+            "available": true
+          },
+          {
+            "title": "Dedicated workspace",
+            "subtitle": "In a common space",
+            "icon": "SYSTEM_WORKSPACE",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Kitchen and dining",
+        "values": [
+          {
+            "title": "Kitchen",
+            "subtitle": "Space where guests can cook their own meals",
+            "icon": "SYSTEM_COOKING_BASICS",
+            "available": true
+          },
+          {
+            "title": "Refrigerator",
+            "subtitle": "",
+            "icon": "SYSTEM_REFRIGERATOR",
+            "available": true
+          },
+          {
+            "title": "Microwave",
+            "subtitle": "",
+            "icon": "SYSTEM_MICROWAVE",
+            "available": true
+          },
+          {
+            "title": "Cooking basics",
+            "subtitle": "Pots and pans, oil, salt and pepper",
+            "icon": "SYSTEM_COOKING_BASICS",
+            "available": true
+          },
+          {
+            "title": "Dishes and silverware",
+            "subtitle": "Plates, bowls, cups, cutlery, and other utensils",
+            "icon": "SYSTEM_DISHES_AND_SILVERWARE",
+            "available": true
+          },
+          {
+            "title": "Freezer",
+            "subtitle": "",
+            "icon": "SYSTEM_REFRIGERATOR",
+            "available": true
+          },
+          {
+            "title": "Dishwasher",
+            "subtitle": "",
+            "icon": "SYSTEM_DISHWASHER",
+            "available": true
+          },
+          {
+            "title": "Stove",
+            "subtitle": "",
+            "icon": "SYSTEM_STOVE",
+            "available": true
+          },
+          {
+            "title": "Oven",
+            "subtitle": "",
+            "icon": "SYSTEM_OVEN",
+            "available": true
+          },
+          {
+            "title": "Hot water kettle",
+            "subtitle": "",
+            "icon": "SYSTEM_WATER_KETTLE",
+            "available": true
+          },
+          {
+            "title": "Coffee maker",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          },
+          {
+            "title": "Wine glasses",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_BAR",
+            "available": true
+          },
+          {
+            "title": "Toaster",
+            "subtitle": "",
+            "icon": "SYSTEM_TOASTER",
+            "available": true
+          },
+          {
+            "title": "Baking sheet",
+            "subtitle": "",
+            "icon": "SYSTEM_BAKING_SHEET",
+            "available": true
+          },
+          {
+            "title": "Blender",
+            "subtitle": "",
+            "icon": "SYSTEM_BLENDER",
+            "available": true
+          },
+          {
+            "title": "Dining table",
+            "subtitle": "",
+            "icon": "SYSTEM_DINING_TABLE",
+            "available": true
+          },
+          {
+            "title": "Coffee",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Location features",
+        "values": [
+          {
+            "title": "Private entrance",
+            "subtitle": "Separate street or building entrance",
+            "icon": "SYSTEM_DOOR",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Outdoor",
+        "values": [
+          {
+            "title": "Patio or balcony",
+            "subtitle": "",
+            "icon": "SYSTEM_PATIO_BALCONY",
+            "available": true
+          },
+          {
+            "title": "Private backyard – Fully fenced",
+            "subtitle": "An open space on the property usually covered in grass",
+            "icon": "SYSTEM_FLOWER",
+            "available": true
+          },
+          {
+            "title": "Outdoor furniture",
+            "subtitle": "",
+            "icon": "SYSTEM_ROOFTOP_DECK",
+            "available": true
+          },
+          {
+            "title": "Hammock",
+            "subtitle": "",
+            "icon": "SYSTEM_HAMMOCK",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Parking and facilities",
+        "values": [
+          {
+            "title": "Free parking on premises",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_CAR_RENTAL",
+            "available": true
+          },
+          {
+            "title": "Free street parking",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_CAR_RENTAL",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Services",
+        "values": [
+          {
+            "title": "Pets allowed",
+            "subtitle": "Assistance animals are always allowed",
+            "icon": "SYSTEM_PETS",
+            "available": true
+          },
+          {
+            "title": "Long term stays allowed",
+            "subtitle": "Allow stay for 28 days or more",
+            "icon": "SYSTEM_CALENDAR",
+            "available": true
+          },
+          {
+            "title": "Self check-in",
+            "subtitle": "",
+            "icon": "SYSTEM_KEY",
+            "available": true
+          },
+          {
+            "title": "Smart lock",
+            "subtitle": "",
+            "icon": "SYSTEM_LOCK_ON_DOOR",
+            "available": true
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-10-07T16:10:27.278Z",
+    "language": "en",
+    "checkIn": "2026-10-07",
+    "checkOut": "2026-11-07"
+  },
+  {
+    "id": "900000002",
+    "coordinates": {
+      "latitude": 30.36,
+      "longitude": -97.66
+    },
+    "descriptionOriginalLanguage": "en",
+    "metaDescription": "Oct 7, 2026 · Private room in home · Kick back and relax in this calm, stylish space.",
+    "seoTitle": "Private Bedroom plus game room - Houses for Rent in Exampleville, Texas, United States - Airbnb",
+    "sharingConfigTitle": "Home in Exampleville · ★5.0 · 1 bedroom · 1 bed · 1 shared bath",
+    "thumbnail": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000005.jpeg",
+    "url": "https://www.airbnb.com/rooms/900000002?locale=en-US&currency=USD&check_in=2026-10-07&check_out=2026-11-07",
+    "propertyType": "Private room in home",
+    "roomType": "Private room",
+    "homeTier": 1,
+    "personCapacity": 2,
+    "rating": {
+      "accuracy": 4.75,
+      "checking": 5,
+      "cleanliness": 5,
+      "communication": 4.75,
+      "location": 4.5,
+      "value": 4.75,
+      "guestSatisfaction": 5,
+      "reviewsCount": 4
+    },
+    "location": "Exampleville",
+    "host": {
+      "id": "1000",
+      "name": "Jane Example",
+      "profileImage": "https://example.com/host.jpg",
+      "isSuperHost": true,
+      "isVerified": true,
+      "highlights": [],
+      "about": "",
+      "ratingCount": 13,
+      "ratingAverage": 5,
+      "hostDetails": [
+        "Response rate: 88%",
+        "Responds within an hour"
+      ],
+      "timeAsHost": {
+        "months": 1,
+        "years": 3
+      }
+    },
+    "coHosts": [],
+    "locationSubtitle": "Exampleville, Texas, United States",
+    "title": "Private Bedroom plus game room",
+    "description": "Kick back and relax in this calm, stylish space.",
+    "subDescription": {
+      "title": "Room in Exampleville, Texas",
+      "items": [
+        "1 bed",
+        "Shared bathroom"
+      ]
+    },
+    "isAvailable": true,
+    "price": {
+      "label": "$1,028 monthly, originally $1,330",
+      "qualifier": "monthly",
+      "price": "$1,028",
+      "originalPrice": "$1,330",
+      "discountedPrice": "$1,028",
+      "breakDown": {
+        "basePrice": {
+          "description": "Average monthly price",
+          "price": "$1,330.00"
+        },
+        "basePriceBreakdown": [],
+        "serviceFee": null,
+        "taxes": null,
+        "total": {
+          "price": "$1,330",
+          "description": "Total (calculated price, may vary)"
+        },
+        "totalBeforeTaxes": null,
+        "cleaningFee": null,
+        "specialOffer": null,
+        "earlyBirdDiscount": null
+      }
+    },
+    "images": [
+      {
+        "caption": "Living area image 1",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000006.jpeg",
+        "orientation": "PORTRAIT"
+      },
+      {
+        "caption": "Shared full kitchen image 1",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000007.jpeg",
+        "orientation": "PORTRAIT"
+      },
+      {
+        "caption": "Shared full kitchen image 2",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000008.jpeg",
+        "orientation": "LANDSCAPE"
+      }
+    ],
+    "breadcrumbs": [
+      {
+        "linkRoute": "/",
+        "linkText": "Airbnb",
+        "searchText": "Airbnb"
+      },
+      {
+        "linkRoute": "/united-states/stays",
+        "linkText": "United States",
+        "searchText": "United States"
+      },
+      {
+        "linkRoute": "/texas-united-states/stays",
+        "linkText": "Texas",
+        "searchText": "Texas"
+      },
+      {
+        "linkRoute": "/example-county-xx/stays",
+        "linkText": "Example County",
+        "searchText": "Example County"
+      },
+      {
+        "linkRoute": "/exampleville-xx/stays",
+        "linkText": "Exampleville",
+        "searchText": "Exampleville"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "Near a park",
+        "subtitle": "A park with trails is about a 5-min walk away",
+        "icon": "",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Shared pool with patio and fire pit",
+        "subtitle": "A shared pool, patio, and fire pit for unwinding after a day out in Exampleville",
+        "icon": "SYSTEM_CHECK",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Jane Example is a standout host",
+        "subtitle": "Guests highlight Jane Example as responsive, flexible, and welcoming throughout their stays",
+        "icon": "SYSTEM_HEART",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      }
+    ],
+    "houseRules": {
+      "general": []
+    },
+    "amenities": [
+      {
+        "title": "Bathroom",
+        "values": [
+          {
+            "title": "Hot water",
+            "subtitle": "",
+            "icon": "SYSTEM_HOT_WATER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Bedroom and laundry",
+        "values": [
+          {
+            "title": "Washer",
+            "subtitle": "",
+            "icon": "SYSTEM_WASHER",
+            "available": true
+          },
+          {
+            "title": "Free dryer – In building",
+            "subtitle": "",
+            "icon": "SYSTEM_DRYER",
+            "available": true
+          },
+          {
+            "title": "Essentials",
+            "subtitle": "Towels, bed sheets, soap, and toilet paper",
+            "icon": "SYSTEM_TOILETRIES",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Entertainment",
+        "values": [
+          {
+            "title": "TV",
+            "subtitle": "",
+            "icon": "SYSTEM_TV",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Heating and cooling",
+        "values": [
+          {
+            "title": "Air conditioning",
+            "subtitle": "",
+            "icon": "SYSTEM_SNOWFLAKE",
+            "available": true
+          },
+          {
+            "title": "Ceiling fan",
+            "subtitle": "",
+            "icon": "SYSTEM_FAN_CEILING",
+            "available": true
+          },
+          {
+            "title": "Heating",
+            "subtitle": "",
+            "icon": "SYSTEM_THERMOMETER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Privacy and safety",
+        "values": [
+          {
+            "title": "Lock on bedroom door",
+            "subtitle": "",
+            "icon": "SYSTEM_LOCK_ON_DOOR",
+            "available": true
+          },
+          {
+            "title": "Exterior security cameras on property",
+            "subtitle": "",
+            "icon": "SYSTEM_SURVEILLANCE",
+            "available": true
+          },
+          {
+            "title": "Smoke alarm",
+            "subtitle": "",
+            "icon": "SYSTEM_DETECTOR_SMOKE",
+            "available": true
+          },
+          {
+            "title": "Fire extinguisher",
+            "subtitle": "",
+            "icon": "SYSTEM_FIRE_EXTINGUISHER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Internet and office",
+        "values": [
+          {
+            "title": "Wifi",
+            "subtitle": "",
+            "icon": "SYSTEM_WI_FI",
+            "available": true
+          },
+          {
+            "title": "Dedicated workspace",
+            "subtitle": "",
+            "icon": "SYSTEM_WORKSPACE",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Kitchen and dining",
+        "values": [
+          {
+            "title": "Kitchen",
+            "subtitle": "Space where guests can cook their own meals",
+            "icon": "SYSTEM_COOKING_BASICS",
+            "available": true
+          },
+          {
+            "title": "Coffee maker",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          },
+          {
+            "title": "Blender",
+            "subtitle": "",
+            "icon": "SYSTEM_BLENDER",
+            "available": true
+          },
+          {
+            "title": "Coffee",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Outdoor",
+        "values": [
+          {
+            "title": "Fire pit",
+            "subtitle": "",
+            "icon": "SYSTEM_FIREPIT",
+            "available": true
+          },
+          {
+            "title": "Outdoor dining area",
+            "subtitle": "",
+            "icon": "SYSTEM_ROOFTOP_DECK",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Parking and facilities",
+        "values": [
+          {
+            "title": "Free parking on premises",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_CAR_RENTAL",
+            "available": true
+          },
+          {
+            "title": "Free street parking",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_CAR_RENTAL",
+            "available": true
+          },
+          {
+            "title": "Shared pool",
+            "subtitle": "",
+            "icon": "SYSTEM_POOL",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Not included",
+        "values": [
+          {
+            "title": "Carbon monoxide alarm",
+            "subtitle": "This place may not have a carbon monoxide detector. Reach out to the host with any questions.",
+            "icon": "SYSTEM_NO_DETECTOR_CO2",
+            "available": false
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-10-07T16:10:28.911Z",
+    "language": "en",
+    "checkIn": "2026-10-07",
+    "checkOut": "2026-11-07"
+  },
+  {
+    "id": "900000003",
+    "coordinates": {
+      "latitude": 30.32,
+      "longitude": -97.7
+    },
+    "descriptionOriginalLanguage": "en",
+    "metaDescription": "Oct 7, 2026 · Entire rental unit · Make yourself at home in Exampleville’s mature Example neighborhood at Example Flats. Ideal for short getaways, extended stays, and everything in between...",
+    "seoTitle": "Jane Example | Chic 1BD, Gym, Pool - Apartments for Rent in Exampleville, Texas, United States - Airbnb",
+    "sharingConfigTitle": "Rental unit in Exampleville · ★3.83 · 1 bedroom · 1 bed · 1 bath",
+    "thumbnail": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/00000000000000000000000000000009.jpeg",
+    "url": "https://www.airbnb.com/rooms/900000003?locale=en-US&currency=USD&check_in=2026-10-07&check_out=2026-11-07",
+    "propertyType": "Entire rental unit",
+    "roomType": "Entire home/apt",
+    "homeTier": 1,
+    "personCapacity": 2,
+    "rating": {
+      "accuracy": 4.5,
+      "checking": 4,
+      "cleanliness": 4.33,
+      "communication": 3.83,
+      "location": 4.33,
+      "value": 3.83,
+      "guestSatisfaction": 3.83,
+      "reviewsCount": 6
+    },
+    "location": "Exampleville",
+    "host": {
+      "id": "1000",
+      "name": "Jane Example",
+      "profileImage": "https://example.com/host.jpg",
+      "isSuperHost": false,
+      "isVerified": true,
+      "highlights": [],
+      "about": "",
+      "ratingCount": 10908,
+      "ratingAverage": 4.35,
+      "hostDetails": [
+        "Response rate: 100%",
+        "Responds within an hour"
+      ],
+      "timeAsHost": {
+        "months": 4,
+        "years": 7
+      }
+    },
+    "coHosts": [],
+    "locationSubtitle": "Exampleville, Texas, United States",
+    "title": "Jane Example | Chic 1BD, Gym, Pool",
+    "description": "Make yourself at home in Exampleville’s mature Example neighborhood at Example Flats. Ideal for short getaways, extended stays, and everything in between, our fully-furnished apartments feature full kitchens with quartz countertops, and private patios. Enjoy two sparkling pools, a 24-hour fitness center and a bark park.…",
+    "subDescription": {
+      "title": "Entire rental unit in Exampleville, Texas",
+      "items": [
+        "2 guests",
+        "1 bedroom",
+        "1 bed",
+        "1 bath"
+      ]
+    },
+    "isAvailable": true,
+    "price": {
+      "label": "$3,569 monthly, originally $5,196",
+      "qualifier": "monthly",
+      "price": "$3,569",
+      "originalPrice": "$5,196",
+      "discountedPrice": "$3,569",
+      "breakDown": {
+        "basePrice": {
+          "description": "Average monthly price",
+          "price": "$5,196.00"
+        },
+        "basePriceBreakdown": [],
+        "serviceFee": null,
+        "taxes": null,
+        "total": {
+          "price": "$5,196",
+          "description": "Total (calculated price, may vary)"
+        },
+        "totalBeforeTaxes": null,
+        "cleaningFee": null,
+        "specialOffer": null,
+        "earlyBirdDiscount": null
+      }
+    },
+    "images": [
+      {
+        "caption": "Listing image 1",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/0000000000000000000000000000000a.jpeg",
+        "orientation": "LANDSCAPE"
+      },
+      {
+        "caption": "Listing image 2",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/0000000000000000000000000000000b.jpeg",
+        "orientation": "LANDSCAPE"
+      },
+      {
+        "caption": "Listing image 3",
+        "imageUrl": "https://a0.muscache.com/im/pictures/hosting/Hosting-0/original/0000000000000000000000000000000c.jpeg",
+        "orientation": "LANDSCAPE"
+      }
+    ],
+    "breadcrumbs": [
+      {
+        "linkRoute": "/",
+        "linkText": "Airbnb",
+        "searchText": "Airbnb"
+      },
+      {
+        "linkRoute": "/united-states/stays",
+        "linkText": "United States",
+        "searchText": "United States"
+      },
+      {
+        "linkRoute": "/texas-united-states/stays",
+        "linkText": "Texas",
+        "searchText": "Texas"
+      },
+      {
+        "linkRoute": "/example-county-xx/stays",
+        "linkText": "Example County",
+        "searchText": "Example County"
+      },
+      {
+        "linkRoute": "/exampleville-xx/stays",
+        "linkText": "Exampleville",
+        "searchText": "Exampleville"
+      }
+    ],
+    "highlights": [
+      {
+        "title": "In Exampleville's Example neighborhood",
+        "subtitle": "In Exampleville's Example neighborhood, near the town center and minutes from downtown dining and shops",
+        "icon": "",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Full kitchen with quartz countertops",
+        "subtitle": "A fully equipped kitchen with quartz countertops, stainless steel appliances, and a dishwasher",
+        "icon": "SYSTEM_FORK_SPOON",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      },
+      {
+        "title": "Workspace, laundry, and private patio",
+        "subtitle": "The apartment includes a workspace, in-unit washer and dryer, and a private patio",
+        "icon": "SYSTEM_WORKSPACE",
+        "type": "LISTING_CUSTOM_OFFLINE_GENERATED"
+      }
+    ],
+    "houseRules": {
+      "general": []
+    },
+    "amenities": [
+      {
+        "title": "Bathroom",
+        "values": [
+          {
+            "title": "Hair dryer",
+            "subtitle": "",
+            "icon": "SYSTEM_HAIRDRYER",
+            "available": true
+          },
+          {
+            "title": "Hot water",
+            "subtitle": "",
+            "icon": "SYSTEM_HOT_WATER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Bedroom and laundry",
+        "values": [
+          {
+            "title": "Washer",
+            "subtitle": "",
+            "icon": "SYSTEM_WASHER",
+            "available": true
+          },
+          {
+            "title": "Dryer",
+            "subtitle": "",
+            "icon": "SYSTEM_DRYER",
+            "available": true
+          },
+          {
+            "title": "Essentials",
+            "subtitle": "Towels, bed sheets, soap, and toilet paper",
+            "icon": "SYSTEM_TOILETRIES",
+            "available": true
+          },
+          {
+            "title": "Hangers",
+            "subtitle": "",
+            "icon": "SYSTEM_HANGERS",
+            "available": true
+          },
+          {
+            "title": "Bed linens",
+            "subtitle": "",
+            "icon": "SYSTEM_BLANKETS",
+            "available": true
+          },
+          {
+            "title": "Iron",
+            "subtitle": "",
+            "icon": "SYSTEM_IRON",
+            "available": true
+          },
+          {
+            "title": "Clothing storage",
+            "subtitle": "",
+            "icon": "SYSTEM_WARDROBE",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Entertainment",
+        "values": [
+          {
+            "title": "TV",
+            "subtitle": "",
+            "icon": "SYSTEM_TV",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Heating and cooling",
+        "values": [
+          {
+            "title": "Air conditioning",
+            "subtitle": "",
+            "icon": "SYSTEM_SNOWFLAKE",
+            "available": true
+          },
+          {
+            "title": "Heating",
+            "subtitle": "",
+            "icon": "SYSTEM_THERMOMETER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Home safety",
+        "values": [
+          {
+            "title": "Smoke alarm",
+            "subtitle": "",
+            "icon": "SYSTEM_DETECTOR_SMOKE",
+            "available": true
+          },
+          {
+            "title": "Carbon monoxide alarm",
+            "subtitle": "",
+            "icon": "SYSTEM_DETECTOR_CO",
+            "available": true
+          },
+          {
+            "title": "Fire extinguisher",
+            "subtitle": "",
+            "icon": "SYSTEM_FIRE_EXTINGUISHER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Internet and office",
+        "values": [
+          {
+            "title": "Wifi",
+            "subtitle": "",
+            "icon": "SYSTEM_WI_FI",
+            "available": true
+          },
+          {
+            "title": "Dedicated workspace",
+            "subtitle": "",
+            "icon": "SYSTEM_WORKSPACE",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Kitchen and dining",
+        "values": [
+          {
+            "title": "Kitchen",
+            "subtitle": "Space where guests can cook their own meals",
+            "icon": "SYSTEM_COOKING_BASICS",
+            "available": true
+          },
+          {
+            "title": "Refrigerator",
+            "subtitle": "",
+            "icon": "SYSTEM_REFRIGERATOR",
+            "available": true
+          },
+          {
+            "title": "Microwave",
+            "subtitle": "",
+            "icon": "SYSTEM_MICROWAVE",
+            "available": true
+          },
+          {
+            "title": "Cooking basics",
+            "subtitle": "Pots and pans, oil, salt and pepper",
+            "icon": "SYSTEM_COOKING_BASICS",
+            "available": true
+          },
+          {
+            "title": "Dishes and silverware",
+            "subtitle": "Plates, bowls, cups, cutlery, and other utensils",
+            "icon": "SYSTEM_DISHES_AND_SILVERWARE",
+            "available": true
+          },
+          {
+            "title": "Dishwasher",
+            "subtitle": "",
+            "icon": "SYSTEM_DISHWASHER",
+            "available": true
+          },
+          {
+            "title": "Stove",
+            "subtitle": "",
+            "icon": "SYSTEM_STOVE",
+            "available": true
+          },
+          {
+            "title": "Oven",
+            "subtitle": "",
+            "icon": "SYSTEM_OVEN",
+            "available": true
+          },
+          {
+            "title": "Hot water kettle",
+            "subtitle": "",
+            "icon": "SYSTEM_WATER_KETTLE",
+            "available": true
+          },
+          {
+            "title": "Coffee maker",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          },
+          {
+            "title": "Wine glasses",
+            "subtitle": "",
+            "icon": "SYSTEM_MAPS_BAR",
+            "available": true
+          },
+          {
+            "title": "Toaster",
+            "subtitle": "",
+            "icon": "SYSTEM_TOASTER",
+            "available": true
+          },
+          {
+            "title": "Baking sheet",
+            "subtitle": "",
+            "icon": "SYSTEM_BAKING_SHEET",
+            "available": true
+          },
+          {
+            "title": "Coffee",
+            "subtitle": "",
+            "icon": "SYSTEM_COFFEE_MAKER",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Location features",
+        "values": [
+          {
+            "title": "Private entrance",
+            "subtitle": "Separate street or building entrance",
+            "icon": "SYSTEM_DOOR",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Outdoor",
+        "values": [
+          {
+            "title": "Patio or balcony",
+            "subtitle": "",
+            "icon": "SYSTEM_PATIO_BALCONY",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Services",
+        "values": [
+          {
+            "title": "Pets allowed",
+            "subtitle": "Assistance animals are always allowed",
+            "icon": "SYSTEM_PETS",
+            "available": true
+          },
+          {
+            "title": "Host greets you",
+            "subtitle": "",
+            "icon": "SYSTEM_HOST_OWNERS",
+            "available": true
+          }
+        ]
+      },
+      {
+        "title": "Not included",
+        "values": [
+          {
+            "title": "Shampoo",
+            "subtitle": "",
+            "icon": "SYSTEM_NO_SHAMPOO",
+            "available": false
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-10-07T16:10:30.218Z",
+    "language": "en",
+    "checkIn": "2026-10-07",
+    "checkOut": "2026-11-07"
+  }
+]

@@ -97,6 +97,33 @@ def test_street_addresses_are_replaced(address: str) -> None:
     assert clean(f"at {address} near") == f"at {ADDRESS_PLACEHOLDER} near"
 
 
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (
+            "/homedetails/70-Rainey-St-2605-Exampleville-XX-00001/1_zpid/",
+            "/homedetails/123-Example-St-2605-Exampleville-XX-00001/1_zpid/",
+        ),
+        (
+            "/homedetails/2250-Ridgepoint-Dr-APT-1303-Exampleville-XX-00001/2_zpid/",
+            "/homedetails/123-Example-St-APT-1303-Exampleville-XX-00001/2_zpid/",
+        ),
+        ("/home/410-E-5th-Street?x=1", "/home/123-Example-St?x=1"),
+        ("/home/1500-E-Old-Mill-Ln/", "/home/123-Example-St/"),
+    ],
+)
+def test_street_addresses_in_url_slugs_are_replaced(path: str, expected: str) -> None:
+    url = f"https://www.example.com{path}"
+
+    assert clean(url) == f"https://www.example.com{expected}"
+
+
+def test_slugs_that_are_not_addresses_are_kept() -> None:
+    url = "https://www.example.com/b/2-Bedroom-Apartments/77-units/"
+
+    assert clean(url) == url
+
+
 def test_redacted_terms_are_replaced_whole_word_any_case() -> None:
     text = "Ask for ROSALIND or rosalind.  Rosalinda is someone else."
 

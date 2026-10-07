@@ -41,7 +41,7 @@ log = get_logger(__name__)
 class Airbnb(ApifyAdapter):
     name: ClassVar[str] = "airbnb"
     display_name: ClassVar[str] = "Airbnb"
-    actor: ClassVar[str] = ACTOR
+    job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:

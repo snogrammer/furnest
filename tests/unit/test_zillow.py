@@ -181,6 +181,65 @@ def test_a_relative_building_url_is_made_absolute() -> None:
     assert (listing.price, listing.title) == (None, "2 bd")
 
 
+def test_a_unit_group_for_rooms_is_a_room() -> None:
+    building = {
+        "_type": "propertyGroup",
+        "zpid": 7,
+        "url": "https://www.zillow.com/b/7/",
+        "unitsGroup": [{"bedrooms": 1, "minPrice": 900, "isRoomForRent": True}],
+    }
+
+    (listing,) = parse_item(building, today=TODAY)
+
+    assert listing.property_type is PropertyType.ROOM
+
+
+# --- parse_item: a live run ----------------------------------------------------------
+
+
+def test_a_live_run_maps_as_recorded() -> None:
+    listings = [
+        listing
+        for item in fixture("dataset_live.json")
+        for listing in parse_item(item, today=TODAY)
+    ]
+
+    summary = [
+        (
+            listing.source_id,
+            listing.title,
+            listing.price.amount if listing.price else None,
+            listing.beds,
+            listing.property_type,
+            listing.available_from,
+            listing.min_lease_months,
+        )
+        for listing in listings
+    ]
+    apartment, condo = PropertyType.APARTMENT, PropertyType.CONDO
+    oct13 = date(2026, 10, 13)
+    assert summary == [
+        ("100000001", "123 Example St", usd(9021), 4, apartment, date(2027, 1, 2), 1),
+        ("100000002-1bd", "Example Heights", usd(935), 1, apartment, None, None),
+        ("100000002-2bd", "Example Heights", usd(1025), 2, apartment, None, None),
+        ("100000002-3bd", "Example Heights", usd(1325), 3, apartment, None, None),
+        ("100000003-1bd", "Example Point Apartments", usd(811), 1, apartment, oct13, 12),
+        ("100000003-2bd", "Example Point Apartments", usd(1061), 2, apartment, oct13, 12),
+        ("100000004", "123 Example St", usd(3250), 1, condo, date(2026, 10, 21), 12),
+    ]
+    house = listings[0]
+    assert (house.baths, house.sqft, house.address.city, house.address.region) == (
+        3.0,
+        2669,
+        "Exampleville",
+        "TX",
+    )
+    assert len(house.images) == 3
+    assert {"dishwasher", "fitness center"} <= house.amenities
+    assert all(listing.contact.platform_only for listing in listings)
+    assert not any("attributionInfo" in listing.raw for listing in listings)
+
+
 # --- parse_item: field details -------------------------------------------------------
 
 
@@ -207,6 +266,8 @@ def test_prices(price: object, expected: Price | None) -> None:
         ({"homeType": "SINGLE_FAMILY"}, PropertyType.SINGLE_FAMILY),
         ({"propertyType": "multiFamily", "homeType": "APARTMENT"}, PropertyType.APARTMENT),
         ({"isRoomForRent": True, "propertyType": "singleFamily"}, PropertyType.ROOM),
+        ({"rental": {"isRoomForRent": True}, "propertyType": "apartment"}, PropertyType.ROOM),
+        ({"rental": {"isRoomForRent": False}, "propertyType": "apartment"}, PropertyType.APARTMENT),
         ({"propertyType": "lot"}, PropertyType.OTHER),
         ({}, PropertyType.OTHER),
     ],
@@ -223,6 +284,9 @@ def test_property_types(item: dict[str, Any], expected: PropertyType) -> None:
         ({"availabilityDate": "Dec 1, 2026"}, date(2026, 12, 1)),
         ({"availabilityDate": "Now"}, TODAY),
         ({"availabilityDate": "Soon"}, None),
+        # resoFacts as live runs send it: epoch milliseconds, midnight UTC.
+        ({"resoFacts": {"availabilityDate": 1798848000000}}, date(2027, 1, 2)),
+        ({"resoFacts": {"availabilityDate": 10**20}}, None),
     ],
 )
 def test_available_dates(details: dict[str, Any], expected: date | None) -> None:

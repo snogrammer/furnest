@@ -43,7 +43,7 @@ log = get_logger(__name__)
 class Zillow(ApifyAdapter):
     name: ClassVar[str] = "zillow"
     display_name: ClassVar[str] = "Zillow"
-    actor: ClassVar[str] = ACTOR
+    job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:

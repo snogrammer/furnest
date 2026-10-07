@@ -267,6 +267,64 @@ def test_a_place_without_commas_is_the_city() -> None:
 # --- Criteria → actor input -----------------------------------------------------------
 
 
+def test_the_country_comes_from_the_location_subtitle() -> None:
+    item = minimal(
+        locationSubtitle="Exampleville, Texas, United States",
+        subDescription={"title": "Entire home in Exampleville, Texas"},
+    )
+
+    assert (one(item).address.city, one(item).address.region) == ("Exampleville", "Texas")
+
+
+def test_a_live_run_maps_as_recorded() -> None:
+    listings = [one(item) for item in fixture("dataset_live.json")]
+
+    summary = [
+        (
+            listing.source_id,
+            listing.price,
+            listing.beds,
+            listing.baths,
+            listing.property_type,
+            listing.address.region,
+        )
+        for listing in listings
+    ]
+    monthly = RentPeriod.MONTHLY
+    assert summary == [
+        (
+            "900000001",
+            Price(amount=usd(6883), period=monthly),
+            4,
+            2.5,
+            PropertyType.SINGLE_FAMILY,
+            "Texas",
+        ),
+        (
+            "900000002",
+            Price(amount=usd(1028), period=monthly),
+            None,
+            None,
+            PropertyType.ROOM,
+            "Texas",
+        ),
+        (
+            "900000003",
+            Price(amount=usd(3569), period=monthly),
+            1,
+            1.0,
+            PropertyType.APARTMENT,
+            "Texas",
+        ),
+    ]
+    home = listings[0]
+    assert home.title == "Executive 4BR King and Queens 2 living spaces"
+    assert home.available_from == WINDOW.check_in
+    assert len(home.images) == 3
+    assert {"kitchen", "long term stays allowed"} <= home.amenities
+    assert not any({"host", "coHosts"} & listing.raw.keys() for listing in listings)
+
+
 def test_input_asks_for_a_month_from_the_earliest_move_in_and_supported_filters() -> None:
     criteria = Criteria(
         price_min=usd(1000),
