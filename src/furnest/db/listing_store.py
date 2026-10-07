@@ -181,12 +181,29 @@ def _write_content(row: Listing, listing: NormalizedListing, digest: str) -> Non
 
 
 def _write_images(session: Session, listing_id: int, listing: NormalizedListing) -> None:
+    """Replace the listing's photo rows, keeping the hash state of URLs it still has."""
+    kept = {
+        row.url: (row.phash, row.hash_error, row.hashed_at)
+        for row in session.scalars(
+            select(ListingImage).where(ListingImage.listing_id == listing_id)
+        )
+    }
     session.execute(delete(ListingImage).where(ListingImage.listing_id == listing_id))
     urls = list(dict.fromkeys(str(url) for url in listing.images))
-    session.add_all(
-        ListingImage(listing_id=listing_id, position=position, url=url)
-        for position, url in enumerate(urls)
-    )
+    rows = []
+    for position, url in enumerate(urls):
+        phash, error, hashed_at = kept.get(url, (None, None, None))
+        rows.append(
+            ListingImage(
+                listing_id=listing_id,
+                position=position,
+                url=url,
+                phash=phash,
+                hash_error=error,
+                hashed_at=hashed_at,
+            )
+        )
+    session.add_all(rows)
 
 
 def _record_price(session: Session, listing_id: int, price: Price | None, at: datetime) -> bool:

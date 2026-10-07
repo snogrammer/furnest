@@ -8,6 +8,11 @@ as the adapter produced it. The other data columns are copies kept for querying.
 listings under a property (``furnest.db.models.property``); it is NULL until the
 listing gets one, and goes back to NULL if the property is deleted.
 
+A ``listing_images`` row carries the photo's perceptual hash once the worker has
+fetched it (``furnest.pipeline.images``). Hashes are shared by URL: every row with
+the same URL gets the same hash, and rewriting a listing's photos keeps the hashes
+of the URLs it still has.
+
 ``missed_runs`` counts successful runs of the source that didn't return the
 listing, and ``removed_at`` is set once it has been gone long enough. Seeing it
 again clears both.
@@ -61,7 +66,12 @@ class ListingImage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id", ondelete="CASCADE"))
     position: Mapped[int]
-    url: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text, index=True)
+    # 64-bit perceptual hash as 16 hex digits, or why the photo couldn't be hashed.
+    # Both NULL means not tried yet; ``hashed_at`` is when either was set.
+    phash: Mapped[str | None] = mapped_column(String(16))
+    hash_error: Mapped[str | None] = mapped_column(String(255))
+    hashed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
 
 class PriceHistory(Base):

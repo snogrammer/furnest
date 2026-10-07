@@ -357,6 +357,29 @@ class ReverseImageSettings(_Group):
     api_key: SecretStr | None = None
 
 
+class ImageSettings(_Group):
+    """Listing photo fetching and perceptual hashing (``furnest.dedup.phash``).
+
+    Photos are downloaded into memory, hashed and thrown away; nothing is stored but
+    the hash. Requests use the ``SOURCES_`` user agent, proxy and robots.txt setting.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="IMAGES_")
+
+    enabled: bool = True
+    # How often the worker hashes photos that don't have a hash yet.
+    interval_minutes: PositiveInt = 10
+    # Photo URLs per run, and only the first ``per_listing`` photos of each listing.
+    batch_size: PositiveInt = 50
+    per_listing: PositiveInt = 10
+    # A larger response, or a decoded image with more pixels, is rejected unread.
+    max_bytes: PositiveInt = 10_000_000
+    max_pixels: PositiveInt = 40_000_000
+    timeout_seconds: PositiveInt = 15
+    # Per image host, enforced by a token bucket.
+    requests_per_minute: PositiveFloat = 30.0
+
+
 # Adapter names: lower-case identifiers, also used as keys in SOURCES_ADAPTERS.
 ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
@@ -444,6 +467,7 @@ class Settings(BaseModel):
     llm: LlmSettings = Field(default_factory=LlmSettings)
     geocoding: GeocodingSettings = Field(default_factory=GeocodingSettings)
     reverse_image: ReverseImageSettings = Field(default_factory=ReverseImageSettings)
+    images: ImageSettings = Field(default_factory=ImageSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 

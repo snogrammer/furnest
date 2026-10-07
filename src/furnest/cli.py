@@ -102,6 +102,7 @@ def worker() -> None:
     from furnest.email.imap import schedule_imap_poll
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.notify.digest import schedule_digest
+    from furnest.pipeline.images import schedule_image_hashing
     from furnest.pipeline.ingest import ListingIngestor
     from furnest.pipeline.properties import PropertyPipeline, schedule_unsnooze
     from furnest.pipeline.schedule import register_run_now, schedule_sources
@@ -143,6 +144,7 @@ def worker() -> None:
         schedule_unsnooze(worker, pipeline, settings.pipeline)
         schedule_digest(worker, factory, settings)
         schedule_imap_poll(worker, factory, settings)
+        schedule_image_hashing(worker, factory, settings)
         alert_after = settings.discord.alert_after_failures
         try:
             schedule_sources(
