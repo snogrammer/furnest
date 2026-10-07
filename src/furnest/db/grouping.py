@@ -26,20 +26,29 @@ ingestion.
    merged with its buttons off, unless the survivor has no message, in which case
    the survivor takes it over.
 5. A survivor left ``unavailable`` with an active listing is restored, as if relisted.
+
+A person can correct it from the dashboard (``SqlPropertyStore.merge_properties`` and
+``split_listing``). A manual merge is never undone here: grouping only merges. A
+split is remembered as :class:`~furnest.db.models.ListingSeparation` pairs, and
+grouping never puts two separated listings under one property: a candidate holding
+a listing separated from the one being grouped is skipped, and so is any candidate
+separated from the group taken so far (best match first), so a new listing matching
+both halves of a split joins only one.
 """
 
 from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.orm import Session
 
-from furnest.db.models import Email, Listing, ListingImage, Note, Property
+from furnest.db.models import Email, Listing, ListingImage, ListingSeparation, Note, Property
 from furnest.dedup.grouping import (
     AddressKey,
     GroupingThresholds,
@@ -91,6 +100,76 @@ def merged_ids(session: Session, property_id: int) -> list[int]:
         )
         found.extend(children)
         frontier = children
+    return found
+
+
+def separations(session: Session, listing_ids: Collection[int]) -> set[frozenset[int]]:
+    """The separated pairs among ``listing_ids``."""
+    ids = list(listing_ids)
+    if len(ids) < 2:
+        return set()
+    rows = session.execute(
+        select(ListingSeparation.listing_id, ListingSeparation.other_listing_id).where(
+            ListingSeparation.listing_id.in_(ids), ListingSeparation.other_listing_id.in_(ids)
+        )
+    )
+    return {frozenset(pair) for pair in rows}
+
+
+def separate(
+    session: Session,
+    listing_id: int,
+    others: Collection[int],
+    *,
+    actor: Actor,
+    at: datetime,
+    detail: str | None = None,
+) -> None:
+    """Record that ``listing_id`` is a different unit from each of ``others``."""
+    known = separations(session, [listing_id, *others])
+    for other in others:
+        if other == listing_id or frozenset((listing_id, other)) in known:
+            continue
+        low, high = sorted((listing_id, other))
+        session.add(
+            ListingSeparation(
+                listing_id=low,
+                other_listing_id=high,
+                actor=actor,
+                actor_detail=detail,
+                created_at=at,
+            )
+        )
+
+
+def unseparate(session: Session, listing_ids: Collection[int], others: Collection[int]) -> None:
+    """Forget every separation between a listing of ``listing_ids`` and one of ``others``."""
+    ids, other_ids = list(listing_ids), list(others)
+    session.execute(
+        delete(ListingSeparation).where(
+            or_(
+                and_(
+                    ListingSeparation.listing_id.in_(ids),
+                    ListingSeparation.other_listing_id.in_(other_ids),
+                ),
+                and_(
+                    ListingSeparation.listing_id.in_(other_ids),
+                    ListingSeparation.other_listing_id.in_(ids),
+                ),
+            )
+        )
+    )
+
+
+def listing_ids_of(session: Session, property_ids: Collection[int]) -> dict[int, set[int]]:
+    """Each property's listing ids."""
+    found: dict[int, set[int]] = {property_id: set() for property_id in property_ids}
+    rows = session.execute(
+        select(Listing.property_id, Listing.id).where(Listing.property_id.in_(list(property_ids)))
+    )
+    for property_id, listing_id in rows:
+        if property_id is not None:
+            found[property_id].add(listing_id)
     return found
 
 
@@ -208,6 +287,38 @@ def _survivor(session: Session, rows: list[Property]) -> Property:
     return max(rows, key=key)
 
 
+def _compatible(
+    session: Session,
+    listing_id: int,
+    own: Property | None,
+    candidates: list[Property],
+    matches: Mapping[int, PairScore],
+) -> list[Property]:
+    """The matching candidates that can join ``own`` (and the listing) without putting
+    two separated listings together, best match first."""
+    matching = sorted(
+        (row for row in candidates if row.id in matches),
+        key=lambda row: matches[row.id].score,
+        reverse=True,
+    )
+    if not matching:
+        return []
+    members = listing_ids_of(
+        session, [row.id for row in matching] + ([] if own is None else [own.id])
+    )
+    taken = {listing_id} | (set() if own is None else members[own.id])
+    apart = separations(session, taken.union(*(members[row.id] for row in matching)))
+    if not apart:
+        return matching
+    group = []
+    for row in matching:
+        if any(frozenset((a, b)) in apart for a in taken for b in members[row.id]):
+            continue
+        group.append(row)
+        taken |= members[row.id]
+    return group
+
+
 def group_listing(
     session: Session,
     listing_row: Listing,
@@ -232,9 +343,9 @@ def group_listing(
         limit=max_candidates,
     )
     matches = _best_matches(session, listing_row, candidates, thresholds)
-    if not matches:
+    group = _compatible(session, listing_row.id, own, candidates, matches)
+    if not group:
         return GroupingOutcome(property=own)
-    group = [row for row in candidates if row.id in matches]
     if own is not None:
         group.append(own)
     survivor = _survivor(session, group)
@@ -243,7 +354,15 @@ def group_listing(
         if row is survivor:
             continue
         pair = matches.get(row.id) or matches[survivor.id]
-        merge(session, survivor, row, at=at, reason=pair, listing_id=listing_row.id)
+        merge(
+            session,
+            survivor,
+            row,
+            at=at,
+            actor=Actor.SYSTEM,
+            payload=pair.as_payload(),
+            listing_id=listing_row.id,
+        )
         merged.append(row.id)
     if own is None:
         listing_row.property_id = survivor.id
@@ -255,7 +374,7 @@ def group_listing(
             detail="grouped",
             payload={"listing_id": listing_row.id, **matches[survivor.id].as_payload()},
         )
-    _after_grouping(session, survivor, at=at, merged=bool(merged))
+    after_grouping(session, survivor, at=at, merged=bool(merged))
     return GroupingOutcome(property=survivor, merged=tuple(merged))
 
 
@@ -265,10 +384,16 @@ def merge(
     absorbed: Property,
     *,
     at: datetime,
-    reason: PairScore,
-    listing_id: int,
+    actor: Actor,
+    payload: Mapping[str, Any],
+    listing_id: int | None = None,
+    detail: str = "merged",
 ) -> None:
-    """Merge ``absorbed`` into ``survivor``: see the module docstring."""
+    """Merge ``absorbed`` into ``survivor``: see the module docstring.
+
+    ``payload`` (why) goes into both audit events, with ``listing_id`` (the listing
+    that brought them together) when there is one.
+    """
     from furnest.db.property_store import _audit_in_place
 
     for model in (Listing, Note, Email):
@@ -299,30 +424,30 @@ def merge(
         absorbed.discord_message_id = None
     survivor.updated_at = at
     session.flush()
-    payload = {"listing_id": listing_id, **reason.as_payload()}
+    why = dict(payload) if listing_id is None else {"listing_id": listing_id, **payload}
     _audit_in_place(
         session,
         absorbed,
-        actor=Actor.SYSTEM,
+        actor=actor,
         at=at,
-        detail="merged",
-        payload={"merged_into": survivor.id, **payload},
+        detail=detail,
+        payload={"merged_into": survivor.id, **why},
     )
     _audit_in_place(
         session,
         survivor,
-        actor=Actor.SYSTEM,
+        actor=actor,
         at=at,
-        detail="merged",
+        detail=detail,
         payload={
             "merged_from": absorbed.id,
             "merged_status": absorbed.status.value,
-            **payload,
+            **why,
         },
     )
 
 
-def _after_grouping(session: Session, survivor: Property, *, at: datetime, merged: bool) -> None:
+def after_grouping(session: Session, survivor: Property, *, at: datetime, merged: bool) -> None:
     """Bring the survivor in step with the listings it now has."""
     from furnest.db.property_store import (
         _apply_transition,
@@ -363,10 +488,15 @@ def audit_property_ids(session: Session, property_id: int) -> list[int]:
 
 __all__ = [
     "GroupingOutcome",
+    "after_grouping",
     "audit_property_ids",
     "group_listing",
+    "listing_ids_of",
     "merge",
     "merged_ids",
     "resolve",
+    "separate",
+    "separations",
     "set_address_keys",
+    "unseparate",
 ]

@@ -197,11 +197,15 @@ def audit_label(entry: AuditEntry, property_id: int | None = None) -> str:
 
 def _audit_text(entry: AuditEntry) -> str:
     if entry.from_status is None:
-        return f"Created as {status_label(entry.to_status)}"
+        label = f"Created as {status_label(entry.to_status)}"
+        split_from = (entry.payload or {}).get("split_from")
+        return label if split_from is None else f"{label} (split from #{split_from})"
     if entry.from_status == entry.to_status:
         payload = entry.payload or {}
         if entry.actor_detail == "grouped":
             return f"Listing #{payload.get('listing_id')} grouped here"
+        if entry.actor_detail == "split" and "split_into" in payload:
+            return f"Listing #{payload.get('listing_id')} split off into #{payload['split_into']}"
         if entry.actor_detail == "merged" and "merged_into" in payload:
             return f"Merged into #{payload['merged_into']}"
         if entry.actor_detail == "merged" and "merged_from" in payload:

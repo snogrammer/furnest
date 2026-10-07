@@ -18,6 +18,10 @@ other: its listings, notes and emails move to the survivor and ``merged_into_id`
 points there. The merged row stays, with its own audit trail, so old links and
 Discord messages still resolve.
 
+A :class:`ListingSeparation` records that a person split two listings apart: they
+are different units, and grouping never puts them under one property again (until a
+person merges their properties by hand, which deletes the separation).
+
 A :class:`Note` is free-form markdown someone wrote about a property. Deny reasons
 are notes too; the deny's audit event names its note in ``payload["note_id"]``.
 """
@@ -25,7 +29,7 @@ are notes too; the deny's audit event names its note in ``payload["note_id"]``.
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Enum, Float, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, CheckConstraint, Enum, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from furnest.db.base import Base, UTCDateTime, utcnow
@@ -115,5 +119,26 @@ class Note(Base):
     body_md: Mapped[str] = mapped_column(Text)
     actor: Mapped[Actor] = mapped_column(_actor_enum("note_actor"))
     # Free text about the actor, such as a Discord user.
+    actor_detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class ListingSeparation(Base):
+    """Two listings a person said are different units (a split); see the module docstring."""
+
+    __tablename__ = "listing_separations"
+    __table_args__ = (
+        # One row per pair, stored lowest id first.
+        CheckConstraint("listing_id < other_listing_id", name="ordered"),
+        Index("ix_listing_separations_other_listing_id", "other_listing_id"),
+    )
+
+    listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), primary_key=True
+    )
+    other_listing_id: Mapped[int] = mapped_column(
+        ForeignKey("listings.id", ondelete="CASCADE"), primary_key=True
+    )
+    actor: Mapped[Actor] = mapped_column(_actor_enum("listing_separation_actor"))
     actor_detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -160,7 +160,9 @@ def default_registry(
     pipeline = pipeline or properties.PropertyPipeline(session_factory, grouping=settings.grouping)
     registry = JobRegistry()
     listings = SqlListingStore(session_factory)
-    rerun = RerunCriteria(session_factory, listings=listings.active, record=pipeline.record)
+    rerun = RerunCriteria(
+        session_factory, listings=listings.active, by_id=listings.many, record=pipeline.record
+    )
     registry.register(RERUN_CRITERIA, rerun)
     registry.register(
         properties.NOTIFY,

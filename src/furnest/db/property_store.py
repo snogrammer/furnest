@@ -50,6 +50,13 @@ free-form markdown about a property. :meth:`SqlPropertyStore.deny` denies a
 property and, given a reason, saves it as a note in the same transaction; the
 audit event points at the note with ``payload["note_id"]``.
 
+Grouping mistakes are corrected by hand. :meth:`SqlPropertyStore.merge_properties`
+merges one property into another, which keeps its status, and
+:meth:`SqlPropertyStore.split_listing` moves a listing out to a new property in
+``new``. Both are audited on both properties. A split is remembered so grouping
+never undoes it (:mod:`furnest.db.grouping`), and the listings involved are scored
+again by a ``rerun_criteria`` job, since each property shows its best listing's match.
+
 A snooze isn't a status change, but who snoozed matters, so it is still written to
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
 
@@ -79,7 +86,17 @@ from sqlalchemy import ColumnElement, ScalarSelect, Select, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import GroupingSettings
-from furnest.db.grouping import audit_property_ids, group_listing, resolve, set_address_keys
+from furnest.db.grouping import (
+    after_grouping,
+    audit_property_ids,
+    group_listing,
+    listing_ids_of,
+    merge,
+    resolve,
+    separate,
+    set_address_keys,
+    unseparate,
+)
 from furnest.db.listing_store import PricePoint, price_points, stored_listing
 from furnest.db.models import AuditEvent, CriteriaVersion, JobStatus, Listing, Note, Property
 from furnest.db.session import session_scope
@@ -95,6 +112,7 @@ from furnest.domain import (
 )
 from furnest.domain.status import TRANSITIONS, check_transition
 from furnest.matching import MatchResult
+from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.worker import queue
 
 # The job that tells the user about a suggested property: furnest.notify.post posts it.
@@ -129,6 +147,10 @@ class ListingNotFoundError(LookupError):
     def __init__(self, listing_id: int) -> None:
         super().__init__(f"no listing with id {listing_id}")
         self.listing_id = listing_id
+
+
+class GroupingError(ValueError):
+    """A manual merge or split that can't be done; the message says why."""
 
 
 class SnoozeError(ValueError):
@@ -570,6 +592,78 @@ def _audit_in_place(
     _sync_message(session, row)
 
 
+def _mark_gone_in(session: Session, row: Property, *, at: datetime) -> bool:
+    """Move ``row`` to ``unavailable`` if none of its listings is active and the state
+    machine allows it; whether it moved."""
+    if PropertyStatus.UNAVAILABLE not in TRANSITIONS[row.status]:
+        return False
+    active = session.scalars(
+        select(Listing.id)
+        .where(Listing.property_id == row.id, Listing.removed_at.is_(None))
+        .limit(1)
+    ).first()
+    if active is not None:
+        return False
+    _apply_transition(
+        session,
+        row,
+        PropertyStatus.UNAVAILABLE,
+        actor=Actor.SYSTEM,
+        at=at,
+        detail="listings removed",
+    )
+    return True
+
+
+def _new_property(
+    session: Session,
+    listing_row: Listing,
+    parsed: ParsedAddress | None,
+    *,
+    actor: Actor,
+    at: datetime,
+    detail: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> Property:
+    """A new property in ``new`` for ``listing_row``, with its creation audit event."""
+    row = Property(
+        status=PropertyStatus.NEW,
+        address=None if parsed is None else parsed.canonical,
+        lat=listing_row.lat,
+        lng=listing_row.lng,
+        manual_contact_required=_manual_contact(listing_row),
+        status_changed_at=at,
+        created_at=at,
+        updated_at=at,
+    )
+    session.add(row)
+    session.flush()
+    listing_row.property_id = row.id
+    session.add(
+        AuditEvent(
+            property_id=row.id,
+            from_status=None,
+            to_status=PropertyStatus.NEW,
+            actor=actor,
+            actor_detail=detail,
+            payload={"listing_id": listing_row.id, **(payload or {})},
+            created_at=at,
+        )
+    )
+    return row
+
+
+def _enqueue_rescore(session: Session, listing_ids: list[int]) -> None:
+    """Queue a ``rerun_criteria`` job scoring ``listing_ids`` against the active criteria."""
+    version = session.scalars(
+        select(CriteriaVersion.version).where(CriteriaVersion.is_active)
+    ).first()
+    if version is not None and listing_ids:
+        queue.enqueue(
+            session, RERUN_CRITERIA, {"criteria_version": version, "listing_ids": listing_ids}
+        )
+
+
 def transition_in(
     session: Session,
     property_id: int,
@@ -783,27 +877,11 @@ class SqlPropertyStore:
         already unavailable) is left alone.
         """
         with session_scope(self._session_factory) as session:
-            moved = []
-            for row in self._properties_of(session, listing_ids):
-                if PropertyStatus.UNAVAILABLE not in TRANSITIONS[row.status]:
-                    continue
-                active = session.scalars(
-                    select(Listing.id)
-                    .where(Listing.property_id == row.id, Listing.removed_at.is_(None))
-                    .limit(1)
-                ).first()
-                if active is not None:
-                    continue
-                _apply_transition(
-                    session,
-                    row,
-                    PropertyStatus.UNAVAILABLE,
-                    actor=Actor.SYSTEM,
-                    at=at,
-                    detail="listings removed",
-                )
-                moved.append(row.id)
-            return moved
+            return [
+                row.id
+                for row in self._properties_of(session, listing_ids)
+                if _mark_gone_in(session, row, at=at)
+            ]
 
     def restore_relisted(self, listing_ids: Iterable[int], *, at: datetime) -> list[int]:
         """Move the unavailable properties of ``listing_ids`` back to the state they
@@ -1036,6 +1114,111 @@ class SqlPropertyStore:
                 merged.extend(outcome.merged)
         return merged
 
+    def merge_properties(
+        self,
+        survivor_id: int,
+        absorbed_id: int,
+        *,
+        actor: Actor,
+        at: datetime,
+        detail: str | None = None,
+    ) -> PropertyState:
+        """Merge property ``absorbed_id`` into ``survivor_id`` by hand.
+
+        ``survivor_id`` keeps its status, and takes the other's listings, notes and
+        emails as an automatic merge does (:func:`furnest.db.grouping.merge`). An
+        ``absorbed_id`` merged away already stands for the property it went into. Any
+        split between the two is forgotten: a person said they are one unit.
+
+        Raises :class:`PropertyNotFoundError` for an unknown id,
+        :class:`PropertyMergedError` if ``survivor_id`` was merged away and
+        :class:`GroupingError` if both are already the same property.
+        """
+        with session_scope(self._session_factory) as session:
+            survivor = live_property(session, survivor_id)
+            absorbed = resolve(session, absorbed_id)
+            if absorbed is None:
+                raise PropertyNotFoundError(absorbed_id)
+            if absorbed.id == survivor.id:
+                raise GroupingError(f"#{absorbed_id} is already this property")
+            members = listing_ids_of(session, [survivor.id, absorbed.id])
+            unseparate(session, members[survivor.id], members[absorbed.id])
+            merge(
+                session,
+                survivor,
+                absorbed,
+                at=at,
+                actor=actor,
+                payload={"manual": True} if detail is None else {"manual": True, "by": detail},
+            )
+            after_grouping(session, survivor, at=at, merged=True)
+            return _state(survivor)
+
+    def split_listing(
+        self,
+        property_id: int,
+        listing_id: int,
+        *,
+        actor: Actor,
+        at: datetime,
+        detail: str | None = None,
+    ) -> PropertyState:
+        """Move listing ``listing_id`` out of property ``property_id`` to a new property
+        in ``new``; return the new property.
+
+        The listing is remembered as a different unit from every listing left behind,
+        so grouping never puts them back together. The old property drops the match
+        it took from the listing, and both are scored again (``rerun_criteria``); the
+        old one becomes ``unavailable`` if it has no active listing left.
+
+        Raises :class:`PropertyNotFoundError` / :class:`PropertyMergedError` as
+        :meth:`transition` does, :class:`ListingNotFoundError` if the listing isn't
+        the property's and :class:`GroupingError` if it is its only listing.
+        """
+        with session_scope(self._session_factory) as session:
+            old = live_property(session, property_id)
+            listing_row = session.get(Listing, listing_id)
+            if listing_row is None or listing_row.property_id != old.id:
+                raise ListingNotFoundError(listing_id)
+            rest = sorted(listing_ids_of(session, [old.id])[old.id] - {listing_id})
+            if not rest:
+                raise GroupingError("a property's only listing can't be split off")
+            separate(session, listing_id, rest, actor=actor, at=at, detail=detail)
+            parsed = self._set_keys(listing_row)
+            new = _new_property(
+                session,
+                listing_row,
+                parsed,
+                actor=actor,
+                at=at,
+                detail=detail,
+                payload={"split_from": old.id},
+            )
+            session.flush()
+            if old.match_listing_id == listing_id:
+                old.score = None
+                old.match_result = None
+                old.criteria_version_id = None
+                old.match_listing_id = None
+            primary = primary_listing(session, old.id)
+            if primary is not None:
+                old_parsed = self._set_keys(primary)
+                old.address = None if old_parsed is None else old_parsed.canonical
+                old.lat, old.lng = primary.lat, primary.lng
+                old.manual_contact_required = _manual_contact(primary)
+            old.updated_at = at
+            _audit_in_place(
+                session,
+                old,
+                actor=actor,
+                at=at,
+                detail="split",
+                payload={"listing_id": listing_id, "split_into": new.id},
+            )
+            _mark_gone_in(session, old, at=at)
+            _enqueue_rescore(session, [listing_id, *rest])
+            return _state(new)
+
     def _parsed(self, listing: NormalizedListing) -> ParsedAddress | None:
         address = listing.address
         if not any((address.line1, address.line2, address.city, address.postal_code)):
@@ -1064,30 +1247,7 @@ class SqlPropertyStore:
             )
             if outcome.property is not None:
                 return outcome.property
-        row = Property(
-            status=PropertyStatus.NEW,
-            address=None if parsed is None else parsed.canonical,
-            lat=listing_row.lat,
-            lng=listing_row.lng,
-            manual_contact_required=_manual_contact(listing_row),
-            status_changed_at=at,
-            created_at=at,
-            updated_at=at,
-        )
-        session.add(row)
-        session.flush()
-        listing_row.property_id = row.id
-        session.add(
-            AuditEvent(
-                property_id=row.id,
-                from_status=None,
-                to_status=PropertyStatus.NEW,
-                actor=actor,
-                payload={"listing_id": listing_id},
-                created_at=at,
-            )
-        )
-        return row
+        return _new_property(session, listing_row, parsed, actor=actor, at=at)
 
     @staticmethod
     def _properties_of(session: Session, listing_ids: Iterable[int]) -> list[Property]:

@@ -24,6 +24,11 @@ re-renders the page with the error (422); a deny or status change the state
 machine forbids re-renders it with 409. The status buttons only offer allowed
 moves, so a 409 means the page was stale.
 
+Grouping mistakes are fixed here too: **Merge** takes another property's number and
+merges it into this one, which keeps its status, and each listing of a property
+with several has a **Split off** button that moves it to a new property. An unknown
+number or a merge with itself re-renders the page with 422.
+
 The list view's bulk deny/archive moves what it can and, with htmx, re-renders the
 results with a notice of what it skipped; without htmx it redirects back to the
 list (303). An empty or oversized selection is a 422, and one where nothing could
@@ -46,6 +51,8 @@ from furnest.db.email_store import SqlEmailStore, StoredEmail
 from furnest.db.models import EmailDirection, Property
 from furnest.db.property_store import (
     MAX_NOTE_LENGTH,
+    GroupingError,
+    ListingNotFoundError,
     PropertyMergedError,
     PropertyNotFoundError,
     PropertySort,
@@ -199,9 +206,15 @@ def property_detail(
     request: Request,
     property_id: int,
     inquiry: Annotated[str | None, Query(max_length=20)] = None,
+    grouping: Annotated[str | None, Query(max_length=20)] = None,
+    new: int | None = None,
 ) -> Response:
     notice = None
-    if inquiry == "marked":
+    if grouping == "merged":
+        notice = "Properties merged."
+    elif grouping == "split" and new is not None:
+        notice = f"Listing split off into property #{new}."
+    elif inquiry == "marked":
         notice = "Inquiry marked as sent."
     elif inquiry == "requested":
         settings = request.app.state.settings
@@ -346,3 +359,35 @@ def change_status(
             status_code=409,
         )
     return RedirectResponse(f"/properties/{property_id}", status_code=303)
+
+
+@router.post("/properties/{property_id}/merge", response_class=HTMLResponse)
+def merge(request: Request, property_id: int, other: Annotated[int, Form()]) -> Response:
+    try:
+        _store(request).merge_properties(property_id, other, actor=Actor.DASHBOARD, at=utcnow())
+    except PropertyMergedError as e:
+        return _merged(e)
+    except PropertyNotFoundError as e:
+        if e.property_id == property_id:
+            raise HTTPException(status_code=404) from None
+        return _render_detail(request, property_id, error=f"No property #{other}.", status_code=422)
+    except GroupingError as e:
+        return _render_detail(request, property_id, error=f"Can't merge: {e}.", status_code=422)
+    return RedirectResponse(f"/properties/{property_id}?grouping=merged", status_code=303)
+
+
+@router.post("/properties/{property_id}/listings/{listing_id}/split", response_class=HTMLResponse)
+def split(request: Request, property_id: int, listing_id: int) -> Response:
+    try:
+        new = _store(request).split_listing(
+            property_id, listing_id, actor=Actor.DASHBOARD, at=utcnow()
+        )
+    except PropertyMergedError as e:
+        return _merged(e)
+    except (PropertyNotFoundError, ListingNotFoundError):
+        raise HTTPException(status_code=404) from None
+    except GroupingError as e:
+        return _render_detail(request, property_id, error=f"Can't split: {e}.", status_code=422)
+    return RedirectResponse(
+        f"/properties/{property_id}?grouping=split&new={new.id}", status_code=303
+    )

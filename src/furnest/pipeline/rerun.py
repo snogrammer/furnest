@@ -13,11 +13,14 @@ worker plugs in the active stored listings (``SqlListingStore.active``) and
 moving any property a person already decided on. The handler checks
 ``ctx.cancelled`` between listings, and re-running it is harmless because every
 result is recomputed from scratch.
+
+A payload with ``listing_ids`` scores only those listings (through ``by_id``), active
+or not: splitting a property by hand queues one for the listings involved.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,12 +36,17 @@ if TYPE_CHECKING:
 RERUN_CRITERIA = "rerun_criteria"
 
 ListingSource = Callable[[], Iterable[StoredListing]]
+ListingsById = Callable[[Sequence[int]], Iterable[StoredListing]]
 ResultSink = Callable[[StoredListing, MatchResult], None]
 
 log = get_logger(__name__)
 
 
 def no_listings() -> Iterable[StoredListing]:
+    return ()
+
+
+def none_by_id(_ids: Sequence[int]) -> Iterable[StoredListing]:
     return ()
 
 
@@ -52,17 +60,21 @@ class RerunCriteria:
         session_factory: sessionmaker[Session],
         *,
         listings: ListingSource = no_listings,
+        by_id: ListingsById = none_by_id,
         record: ResultSink = discard,
     ) -> None:
         self._store = CriteriaStore(session_factory)
         self._listings = listings
+        self._by_id = by_id
         self._record = record
 
     def __call__(self, ctx: JobContext) -> None:
         version = int(ctx.payload["criteria_version"])
         criteria = self._store.get(version).criteria
+        ids = ctx.payload.get("listing_ids")
+        listings = self._listings() if ids is None else self._by_id([int(i) for i in ids])
         scored = 0
-        for stored in self._listings():
+        for stored in listings:
             if ctx.cancelled.is_set():
                 log.info("criteria_rerun_cancelled", criteria_version=version, scored=scored)
                 return

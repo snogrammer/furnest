@@ -14,11 +14,14 @@ from furnest.db.email_store import draft_email
 from furnest.db.grouping import resolve
 from furnest.db.image_store import SqlImageStore
 from furnest.db.listing_store import SqlListingStore
-from furnest.db.models import Email, Job, Listing, Note, Property
+from furnest.db.models import Email, Job, Listing, ListingSeparation, Note, Property
 from furnest.db.property_store import (
     MESSAGE_SYNC_JOB,
     NOTIFY,
+    GroupingError,
+    ListingNotFoundError,
     PropertyMergedError,
+    PropertyNotFoundError,
     SqlPropertyStore,
 )
 from furnest.db.session import session_scope
@@ -405,3 +408,221 @@ def test_the_pipeline_regroups_hashed_listings(
     absorbed = store.get(pb)
     assert absorbed is not None
     assert absorbed.merged_into_id == pa
+
+
+# --- Fixing grouping by hand ---------------------------------------------------------
+
+
+def separations(session_factory: sessionmaker[Session]) -> set[tuple[int, int]]:
+    with session_scope(session_factory) as session:
+        return {
+            (row.listing_id, row.other_listing_id)
+            for row in session.scalars(select(ListingSeparation))
+        }
+
+
+def grouped_pair(store: SqlPropertyStore, add_listing: AddListing) -> tuple[int, int, int]:
+    """Two listings grouped under one property, the second with the better match.
+    Returns (first listing, second listing, property)."""
+    first = add_listing("zillow")
+    second = add_listing("craigslist")
+    prop = store.record_match(first, passing(70), at=T0).id
+    assert store.record_match(second, passing(90), at=T0).id == prop
+    return first, second, prop
+
+
+def test_merging_by_hand_moves_everything_and_keeps_the_survivors_status(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    a, pa, b, pb = two_properties(store, add_listing, session_factory)
+    store.transition(pb, S.APPROVED, actor=Actor.DASHBOARD, at=T0)
+    store.add_note(pb, "Called them", actor=Actor.DASHBOARD, at=T0)
+
+    state = store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+
+    # The person chose pa: it survives in its own status, with the better score.
+    assert state.id == pa
+    assert state.status is S.SUGGESTED
+    assert state.score == 85
+    absorbed = store.get(pb)
+    assert absorbed is not None
+    assert absorbed.merged_into_id == pa
+    assert absorbed.status is S.APPROVED
+    assert {property_of(session_factory, x) for x in (a, b)} == {pa}
+    with session_scope(session_factory) as session:
+        assert {n.property_id for n in session.scalars(select(Note))} == {pa}
+    merged = [e for e in store.audit_events(pa) if e.actor_detail == "merged"]
+    assert {e.property_id for e in merged} == {pa, pb}
+    assert {e.actor for e in merged} == {Actor.DASHBOARD}
+    assert all(e.payload is not None and e.payload["manual"] is True for e in merged)
+    survivor_event = next(e for e in merged if e.property_id == pa)
+    assert survivor_event.payload is not None
+    assert survivor_event.payload["merged_status"] == "approved"
+    assert [s.id for s in store.query(now=LATER)] == [pa]
+
+
+def test_a_manual_merge_is_not_undone_by_grouping(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    # No photos in common and different titles: grouping would never merge these.
+    a = add_listing("zillow", address={"city": "Springfield"}, title="Loft")
+    b = add_listing("craigslist", address={"city": "Springfield"}, title="Cabin", beds=None)
+    pa = store.record_match(a, passing(), at=T0).id
+    pb = store.record_match(b, passing(), at=T0).id
+    assert pa != pb
+
+    store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+
+    assert store.regroup([a, b], at=LATER) == []
+    assert {property_of(session_factory, x) for x in (a, b)} == {pa}
+
+
+def test_merging_by_hand_refuses_what_cant_be_merged(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    _a, pa, _b, pb = two_properties(store, add_listing, session_factory)
+
+    with pytest.raises(GroupingError, match="already this property"):
+        store.merge_properties(pa, pa, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(PropertyNotFoundError) as missing:
+        store.merge_properties(pa, 999, actor=Actor.DASHBOARD, at=LATER)
+    assert missing.value.property_id == 999
+    with pytest.raises(PropertyNotFoundError):
+        store.merge_properties(999, pa, actor=Actor.DASHBOARD, at=LATER)
+
+    store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+    # pb now stands for pa.
+    with pytest.raises(GroupingError):
+        store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(PropertyMergedError) as merged:
+        store.merge_properties(pb, pa, actor=Actor.DASHBOARD, at=LATER)
+    assert merged.value.merged_into == pa
+
+
+def test_merging_into_an_unavailable_property_with_an_active_listing_restores_it(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    a, pa, _b, pb = two_properties(store, add_listing, session_factory)
+    assert store.mark_gone([a], at=T0) == []  # still active
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).where(Listing.id == a).values(removed_at=T0))
+    assert store.mark_gone([a], at=T0) == [pa]
+
+    state = store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+
+    assert state.status is S.SUGGESTED
+
+
+def test_splitting_a_listing_off_gives_it_a_new_property(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second, prop = grouped_pair(store, add_listing)
+    assert store.get(prop).score == 90  # type: ignore[union-attr]
+
+    new = store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER)
+
+    assert new.id != prop
+    assert new.status is S.NEW
+    assert new.score is None
+    assert new.address == store.get(prop).address  # type: ignore[union-attr]
+    assert property_of(session_factory, second) == new.id
+    assert property_of(session_factory, first) == prop
+    assert separations(session_factory) == {(first, second)}
+    # The old property took its score from the split listing: dropped until rescored.
+    old = store.get(prop)
+    assert old is not None
+    assert old.status is S.SUGGESTED
+    assert old.score is None
+    assert jobs(session_factory, "rerun_criteria") == [
+        {"criteria_version": 1, "listing_ids": [second, first]}
+    ]
+    split = [e for e in store.audit_events(prop) if e.actor_detail == "split"]
+    assert len(split) == 1
+    assert split[0].actor is Actor.DASHBOARD
+    assert split[0].payload == {"listing_id": second, "split_into": new.id}
+    created = store.audit_events(new.id)[0]
+    assert created.from_status is None
+    assert created.actor is Actor.DASHBOARD
+    assert created.payload == {"listing_id": second, "split_from": prop}
+
+    # The queued rescore lands on each listing's own property.
+    store.record_match(second, passing(90), at=LATER)
+    store.record_match(first, passing(70), at=LATER)
+    assert store.get(new.id).status is S.SUGGESTED  # type: ignore[union-attr]
+    assert store.get(new.id).score == 90  # type: ignore[union-attr]
+    assert store.get(prop).score == 70  # type: ignore[union-attr]
+    stored = SqlListingStore(session_factory).many([second, first, 999])
+    assert [item.id for item in stored] == [first, second]
+
+
+def test_a_split_is_not_undone_by_grouping(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second, prop = grouped_pair(store, add_listing)
+    new = store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER).id
+
+    assert store.regroup([first, second], at=LATER) == []
+    assert property_of(session_factory, first) == prop
+    assert property_of(session_factory, second) == new
+
+    # A third listing of the unit matches both halves, but joins only one of them.
+    third = add_listing("furnishedfinder")
+    joined = store.record_match(third, passing(), at=LATER).id
+    assert joined in {prop, new}
+    assert store.get(prop).merged_into_id is None  # type: ignore[union-attr]
+    assert store.get(new).merged_into_id is None  # type: ignore[union-attr]
+    assert property_of(session_factory, first) != property_of(session_factory, second)
+
+
+def test_merging_by_hand_forgets_the_split(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second, prop = grouped_pair(store, add_listing)
+    new = store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER).id
+
+    store.merge_properties(prop, new, actor=Actor.DASHBOARD, at=LATER)
+
+    assert separations(session_factory) == set()
+    assert {property_of(session_factory, x) for x in (first, second)} == {prop}
+
+
+def test_splitting_refuses_what_cant_be_split(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    a, pa, b, pb = two_properties(store, add_listing, session_factory)
+
+    with pytest.raises(GroupingError, match="only listing"):
+        store.split_listing(pa, a, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(ListingNotFoundError):
+        store.split_listing(pa, b, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(ListingNotFoundError):
+        store.split_listing(pa, 999, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(PropertyNotFoundError):
+        store.split_listing(999, a, actor=Actor.DASHBOARD, at=LATER)
+    store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+    with pytest.raises(PropertyMergedError):
+        store.split_listing(pb, b, actor=Actor.DASHBOARD, at=LATER)
+    assert separations(session_factory) == set()
+
+
+def test_splitting_off_the_last_active_listing_makes_the_property_unavailable(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second, prop = grouped_pair(store, add_listing)
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).where(Listing.id == first).values(removed_at=T0))
+
+    store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER)
+
+    assert store.get(prop).status is S.UNAVAILABLE  # type: ignore[union-attr]
+
+
+def test_splitting_without_criteria_queues_no_rescore(
+    session_factory: sessionmaker[Session], add_listing: AddListing
+) -> None:
+    store = SqlPropertyStore(session_factory, grouping=GroupingSettings())
+    _first, second, prop = grouped_pair(store, add_listing)
+
+    store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER)
+
+    assert jobs(session_factory, "rerun_criteria") == []

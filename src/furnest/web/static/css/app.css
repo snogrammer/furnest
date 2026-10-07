@@ -972,6 +972,25 @@ button.secondary {
   }
 }
 
+/* Grouping fixes: merge another property in, split a listing off. */
+.merge {
+  margin-top: var(--space);
+}
+
+.merge summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.split-form {
+  margin-top: 0.25rem;
+}
+
+.split-form button {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.85em;
+}
+
 .description {
   max-width: 42rem;
   overflow-wrap: anywhere;

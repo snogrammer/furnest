@@ -359,6 +359,12 @@ class SqlListingStore:
             row = session.get(Listing, listing_id)
             return None if row is None else stored_listing(row)
 
+    def many(self, listing_ids: Sequence[int]) -> list[StoredListing]:
+        """The listings of ``listing_ids`` that exist, by id."""
+        statement = select(Listing).where(Listing.id.in_(list(listing_ids))).order_by(Listing.id)
+        with session_scope(self._session_factory) as session:
+            return [stored_listing(row) for row in session.scalars(statement)]
+
     def find(self, source: str, source_id: str) -> StoredListing | None:
         with session_scope(self._session_factory) as session:
             row = session.scalars(

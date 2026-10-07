@@ -67,3 +67,11 @@ def test_grouping_events_are_labelled() -> None:
     # On the survivor's timeline, the merged property's events say whose they are.
     assert audit_label(event("grouped", {"listing_id": 7}, 2), 1) == "#2: Listing #7 grouped here"
     assert audit_label(event("grouped", {"listing_id": 7}, 1), 1) == "Listing #7 grouped here"
+    assert (
+        audit_label(event("split", {"listing_id": 7, "split_into": 9}))
+        == "Listing #7 split off into #9"
+    )
+    assert (
+        audit_label(entry(None, S.NEW, {"listing_id": 7, "split_from": 1}))
+        == "Created as new (split from #1)"
+    )

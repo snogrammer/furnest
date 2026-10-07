@@ -1,5 +1,6 @@
 """The rerun_criteria job handler: scores listings against the queued criteria version."""
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import pytest
@@ -146,3 +147,35 @@ def test_the_worker_rerun_rescores_stored_listings_without_undoing_decisions(
     assert (a_after.status, b_after.status) == (PropertyStatus.DENIED, PropertyStatus.SUGGESTED)
     assert a_after.score == b_after.score
     assert a_after.score != 50
+
+
+def test_scores_only_the_listings_the_payload_names(
+    session_factory: sessionmaker[Session],
+) -> None:
+    CriteriaStore(session_factory).save(Criteria(), created_by="cli")
+    asked: list[list[int]] = []
+    recorded: list[str] = []
+
+    def by_id(ids: Sequence[int]) -> list[StoredListing]:
+        asked.append(list(ids))
+        return [listing("b", 2)]
+
+    handler = RerunCriteria(
+        session_factory,
+        listings=lambda: [listing("a", 3), listing("b", 1)],
+        by_id=by_id,
+        record=lambda item, _result: recorded.append(item.listing.source_id),
+    )
+    job = ctx(1)
+    handler(
+        JobContext(
+            job_id=job.job_id,
+            kind=job.kind,
+            payload={"criteria_version": 1, "listing_ids": [5, "6"]},
+            attempt=job.attempt,
+            deadline=job.deadline,
+        )
+    )
+
+    assert asked == [[5, 6]]
+    assert recorded == ["b"]

@@ -130,6 +130,12 @@
             <a href="{{ s.url }}" rel="noopener noreferrer" target="_blank">{{ source_name(s.source) }}</a>
             {% if s.removed_at %}<span class="status">removed {{ day(s.removed_at) }}</span>{% endif %}
             <br><small class="muted">{{ s.title }}</small>
+            {% if d.listings | length > 1 %}
+            <form method="post" action="/properties/{{ p.id }}/listings/{{ s.id }}/split" class="split-form" hx-boost="true" hx-confirm="Split this listing off into its own property? It won't be grouped with the others again.">
+              {{ csrf_field(request) }}
+              <button type="submit" class="secondary">Split off</button>
+            </form>
+            {% endif %}
           </th>
           <td>
             {% if s.monthly_price %}{{ s.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}
@@ -155,6 +161,17 @@
     {% else %}
     <p class="muted">No listings are attached to this property.</p>
     {% endif %}
+    <details class="merge">
+      <summary>Merge another property into this one…</summary>
+      <form method="post" action="/properties/{{ p.id }}/merge" class="note-form" hx-boost="true" hx-confirm="Merge that property into this one? Its listings, notes and emails move here and this property keeps its status.">
+        {{ csrf_field(request) }}
+        <div class="field">
+          <label for="merge-other">Property number</label>
+          <input id="merge-other" name="other" type="number" min="1" required inputmode="numeric">
+        </div>
+        <button type="submit">Merge into this property</button>
+      </form>
+    </details>
   </section>
 
   <section aria-labelledby="score">
