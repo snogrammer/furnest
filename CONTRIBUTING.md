@@ -35,7 +35,7 @@ The script is for manual use only. It refuses to run when `CI` is set, and nothi
 3. It writes the result to `tests/fixtures/<adapter>/<name>`. The default name comes from the URL path. An existing file is only replaced with `--force`.
 4. It prints how many values of each kind it replaced.
 
-**Sources behind a data provider.** Furnished Finder and Zillow are captured from Apify. Run the actor once in the Apify console, then capture that run's dataset:
+**Sources behind a data provider.** Furnished Finder, Zillow and Airbnb are captured from Apify. Run the actor once in the Apify console, then capture that run's dataset:
 
 ```sh
 uv run python scripts/capture_fixture.py furnished_finder \

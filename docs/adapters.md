@@ -208,6 +208,107 @@ against the mapping above, and replace the fixtures with a captured dataset
 on what listers tick, so some furnished places are missed and the odd unfurnished one
 gets through. Matching's keyword checks on the description still apply.
 
+## Airbnb (`airbnb`)
+
+**Access:** the Apify data provider `tri_angle/airbnb-scraper`, searching a stay of a
+month or more (Airbnb's monthly-stay search). Needs an Apify API token (the same one
+the other Apify sources use works). Off by default.
+
+```env
+SOURCES_ADAPTERS={"airbnb": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 360, "max_results": 50}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API or feed | None for searching stays. Airbnb's APIs are for approved software partners that manage hosts' listings. |
+| Direct HTTP scraping | `/s/<place>/homes` answers plain HTTP with a 200 and the results as embedded JSON, but `robots.txt` disallows `/s/*/*` (every search page) and `/api/v3/...StaysQuery` for all crawlers, and Airbnb's terms forbid scraping. `SourceHttpClient` respects robots.txt, so this is out. |
+| Browser scraping | The same pages, so the same robots.txt rules. |
+| Third-party data provider | Many Apify actors scrape Airbnb. The provider handles access, and furnest makes an authenticated API call. **Chosen.** |
+
+Among the Apify actors, `tri_angle/airbnb-scraper` was picked because it is by far
+the most used (about 790 users a month, over 900,000 runs, rated 4.5) and searches by
+place name (like `search_locations`) with check-in and check-out dates, bedrooms and
+bathrooms as input. None of the actors looked at (`curious_coder/airbnb-scraper`,
+`automation-lab/airbnb-listing`, `cirkit/airbnb-search-scraper`) has a "monthly
+stays" switch, and all take dates the same way. If this actor disappears, swapping in
+another means changing `ACTOR` and the mapping in `sources/adapters/airbnb/parse.py`.
+
+### How a run works
+
+1. Criteria become a **stay window**: check-in on the earliest move-in date (today if
+   it's unset or past), check-out `lease_min_months` (default 1) calendar months
+   later, clamped to the end of a short month. A month is never under 28 nights,
+   which is what makes it a monthly-stay search: hosts who don't take stays that long
+   drop out, and quotes carry the monthly discount. Everything returned is free for
+   the whole window.
+2. The input is `locationQueries` (`search_locations`), `checkIn`, `checkOut`, USD,
+   `en-US`, `maxResults` (`max_results`), minimum bedrooms (when above 0) and
+   bathrooms (rounded down), and `enrichUserProfiles: false` (host profiles cost a
+   request each, bill at the higher "enriched" rate, and name people). **Price isn't
+   sent:** the actor doesn't say whether its bounds are nightly or for the stay, so
+   matching applies the price range.
+3. `ApifyAdapter` (`sources/apify.py`) runs the actor as for the other Apify sources,
+   and hands the items back with the input, so the mapping knows the window.
+4. Each item is mapped (see below). An item that can't be mapped is logged and
+   skipped.
+
+### Degrading
+
+- No `api_key`: the source is disabled with a reason, and never scheduled.
+- No `search_locations`: each run fails with a message saying so.
+- A bad token, a forbidden actor, or a run that ends `FAILED`, `TIMED-OUT` or
+  `ABORTED`: the run fails with the reason and nothing is marked missing.
+- An empty dataset is a successful run with no listings (nothing free for the stay).
+
+### Field mapping
+
+| Actor field | `NormalizedListing` |
+| --- | --- |
+| `id` | `source_id` |
+| `url` (under `https://www.airbnb.com/`), else `https://www.airbnb.com/rooms/<id>` | `url` |
+| `title` without the " - Apartments for Rent in … - Airbnb" suffix, else `subDescription.title` | `title` |
+| `description` | `description` |
+| `price.breakDown.totalBeforeTaxes.price`, else `price.amount` per `price.qualifier` | `price`, USD (see below) |
+| `subDescription.title` ("Entire rental unit in City, State, United States") | `address.city`, `region`; outside the US only the city |
+| `coordinates.latitude`, `.longitude` | `lat`, `lng` (both or neither) |
+| `subDescription.items` ("Studio", "2 bedrooms", "1.5 shared baths", "Half-bath") | `beds` (0 is a studio), `baths` (nearest half) |
+| `roomType` ("Private room", "Shared room", "Hotel room"), else the kind in `subDescription.title` ("Entire condo", "rental unit" → apartment) | `property_type`; a 0-bedroom apartment, condo or unknown is a studio |
+| `amenities[].values[]` with `available: true`; the "Not included" group as `no <name>` | `amenities`, lower-cased. "no air conditioning" makes the keyword extractor mark AC absent. |
+| the window's check-in | `available_from` |
+| `images[].imageUrl`, else `thumbnail` | `images` |
+| everything except `host`, `coHosts`, `androidLink`, `iosLink` | `raw`. The dropped blocks name people. |
+
+**Price.** When the item has the stay's total before taxes, the listing's price is
+that total spread over a month, `total x (365/12) / nights`, quoted monthly. The
+monthly discount, cleaning fee and service fee are all in it, so it's what a renter
+would pay. Without a total, the quoted rate is kept with its period ("$95 night" is
+nightly, "$2,100 month" monthly; no qualifier means nightly) and `Price.monthly`
+converts it with the usual factors. Taxes are never included.
+
+Every listing is `furnished` (Airbnb stays are), and `contact` is `platform_only`,
+because hosts are reached through Airbnb's messages.
+
+### Cost
+
+At the prices published in October 2026 (free tier), a run costs $0.0001 to start
+plus $0.004 per listing ($0.0005 to $0.002 on paid Apify plans). Fifty listings every
+six hours comes to about $0.80 a day, while 100 listings hourly would be about $10 a
+day.
+
+### Limitations
+
+The fixtures in `tests/fixtures/airbnb/` were written from the actor's README and
+output example, not captured from a live run. The price breakdown of a monthly stay
+and the `images` shape are the least certain, so check the first live run against
+the mapping above, and replace the fixtures with a captured dataset
+(`scripts/capture_fixture.py airbnb <dataset URL>`). Airbnb gives no street address
+or square footage, and coordinates are approximate until booking, so location
+matching leans on the city and the area check. The actor has no entire-place vs room
+filter, so room-only or no-room criteria are applied by matching. A search returns at
+most about 240 results per place.
+
 ## Candidates
 
 The sources below are planned or proposed and haven't been researched yet. Each
@@ -217,6 +318,6 @@ adapter's issue records its access options here when it's built, as above.
 | --- | --- |
 | Furnished Finder | Built (above): Apify data provider. |
 | Zillow (furnished rentals) | Built (above): Apify data provider. |
-| Airbnb (monthly stays) | Planned (#46). |
+| Airbnb (monthly stays) | Built (above): Apify data provider. |
 | Craigslist (housing, furnished) | Planned (#47). |
 | Blueground, Zumper, Apartments.com (furnished filter), HotPads, Kopa, Landing | Stub and document. |

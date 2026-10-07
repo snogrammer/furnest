@@ -26,6 +26,7 @@ skipped, so one odd listing doesn't fail the run.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import ValidationError
@@ -56,7 +57,9 @@ class FurnishedFinder(ApifyAdapter):
             criteria, locations=self.config.search_locations, max_results=self.config.max_results
         )
 
-    def parse_items(self, items: list[dict[str, Any]]) -> list[NormalizedListing]:
+    def parse_items(
+        self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
+    ) -> list[NormalizedListing]:
         if empty := [item for item in items if is_error_row(item)]:
             where = sorted({str(item.get("searchLocation") or "?") for item in empty})
             msg = (

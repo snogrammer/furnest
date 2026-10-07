@@ -186,8 +186,14 @@ class ApifyAdapter(SourceAdapter):
         """The actor's input for ``criteria`` and this adapter's config."""
 
     @abstractmethod
-    def parse_items(self, items: list[JsonObject]) -> list[NormalizedListing]:
-        """The run's dataset items as listings. Raise :class:`SourceError` to fail the run."""
+    def parse_items(
+        self, items: list[JsonObject], run_input: Mapping[str, Any]
+    ) -> list[NormalizedListing]:
+        """The run's dataset items as listings. Raise :class:`SourceError` to fail the run.
+
+        ``run_input`` is what :meth:`build_input` sent, for a mapping that depends on the
+        search (the stay dates an Airbnb price covers, say).
+        """
 
     def search(self, criteria: Criteria) -> list[NormalizedListing]:
         config = self.config
@@ -217,4 +223,4 @@ class ApifyAdapter(SourceAdapter):
                 timeout_seconds=timeout,
                 clock=self._clock,
             )
-        return self.parse_items(items)
+        return self.parse_items(items, run_input)

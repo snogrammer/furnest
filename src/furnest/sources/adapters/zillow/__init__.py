@@ -27,6 +27,7 @@ can't be mapped are logged and skipped, so one odd listing doesn't fail the run.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import ValidationError
@@ -53,7 +54,9 @@ class Zillow(ApifyAdapter):
             today=self._today(),
         )
 
-    def parse_items(self, items: list[dict[str, Any]]) -> list[NormalizedListing]:
+    def parse_items(
+        self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
+    ) -> list[NormalizedListing]:
         today = self._today()
         listings: list[NormalizedListing] = []
         for item in items:

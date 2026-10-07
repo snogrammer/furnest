@@ -1,0 +1,120 @@
+[
+  {
+    "id": "700000001",
+    "coordinates": {"latitude": 40.1, "longitude": -89.6},
+    "description": "Entire rental unit in Exampleville, Illinois, United States. A bright one-bedroom near the park, set up for longer stays.",
+    "descriptionOriginalLanguage": "en",
+    "title": "Bright One-Bedroom Near the Park - Apartments for Rent in Exampleville, Illinois, United States - Airbnb",
+    "thumbnail": "https://a0.muscache.com/pictures/example-thumb-1.jpeg",
+    "url": "https://www.airbnb.com/rooms/700000001",
+    "androidLink": "airbnb://rooms/700000001",
+    "iosLink": "airbnb://rooms/700000001",
+    "roomType": "Entire home/apt",
+    "isSuperHost": true,
+    "personCapacity": 2,
+    "rating": {"guestSatisfaction": 4.9, "reviewsCount": 120},
+    "host": {
+      "id": "800000001",
+      "name": "Jane Example",
+      "isSuperHost": true,
+      "profileImage": "https://a0.muscache.com/im/pictures/user/example.jpg",
+      "about": ["Lives in Exampleville"]
+    },
+    "coHosts": [{"id": "800000002", "name": "John Example"}],
+    "subDescription": {
+      "title": "Entire rental unit in Exampleville, Illinois, United States",
+      "items": ["2 guests", "1 bedroom", "1 bed", "1 bath"]
+    },
+    "amenities": [
+      {
+        "title": "Bedroom and laundry",
+        "values": [
+          {"title": "Washer", "subtitle": "In unit", "icon": "SYSTEM_WASHER", "available": true},
+          {"title": "Dryer", "subtitle": "", "icon": "SYSTEM_DRYER", "available": true}
+        ]
+      },
+      {
+        "title": "Kitchen and dining",
+        "values": [
+          {"title": "Dishwasher", "subtitle": "", "icon": "SYSTEM_DISHWASHER", "available": true}
+        ]
+      },
+      {
+        "title": "Internet and office",
+        "values": [
+          {"title": "Wifi", "subtitle": "", "icon": "SYSTEM_WI_FI", "available": true},
+          {"title": "Dedicated workspace", "subtitle": "", "icon": "SYSTEM_WORKSPACE", "available": true}
+        ]
+      },
+      {
+        "title": "Parking and facilities",
+        "values": [
+          {"title": "Free parking on premises", "subtitle": "", "icon": "SYSTEM_PARKING", "available": true}
+        ]
+      },
+      {
+        "title": "Not included",
+        "values": [
+          {"title": "Air conditioning", "subtitle": "", "icon": "SYSTEM_NO_AIR_CONDITIONING", "available": ""}
+        ]
+      }
+    ],
+    "images": [
+      {"caption": "Living room", "imageUrl": "https://a0.muscache.com/pictures/example-1a.jpeg"},
+      {"caption": "Bedroom", "imageUrl": "https://a0.muscache.com/pictures/example-1b.jpeg"}
+    ],
+    "locale": "en",
+    "language": "en",
+    "price": {
+      "label": "$3,302 for 31 nights",
+      "amount": "$95",
+      "qualifier": "night",
+      "breakDown": {
+        "basePrice": {"description": "Cleaning fee", "price": "$90"},
+        "basePriceBreakdown": [
+          {"description": "31 nights x $95", "price": "$2,945"},
+          {"description": "Monthly stay discount", "price": "-$140"},
+          {"description": "Total Base Price", "price": "$2,805"}
+        ],
+        "serviceFee": {"description": "Airbnb service fee", "price": "$407"},
+        "totalBeforeTaxes": {"description": "Total before taxes", "price": "$3,302"}
+      }
+    }
+  },
+  {
+    "id": 700000002,
+    "coordinates": {"latitude": 40.2, "longitude": -89.7},
+    "description": "Quiet private room with a shared bath.",
+    "title": "Quiet Room - Rooms for Rent in Exampleville, Illinois, United States - Airbnb",
+    "thumbnail": "https://a0.muscache.com/pictures/example-thumb-2.jpeg",
+    "url": "https://www.airbnb.com/rooms/700000002",
+    "roomType": "Private room",
+    "personCapacity": 1,
+    "host": {"id": "800000003", "name": "Jane Example"},
+    "subDescription": {
+      "title": "Private room in home in Exampleville, Illinois, United States",
+      "items": ["1 guest", "1 bedroom", "1 bed", "1 shared bath"]
+    },
+    "amenities": [],
+    "images": [],
+    "price": {"label": "$45 per night", "amount": "$45", "qualifier": "night"}
+  },
+  {
+    "id": "700000003",
+    "coordinates": {"latitude": 43.6},
+    "description": "",
+    "title": "",
+    "url": "https://example.com/not-airbnb",
+    "roomType": "Entire home/apt",
+    "subDescription": {
+      "title": "Entire condo in Exampletown, Ontario, Canada",
+      "items": ["2 guests", "Studio", "1 bed", "1.5 baths"]
+    },
+    "price": {"label": "$2,100 month", "amount": "$2,100", "qualifier": "month"}
+  },
+  {
+    "title": "A listing with no id - Airbnb",
+    "url": "https://www.airbnb.com/rooms/",
+    "price": {"amount": "$80", "qualifier": "night"}
+  }
+]
