@@ -121,7 +121,9 @@ def test_missing_signature_header_is_401(client: TestClient, missing: str) -> No
     assert client.post(PATH, content=b'{"type":1}', headers=headers).status_code == 401
 
 
-@pytest.mark.parametrize("age", [301, -301])
+# Well past the 300s window: the timestamp is truncated to whole seconds and the server
+# reads its clock later, so `now + 301` can drift back inside the window on slow CI.
+@pytest.mark.parametrize("age", [310, -310])
 def test_stale_or_future_timestamp_is_401(post: Post, age: int) -> None:
     timestamp = str(int(time.time()) - age)
 
