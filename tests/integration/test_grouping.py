@@ -55,7 +55,12 @@ def store(session_factory: sessionmaker[Session]) -> SqlPropertyStore:
 def add_listing(session_factory: sessionmaker[Session]) -> AddListing:
     listings = SqlListingStore(session_factory)
 
-    def add(source: str, source_id: str = "1", **fields: Any) -> int:  # noqa: ANN401
+    def add(
+        source: str,
+        source_id: str = "1",
+        seen_at: datetime = T0,
+        **fields: Any,  # noqa: ANN401
+    ) -> int:
         data: dict[str, Any] = {
             "source": source,
             "source_id": source_id,
@@ -68,7 +73,7 @@ def add_listing(session_factory: sessionmaker[Session]) -> AddListing:
             **fields,
         }
         listing = NormalizedListing.model_validate(data)
-        (listing_id,) = listings.upsert_batch(source, [listing], seen_at=T0).new_ids
+        (listing_id,) = listings.upsert_batch(source, [listing], seen_at=seen_at).new_ids
         return listing_id
 
     return add
@@ -191,10 +196,58 @@ def test_a_relisted_unit_restores_its_unavailable_property(
         session.execute(update(Listing).where(Listing.id == first).values(removed_at=T0))
     assert store.mark_gone([first], at=T0) == [state.id]
 
-    joined = store.record_match(add_listing("craigslist"), passing(), at=LATER)
+    second = add_listing("craigslist", seen_at=LATER)
+    joined = store.record_match(second, passing(), at=LATER)
 
     assert joined.id == state.id
     assert joined.status is S.APPROVED
+    events = store.audit_events(state.id)
+    assert [e.actor_detail for e in events][-2:] == ["grouped", "relisted"]
+    relisted = events[-1]
+    assert (relisted.from_status, relisted.to_status) == (S.UNAVAILABLE, S.APPROVED)
+    assert relisted.payload is not None
+    assert relisted.payload["listing_id"] == second
+    assert relisted.payload["gone_since"] == T0.isoformat()
+    # Restored once: the relisting, not the grouping, moved it.
+    assert sum(e.to_status is S.APPROVED for e in events) == 2
+
+
+def test_a_repost_of_a_denied_unit_is_recorded_as_relisted(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    price = {"amount": {"amount_minor": 240000}, "period": "monthly"}
+    first = add_listing("craigslist", "1", price=price)
+    state = store.record_match(first, passing(), at=T0)
+    store.deny(state.id, actor=Actor.DASHBOARD, at=T0, reason="Too pricey")
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).where(Listing.id == first).values(removed_at=T0))
+    assert store.mark_gone([first], at=T0) == []
+
+    cheaper = {"amount": {"amount_minor": 210000}, "period": "monthly"}
+    second = add_listing("craigslist", "2", seen_at=LATER, price=cheaper)
+    joined = store.record_match(second, passing(), at=LATER)
+
+    assert joined.id == state.id
+    assert joined.status is S.DENIED
+    events = store.audit_events(state.id)
+    assert [e.actor_detail for e in events][-3:] == ["listings removed", "grouped", "relisted"]
+    assert events[-1].from_status == events[-1].to_status == S.DENIED
+    assert events[-1].payload == {
+        "listing_id": second,
+        "gone_since": T0.isoformat(),
+        "price_now_minor": 210000,
+        "currency": "USD",
+        "price_before_minor": 240000,
+    }
+
+
+def test_a_listing_joining_an_active_unit_is_not_a_relisting(
+    store: SqlPropertyStore, add_listing: AddListing
+) -> None:
+    state = store.record_match(add_listing("zillow"), passing(), at=T0)
+    store.record_match(add_listing("craigslist"), passing(), at=LATER)
+
+    assert "relisted" not in [e.actor_detail for e in store.audit_events(state.id)]
 
 
 # --- The best match -----------------------------------------------------------------

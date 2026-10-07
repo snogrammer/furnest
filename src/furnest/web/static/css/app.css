@@ -874,6 +874,24 @@ button.secondary {
   padding-left: 1.25rem;
 }
 
+.price-up {
+  color: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .price-up {
+    color: #f2b8b5;
+  }
+}
+
+.price-down {
+  color: var(--ok);
+}
+
+.price-summary {
+  margin: 0 0 0.5rem;
+}
+
 .price-history summary {
   cursor: pointer;
   color: var(--accent);

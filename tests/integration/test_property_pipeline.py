@@ -278,6 +278,19 @@ def test_a_property_that_cannot_become_unavailable_is_left_alone(
 
     assert store.mark_gone([listing_id], at=T0 + HOUR) == []
     assert store.get(prop.id).status is path[-1]  # type: ignore[union-attr]
+    gone = store.audit_events(prop.id)[-1]
+    assert gone.from_status == gone.to_status == path[-1]
+    assert (gone.actor, gone.actor_detail) == (Actor.SYSTEM, "listings removed")
+
+    set_removed(session_factory, listing_id, at=None)
+    assert store.restore_relisted([listing_id], at=T0 + 2 * HOUR) == []
+    relisted = store.audit_events(prop.id)[-1]
+    assert relisted.from_status == relisted.to_status == path[-1]
+    assert relisted.actor_detail == "relisted"
+    assert relisted.payload == {"listing_id": listing_id, "gone_since": (T0 + HOUR).isoformat()}
+    # Already back: a second call records nothing more.
+    store.restore_relisted([listing_id], at=T0 + 3 * HOUR)
+    assert store.audit_events(prop.id)[-1].id == relisted.id
 
 
 def test_mark_gone_twice_and_without_properties_is_harmless(
@@ -305,9 +318,58 @@ def test_a_relisted_property_goes_back_to_where_it_was(
     assert store.restore_relisted([listing_id], at=T0 + 2 * HOUR) == [prop.id]
 
     assert store.get(prop.id).status is S.APPROVED  # type: ignore[union-attr]
-    assert store.audit_events(prop.id)[-1].actor_detail == "relisted"
-    # Only properties that are unavailable move.
+    last = store.audit_events(prop.id)[-1]
+    assert last.actor_detail == "relisted"
+    assert last.payload == {"listing_id": listing_id, "gone_since": (T0 + HOUR).isoformat()}
+    # Only properties that are unavailable move, and a relisting is recorded once.
     assert store.restore_relisted([listing_id], at=T0 + 3 * HOUR) == []
+    assert store.audit_events(prop.id)[-1].id == last.id
+
+
+def test_a_listing_back_while_another_is_active_is_not_a_relisting(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second = add_listing("a"), add_listing("b")
+    prop = store.record_match(first, passing(), at=T0)
+    link(session_factory, second, prop.id)
+    set_removed(session_factory, first)
+    store.mark_gone([first], at=T0 + HOUR)
+    set_removed(session_factory, first, at=None)
+
+    assert store.restore_relisted([first], at=T0 + 2 * HOUR) == []
+    assert "relisted" not in [e.actor_detail for e in store.audit_events(prop.id)]
+
+
+def test_an_unavailable_property_that_gained_an_active_listing_is_still_restored(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second = add_listing("a"), add_listing("b")
+    prop = store.record_match(first, passing(), at=T0)
+    set_removed(session_factory, first)
+    store.mark_gone([first], at=T0 + HOUR)
+    link(session_factory, second, prop.id)  # active, attached outside the store
+    set_removed(session_factory, first, at=None)
+
+    assert store.restore_relisted([first], at=T0 + 2 * HOUR) == [prop.id]
+    last = store.audit_events(prop.id)[-1]
+    assert (last.to_status, last.actor_detail, last.payload) == (S.SUGGESTED, "relisted", None)
+
+
+def test_listings_relisted_together_record_one_relisting(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first, second = add_listing("a"), add_listing("b")
+    prop = store.record_match(first, passing(), at=T0)
+    link(session_factory, second, prop.id)
+    set_removed(session_factory, first, second)
+    store.mark_gone([first, second], at=T0 + HOUR)
+    set_removed(session_factory, first, second, at=None)
+
+    assert store.restore_relisted([second, first], at=T0 + 2 * HOUR) == [prop.id]
+    relisted = [e for e in store.audit_events(prop.id) if e.actor_detail == "relisted"]
+    assert len(relisted) == 1
+    assert relisted[0].payload is not None
+    assert relisted[0].payload["listing_id"] == first
 
 
 def test_a_snooze_while_unavailable_does_not_hide_where_to_restore_to(

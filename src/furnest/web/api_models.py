@@ -25,6 +25,7 @@ from furnest.db.property_store import (
     NoteEntry,
     PropertyDetail,
     PropertyPage,
+    PropertyPricePoint,
     PropertyState,
 )
 from furnest.domain import Actor, Money, PropertyStatus
@@ -151,6 +152,22 @@ class PricePointOut(_Out):
         return cls(price=point.price, observed_at=point.observed_at)
 
 
+class PropertyPricePointOut(PricePointOut):
+    """One price change of one of the property's listings."""
+
+    listing_id: int
+    source: str
+
+    @classmethod
+    def build_property(cls, point: PropertyPricePoint) -> Self:
+        return cls(
+            listing_id=point.listing_id,
+            source=point.source,
+            price=point.price,
+            observed_at=point.observed_at,
+        )
+
+
 class ListingOut(ListingSummaryOut):
     """One listing in full, as its source adapter normalised it."""
 
@@ -255,6 +272,8 @@ class PropertyDetailOut(_Out):
     audit: list[AuditEntryOut]
     # Oldest first.
     notes: list[NoteOut]
+    # Every listing's price changes in one timeline, oldest first.
+    price_history: list[PropertyPricePointOut]
 
     @classmethod
     def build(cls, detail: PropertyDetail) -> Self:
@@ -264,6 +283,9 @@ class PropertyDetailOut(_Out):
             listings=[ListingOut.build_detail(listing) for listing in detail.listings],
             audit=[AuditEntryOut.build(entry) for entry in detail.audit],
             notes=[NoteOut.build(note) for note in detail.notes],
+            price_history=[
+                PropertyPricePointOut.build_property(point) for point in detail.price_history
+            ],
         )
 
 

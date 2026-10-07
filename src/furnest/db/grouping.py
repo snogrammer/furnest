@@ -25,7 +25,10 @@ ingestion.
    detail page shows alongside the survivor's. Its Discord message is redrawn as
    merged with its buttons off, unless the survivor has no message, in which case
    the survivor takes it over.
-5. A survivor left ``unavailable`` with an active listing is restored, as if relisted.
+5. A new listing joining a unit whose listings were all removed (a repost under a new
+   id) relists it (``relist_in``): a ``relisted`` event after the ``grouped`` one, and
+   an ``unavailable`` survivor moves back to the state it left. A survivor left
+   ``unavailable`` with an active listing after a merge is restored the same way.
 
 A person can correct it from the dashboard (``SqlPropertyStore.merge_properties`` and
 ``split_listing``). A manual merge is never undone here: grouping only merges. A
@@ -332,7 +335,7 @@ def group_listing(
     Returns the property the listing now belongs to, or ``None`` property when it has
     none yet and nothing matched (the caller creates one).
     """
-    from furnest.db.property_store import _audit_in_place
+    from furnest.db.property_store import _audit_in_place, _has_active_listing, relist_in
 
     own = None if listing_row.property_id is None else resolve(session, listing_row.property_id)
     candidates = _candidates(
@@ -346,6 +349,12 @@ def group_listing(
     group = _compatible(session, listing_row.id, own, candidates, matches)
     if not group:
         return GroupingOutcome(property=own)
+    # A new listing that finds only removed ones brings the unit back.
+    relisted = (
+        own is None
+        and listing_row.removed_at is None
+        and not any(_has_active_listing(session, row.id, besides=[listing_row.id]) for row in group)
+    )
     if own is not None:
         group.append(own)
     survivor = _survivor(session, group)
@@ -374,6 +383,9 @@ def group_listing(
             detail="grouped",
             payload={"listing_id": listing_row.id, **matches[survivor.id].as_payload()},
         )
+        if relisted:
+            session.flush()
+            relist_in(session, survivor, listing_row, at=at)
     after_grouping(session, survivor, at=at, merged=bool(merged))
     return GroupingOutcome(property=survivor, merged=tuple(merged))
 

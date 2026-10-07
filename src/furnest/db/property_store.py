@@ -30,8 +30,13 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
   while that listing has no email address, so the inquiry is sent by hand through
   the source (``furnest.email.inquiry``).
 * :meth:`SqlPropertyStore.mark_gone` moves a property to ``unavailable`` once none
-  of its listings is active, and :meth:`SqlPropertyStore.restore_relisted` moves it
-  back when one returns.
+  of its listings is active. A property whose status can't change that way (denied,
+  won, lost, archived) gets a ``listings removed`` event in place instead, so the gap
+  is on record either way. When a listing of a property with no other active listing
+  comes back (:meth:`SqlPropertyStore.restore_relisted`), or a new listing is grouped
+  into one (:mod:`furnest.db.grouping`), the unit is *relisted*: a ``relisted`` event
+  records the listing, when the group went away and the price before and now, and an
+  ``unavailable`` property moves back to the state it was in before.
 * :meth:`SqlPropertyStore.snooze` hides a property from the default views
   (:meth:`SqlPropertyStore.query` and :meth:`SqlPropertyStore.search`) until
   ``snoozed_until``.
@@ -76,7 +81,7 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -97,8 +102,16 @@ from furnest.db.grouping import (
     set_address_keys,
     unseparate,
 )
-from furnest.db.listing_store import PricePoint, price_points, stored_listing
-from furnest.db.models import AuditEvent, CriteriaVersion, JobStatus, Listing, Note, Property
+from furnest.db.listing_store import PricePoint, price_of, price_points, stored_listing
+from furnest.db.models import (
+    AuditEvent,
+    CriteriaVersion,
+    JobStatus,
+    Listing,
+    Note,
+    PriceHistory,
+    Property,
+)
 from furnest.db.session import session_scope
 from furnest.dedup.address import UsAddressParser
 from furnest.dedup.grouping import AddressKey, GroupingThresholds
@@ -110,6 +123,7 @@ from furnest.domain import (
     ParsedAddress,
     PropertyStatus,
 )
+from furnest.domain.price import Price
 from furnest.domain.status import TRANSITIONS, check_transition
 from furnest.matching import MatchResult
 from furnest.pipeline.rerun import RERUN_CRITERIA
@@ -242,6 +256,16 @@ class ListingDetail:
 
 
 @dataclass(frozen=True)
+class PropertyPricePoint:
+    """One price change of one of a property's listings."""
+
+    listing_id: int
+    source: str
+    price: Price
+    observed_at: datetime
+
+
+@dataclass(frozen=True)
 class PropertyDetail:
     property: PropertyState
     # None until the property's listing has been matched, or if the stored result
@@ -253,6 +277,8 @@ class PropertyDetail:
     audit: list[AuditEntry]
     # Oldest first.
     notes: list[NoteEntry]
+    # Every listing's price changes in one timeline, oldest first.
+    price_history: list[PropertyPricePoint] = field(default_factory=list)
 
     # ``property`` above shadows the builtin in this class body.
     @builtins.property
@@ -489,6 +515,28 @@ def _status_before_unavailable(session: Session, property_id: int) -> PropertySt
     ).first()
 
 
+def property_price_points(session: Session, property_id: int) -> list[PropertyPricePoint]:
+    """The price changes of all the property's listings, oldest first.
+
+    Merging moves listings to the survivor, so this covers merged properties too.
+    """
+    rows = session.execute(
+        select(PriceHistory, Listing.source)
+        .join(Listing, Listing.id == PriceHistory.listing_id)
+        .where(Listing.property_id == property_id)
+        .order_by(PriceHistory.observed_at, PriceHistory.id)
+    )
+    return [
+        PropertyPricePoint(
+            listing_id=row.listing_id,
+            source=source,
+            price=price_of(row),
+            observed_at=row.observed_at,
+        )
+        for row, source in rows
+    ]
+
+
 def _criteria_version_id(session: Session, version: int | None) -> int | None:
     """The row id of criteria ``version``; a match records the version number."""
     if version is None:
@@ -592,17 +640,33 @@ def _audit_in_place(
     _sync_message(session, row)
 
 
+def _has_active_listing(session: Session, property_id: int, *, besides: Iterable[int] = ()) -> bool:
+    """Whether the property has an active listing other than ``besides``."""
+    statement = select(Listing.id).where(
+        Listing.property_id == property_id, Listing.removed_at.is_(None)
+    )
+    others = list(besides)
+    if others:
+        statement = statement.where(Listing.id.not_in(others))
+    return session.scalars(statement.limit(1)).first() is not None
+
+
+# actor_detail of the events that open and close a gap in a property's listings.
+GONE = "listings removed"
+RELISTED = "relisted"
+
+
 def _mark_gone_in(session: Session, row: Property, *, at: datetime) -> bool:
     """Move ``row`` to ``unavailable`` if none of its listings is active and the state
-    machine allows it; whether it moved."""
-    if PropertyStatus.UNAVAILABLE not in TRANSITIONS[row.status]:
+    machine allows it; whether it moved.
+
+    A property that can't move there (denied, won, lost, archived) gets a ``listings
+    removed`` event in place, so a later relisting knows how long the unit was gone.
+    """
+    if row.status is PropertyStatus.UNAVAILABLE or _has_active_listing(session, row.id):
         return False
-    active = session.scalars(
-        select(Listing.id)
-        .where(Listing.property_id == row.id, Listing.removed_at.is_(None))
-        .limit(1)
-    ).first()
-    if active is not None:
+    if PropertyStatus.UNAVAILABLE not in TRANSITIONS[row.status]:
+        _audit_in_place(session, row, actor=Actor.SYSTEM, at=at, detail=GONE, payload={})
         return False
     _apply_transition(
         session,
@@ -610,9 +674,73 @@ def _mark_gone_in(session: Session, row: Property, *, at: datetime) -> bool:
         PropertyStatus.UNAVAILABLE,
         actor=Actor.SYSTEM,
         at=at,
-        detail="listings removed",
+        detail=GONE,
     )
     return True
+
+
+def _gone_since(session: Session, property_id: int) -> datetime | None:
+    """When the property's listings were last all removed, unless it was relisted since."""
+    latest = session.scalars(
+        select(AuditEvent)
+        .where(
+            AuditEvent.property_id == property_id,
+            AuditEvent.actor == Actor.SYSTEM,
+            AuditEvent.actor_detail.in_([GONE, RELISTED]),
+        )
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .limit(1)
+    ).first()
+    if latest is None or latest.actor_detail != GONE:
+        return None
+    return latest.created_at
+
+
+def _price_before(session: Session, property_id: int, before: datetime) -> PriceHistory | None:
+    """The property's last recorded price change before ``before``, on any listing."""
+    return session.scalars(
+        select(PriceHistory)
+        .join(Listing, Listing.id == PriceHistory.listing_id)
+        .where(Listing.property_id == property_id, PriceHistory.observed_at < before)
+        .order_by(PriceHistory.observed_at.desc(), PriceHistory.id.desc())
+        .limit(1)
+    ).first()
+
+
+def relist_in(session: Session, row: Property, listing_row: Listing, *, at: datetime) -> bool:
+    """Record that ``listing_row`` brought the property's unit back after all of its
+    listings were removed; whether the property's status changed.
+
+    An ``unavailable`` property moves back to the state it left. Any other status is
+    kept and the event is recorded in place.
+    """
+    payload: dict[str, Any] = {"listing_id": listing_row.id}
+    gone_since = _gone_since(session, row.id)
+    if gone_since is not None:
+        payload["gone_since"] = gone_since.isoformat()
+    now_minor, currency = listing_row.monthly_price_minor, listing_row.currency
+    if now_minor is not None and currency is not None:
+        payload["price_now_minor"] = now_minor
+        payload["currency"] = currency
+    before = _price_before(session, row.id, listing_row.last_seen)
+    # Prices in two currencies aren't comparable; then only the current one is kept.
+    if before is not None and payload.setdefault("currency", before.currency) == before.currency:
+        payload["price_before_minor"] = before.monthly_minor
+    if row.status is PropertyStatus.UNAVAILABLE:
+        restore_to = _status_before_unavailable(session, row.id)
+        if restore_to is not None:
+            _apply_transition(
+                session,
+                row,
+                restore_to,
+                actor=Actor.SYSTEM,
+                at=at,
+                detail=RELISTED,
+                payload=payload,
+            )
+            return True
+    _audit_in_place(session, row, actor=Actor.SYSTEM, at=at, detail=RELISTED, payload=payload)
+    return False
 
 
 def _new_property(
@@ -884,18 +1012,36 @@ class SqlPropertyStore:
             ]
 
     def restore_relisted(self, listing_ids: Iterable[int], *, at: datetime) -> list[int]:
-        """Move the unavailable properties of ``listing_ids`` back to the state they
-        were in before; return the ids of the properties moved."""
+        """Record the relisting of every property that ``listing_ids`` brought back
+        and move the unavailable ones back to the state they were in before; return
+        the ids of the properties moved.
+
+        A property is back when it has no other active listing and its listings were
+        recorded as all removed (``unavailable``, or a ``listings removed`` event not
+        yet followed by a relisting), so calling this twice records it once.
+        """
+        ids = sorted(set(listing_ids))
         with session_scope(self._session_factory) as session:
             moved = []
-            for row in self._properties_of(session, listing_ids):
+            for row in self._properties_of(session, ids):
+                gone = row.status is PropertyStatus.UNAVAILABLE or _gone_since(session, row.id)
+                if gone and not _has_active_listing(session, row.id, besides=ids):
+                    first = session.scalars(
+                        select(Listing)
+                        .where(Listing.property_id == row.id, Listing.id.in_(ids))
+                        .order_by(Listing.id)
+                        .limit(1)
+                    ).one()
+                    if relist_in(session, row, first, at=at):
+                        moved.append(row.id)
+                    continue
                 if row.status is not PropertyStatus.UNAVAILABLE:
                     continue
                 restore_to = _status_before_unavailable(session, row.id)
                 if restore_to is None:  # never moved there through the store; nothing to restore
                     continue
                 _apply_transition(
-                    session, row, restore_to, actor=Actor.SYSTEM, at=at, detail="relisted"
+                    session, row, restore_to, actor=Actor.SYSTEM, at=at, detail=RELISTED
                 )
                 moved.append(row.id)
             return moved
@@ -1075,6 +1221,7 @@ class SqlPropertyStore:
                 listings=listings,
                 audit=_audit(session, property_id),
                 notes=_notes(session, property_id),
+                price_history=property_price_points(session, property_id),
             )
 
     def for_listing(self, listing_id: int) -> PropertyState | None:

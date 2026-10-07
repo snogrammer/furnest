@@ -301,6 +301,9 @@ def test_get_returns_everything_about_the_property(
     assert listing["address"]["city"] == "Springfield"
     assert listing["contact"]["email"] == "host@example.com"
     assert listing["price_history"][0]["price"]["amount"]["amount_minor"] == 240000
+    (point,) = body["price_history"]
+    assert (point["listing_id"], point["source"]) == (listing_id, listing["source"])
+    assert point["price"]["amount"]["amount_minor"] == 240000
     assert "raw" not in listing
     # Created, then suggested by the passing match.
     assert [(e["from_status"], e["to_status"]) for e in body["audit"]] == [

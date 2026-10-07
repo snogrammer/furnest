@@ -130,6 +130,19 @@ def stored_listing(row: Listing) -> StoredListing:
     )
 
 
+def price_of(row: PriceHistory) -> Price:
+    """The price a ``price_history`` row recorded."""
+    return Price.model_validate(
+        {
+            "amount": {"amount_minor": row.amount_minor, "currency": row.currency},
+            "amount_max": None
+            if row.amount_max_minor is None
+            else {"amount_minor": row.amount_max_minor, "currency": row.currency},
+            "period": row.period,
+        }
+    )
+
+
 def price_points(session: Session, listing_id: int) -> list[PricePoint]:
     """Every recorded price for the listing, oldest first."""
     rows = session.scalars(
@@ -137,21 +150,7 @@ def price_points(session: Session, listing_id: int) -> list[PricePoint]:
         .where(PriceHistory.listing_id == listing_id)
         .order_by(PriceHistory.observed_at, PriceHistory.id)
     )
-    return [
-        PricePoint(
-            price=Price.model_validate(
-                {
-                    "amount": {"amount_minor": row.amount_minor, "currency": row.currency},
-                    "amount_max": None
-                    if row.amount_max_minor is None
-                    else {"amount_minor": row.amount_max_minor, "currency": row.currency},
-                    "period": row.period,
-                }
-            ),
-            observed_at=row.observed_at,
-        )
-        for row in rows
-    ]
+    return [PricePoint(price=price_of(row), observed_at=row.observed_at) for row in rows]
 
 
 def _run_state(row: SourceRun) -> SourceRunState:

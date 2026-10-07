@@ -247,3 +247,65 @@ def test_dashboard_card_links_to_the_detail_page(
     html = get(authed_client, "/")
 
     assert f'href="/properties/{property_id}"' in html
+
+
+def test_price_history_across_listings(
+    authed_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    listings = SqlListingStore(session_factory)
+
+    def listing(source: str, price: int) -> NormalizedListing:
+        return NormalizedListing.model_validate(
+            {
+                "source": source,
+                "source_id": "x",
+                "url": f"https://example.com/{source}/x",
+                "title": "Place",
+                "price": Price(amount=Money.from_major(price)),
+            }
+        )
+
+    (first,) = listings.upsert_batch("test", [listing("test", 2000)], seen_at=T0).new_ids
+    listings.upsert_batch("test", [listing("test", 1900)], seen_at=T0.replace(day=6))
+    (second,) = listings.upsert_batch(
+        "other", [listing("other", 2100)], seen_at=T0.replace(day=7)
+    ).new_ids
+    property_id = SqlPropertyStore(session_factory).ensure_for_listing(first, at=T0).id
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).where(Listing.id == second).values(property_id=property_id))
+
+    html = get(authed_client, f"/properties/{property_id}")
+
+    section = html[html.index('id="prices"') : html.index('id="score"')]
+    assert "First $2,000.00/mo · lowest $1,900.00/mo · now $2,100.00/mo" in section
+    # Newest first, each with its change from the one before and a link to its listing.
+    rows = section[section.index("<tbody>") :]
+    assert rows.index("▲ +$200.00") < rows.index("▼ -$100.00")
+    assert rows.index("$2,100.00/mo") < rows.index("$1,900.00/mo") < rows.index("$2,000.00/mo")
+    assert f'href="#listing-{second}"' in rows
+
+
+def test_a_single_price_has_no_price_history(authed_client: TestClient, seed: Seed) -> None:
+    property_id = seed(price=Price(amount=Money.from_major(2400)))
+
+    assert 'id="prices"' not in get(authed_client, f"/properties/{property_id}")
+
+
+def test_relisting_events_on_the_timeline(
+    authed_client: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    property_id = seed(price=Price(amount=Money.from_major(2400)))
+    store = SqlPropertyStore(session_factory)
+    store.transition(property_id, S.DENIED, actor=Actor.DASHBOARD, at=T0)
+    listing_id = store.detail(property_id).primary.summary.id  # type: ignore[union-attr]
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).values(removed_at=T0))
+    store.mark_gone([listing_id], at=T0)
+    with session_scope(session_factory) as session:
+        session.execute(update(Listing).values(removed_at=None))
+    store.restore_relisted([listing_id], at=T0.replace(day=8))
+
+    html = get(authed_client, f"/properties/{property_id}")
+
+    assert "All listings removed" in html
+    assert f"Relisted (listing #{listing_id}) after 3 days · $2,400.00/mo" in html

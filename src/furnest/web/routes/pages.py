@@ -81,6 +81,7 @@ from furnest.web.property_views import (
     apply_bulk,
     audit_label,
     build_dashboard,
+    price_timeline,
     status_actions,
     status_label,
 )
@@ -193,6 +194,7 @@ def _render_detail(
         "beds_baths": beds_baths,
         "status_label": status_label,
         "audit_label": audit_label,
+        "prices": price_timeline(detail.price_history),
         "render_markdown": render_markdown,
         "source_name": _source_namer(request),
     }

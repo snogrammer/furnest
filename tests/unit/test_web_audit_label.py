@@ -75,3 +75,74 @@ def test_grouping_events_are_labelled() -> None:
         audit_label(entry(None, S.NEW, {"listing_id": 7, "split_from": 1}))
         == "Created as new (split from #1)"
     )
+
+
+def relisting(
+    payload: dict[str, Any], from_status: PropertyStatus = S.DENIED, to: PropertyStatus = S.DENIED
+) -> AuditEntry:
+    return AuditEntry(
+        id=1,
+        property_id=1,
+        from_status=from_status,
+        to_status=to,
+        actor=Actor.SYSTEM,
+        actor_detail="relisted",
+        payload=payload,
+        created_at=datetime(2026, 10, 15, tzinfo=UTC),
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "label"),
+    [
+        (
+            {
+                "listing_id": 7,
+                "gone_since": "2026-10-05T00:00:00+00:00",
+                "price_before_minor": 240000,
+                "price_now_minor": 210000,
+                "currency": "USD",
+            },
+            "Relisted (listing #7) after 10 days · $2,400.00 → $2,100.00/mo",
+        ),
+        (
+            {
+                "listing_id": 7,
+                "price_before_minor": 240000,
+                "price_now_minor": 240000,
+                "currency": "USD",
+            },
+            "Relisted (listing #7) · $2,400.00/mo",
+        ),
+        (
+            {"listing_id": 7, "gone_since": "2026-10-14T00:00:00+00:00"},
+            "Relisted (listing #7) after 1 day",
+        ),
+        ({"gone_since": "not a date", "price_now_minor": "x", "currency": "USD"}, "Relisted"),
+        ({}, "Relisted"),
+        ({"price_now_minor": 100, "currency": "ZZZ"}, "Relisted"),
+    ],
+)
+def test_relisting_is_labelled(payload: dict[str, Any], label: str) -> None:
+    assert audit_label(relisting(payload)) == label
+
+
+def test_a_relisting_out_of_unavailable_shows_the_move() -> None:
+    event = relisting({"listing_id": 7}, S.UNAVAILABLE, S.APPROVED)
+
+    assert audit_label(event) == "unavailable → approved: Relisted (listing #7)"
+
+
+def test_all_listings_removed_is_labelled() -> None:
+    event = AuditEntry(
+        id=1,
+        property_id=1,
+        from_status=S.DENIED,
+        to_status=S.DENIED,
+        actor=Actor.SYSTEM,
+        actor_detail="listings removed",
+        payload={},
+        created_at=datetime(2026, 10, 5, tzinfo=UTC),
+    )
+
+    assert audit_label(event) == "All listings removed"

@@ -13,6 +13,9 @@ Status actions: the detail page offers a button for each move the state machine
 allows the dashboard (:func:`status_actions`), and the list view can deny or archive
 several properties at once (:func:`apply_bulk`). A bulk action moves each property in
 its own transaction and skips, with the reason, any it may not move.
+
+The detail page's price history (:func:`price_timeline`) puts every listing's price
+changes in one timeline, each with its change from the one before.
 """
 
 from __future__ import annotations
@@ -21,19 +24,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from math import ceil
+from typing import Any
 from urllib.parse import urlencode
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.property_store import (
+    GONE,
+    RELISTED,
     AuditEntry,
     PropertyMergedError,
     PropertyNotFoundError,
+    PropertyPricePoint,
     PropertyRow,
     PropertySort,
     SqlPropertyStore,
 )
-from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, allowed_targets
+from furnest.domain import Actor, InvalidTransitionError, Money, PropertyStatus, allowed_targets
 
 S = PropertyStatus
 
@@ -196,6 +203,11 @@ def audit_label(entry: AuditEntry, property_id: int | None = None) -> str:
 
 
 def _audit_text(entry: AuditEntry) -> str:
+    if entry.actor_detail == RELISTED and entry.actor is Actor.SYSTEM:
+        relisted = _relisted_text(entry)
+        if entry.from_status == entry.to_status or entry.from_status is None:
+            return relisted
+        return f"{status_label(entry.from_status)} → {status_label(entry.to_status)}: {relisted}"
     if entry.from_status is None:
         label = f"Created as {status_label(entry.to_status)}"
         split_from = (entry.payload or {}).get("split_from")
@@ -212,6 +224,8 @@ def _audit_text(entry: AuditEntry) -> str:
             was = payload.get("merged_status")
             suffix = f" (was {status_label(S(was))})" if was in set(S) else ""
             return f"Merged #{payload['merged_from']} into this property{suffix}"
+        if entry.actor_detail == GONE:
+            return "All listings removed"
         if payload.get("unsnoozed"):
             return "Snooze ended"
         if "snoozed_until" in payload:
@@ -221,6 +235,95 @@ def _audit_text(entry: AuditEntry) -> str:
     if entry.payload and "note_id" in entry.payload:
         label += " (reason in notes)"
     return label
+
+
+def _relisted_text(entry: AuditEntry) -> str:
+    """The relisting in one line, such as ``Relisted (listing #7) after 12 days ·
+    $2,400.00 → $2,200.00/mo``, leaving out what the event doesn't know."""
+    payload = entry.payload or {}
+    label = "Relisted"
+    if "listing_id" in payload:
+        label += f" (listing #{payload['listing_id']})"
+    gone_since = _datetime(payload.get("gone_since"))
+    if gone_since is not None:
+        days = max((entry.created_at - gone_since).days, 0)
+        label += f" after {days} day{'' if days == 1 else 's'}"
+    before = _money(payload.get("price_before_minor"), payload.get("currency"))
+    now = _money(payload.get("price_now_minor"), payload.get("currency"))
+    if before is not None and now is not None and before != now:
+        label += f" · {before.format()} → {now.format()}/mo"
+    elif now is not None:
+        label += f" · {now.format()}/mo"
+    return label
+
+
+def _datetime(value: Any) -> datetime | None:  # noqa: ANN401 - payloads are JSON
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _money(minor: Any, currency: Any) -> Money | None:  # noqa: ANN401 - payloads are JSON
+    if not isinstance(minor, int) or not isinstance(currency, str):
+        return None
+    try:
+        return Money(amount_minor=minor, currency=currency)
+    except ValueError:
+        return None
+
+
+@dataclass(frozen=True)
+class PriceStep:
+    point: PropertyPricePoint
+    # Signed change of the monthly price from the step before, in minor units; None
+    # for the first one, or after a price in another currency.
+    change_minor: int | None
+
+    @property
+    def change(self) -> str | None:
+        """The change as ``+$100.00`` or ``-$50.00``; None when there is none."""
+        if not self.change_minor:
+            return None
+        sign = "+" if self.change_minor > 0 else "-"
+        amount = Money(amount_minor=abs(self.change_minor), currency=self.point.price.currency)
+        return f"{sign}{amount.format()}"
+
+
+@dataclass(frozen=True)
+class PriceTimeline:
+    # Newest first.
+    steps: list[PriceStep]
+    first: Money
+    lowest: Money
+    current: Money
+
+
+def price_timeline(points: list[PropertyPricePoint]) -> PriceTimeline | None:
+    """The property's price changes across its listings (``points`` oldest first),
+    or None when there is nothing to compare."""
+    if len(points) < 2:
+        return None
+    steps = []
+    previous: Money | None = None
+    for point in points:
+        monthly = point.price.monthly
+        change = None
+        if previous is not None and previous.currency == monthly.currency:
+            change = monthly.amount_minor - previous.amount_minor
+        steps.append(PriceStep(point=point, change_minor=change))
+        previous = monthly
+    monthlies = [point.price.monthly for point in points]
+    current = monthlies[-1]
+    comparable = [m for m in monthlies if m.currency == current.currency]
+    return PriceTimeline(
+        steps=steps[::-1],
+        first=monthlies[0],
+        lowest=min(comparable, key=lambda m: m.amount_minor),
+        current=current,
+    )
 
 
 ACTION_LABELS: dict[PropertyStatus, str] = {
