@@ -1,12 +1,13 @@
 # Example Caddy site for furnest. Replace furnest.example.com with your domain;
 # Caddy fetches a TLS certificate for it automatically.
 #
-# Caddy must reach the web container, e.g. on a shared Docker network as
-# `furnest-web:8000`, or at 127.0.0.1:8000 when Caddy runs on the host.
+# Caddy must reach the web container. docker-compose.portainer.yml puts it on
+# the shared `caddy_net` network as `furnest-web:8000`; a Caddy on the host
+# uses 127.0.0.1:8000 (FURNEST_HOST_PORT) instead.
 #
-# In stack.env, set:
+# In the stack's environment (see stack.env.example), set:
 #   BASE_URL=https://furnest.example.com
-#   WEB_TRUSTED_PROXIES=<Caddy's address or network, e.g. 172.16.0.0/12>
+#   WEB_TRUSTED_PROXIES=<caddy_net's subnet, e.g. 172.16.0.0/12>
 # so login rate limiting sees the real client IP and HTTPS is detected.
 
 furnest.example.com {

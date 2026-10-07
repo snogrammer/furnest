@@ -21,7 +21,7 @@ One container image runs three commands, all sharing a SQLite database on the `/
 | `furnest worker` | Scheduler: one job per enabled source on its own interval with jitter. Also drains the DB job queue (inquiry sends, enrichment, criteria re-runs, Discord message sync) and writes a heartbeat. |
 | `furnest migrate` | Applies Alembic migrations once and exits. Web can also auto-migrate on start. |
 
-`furnest healthcheck web|worker` is each container's health probe: `web` asks its own `/healthz`, `worker` checks that the newest heartbeat is fresh. `docker-compose.yml` runs `migrate` as a one-shot service that must exit 0 before `web` and `worker` start (both refuse an out-of-date schema). The image runs as uid 10001, with the venv root-owned and read-only. A build arg adds Playwright and Chromium for sources that need a browser.
+`furnest healthcheck web|worker` is each container's health probe: `web` asks its own `/healthz`, `worker` checks that the newest heartbeat is fresh. Both compose files run `migrate` as a one-shot service that must exit 0 before `web` and `worker` start (both refuse an out-of-date schema). The app runs as uid 10001, with the venv root-owned and read-only. The entrypoint starts as root only to take ownership of `/data`, since a bind mount that Docker creates is root-owned, then drops privileges. A build arg adds Playwright and Chromium for sources that need a browser.
 
 SQLite runs in WAL mode with `busy_timeout` and foreign keys on, so web and worker can share it safely. The worker does all slow or network-bound work. The web process only reads, writes small rows, and enqueues jobs.
 
@@ -63,7 +63,9 @@ tests/
   fixtures/discord/    Discord message payload snapshots                  (#34)
 scripts/capture_fixture.py  records a fixture (manual only; sources/capture.py,
                   sources/sanitize.py; see CONTRIBUTING.md)                  (#25)
-Dockerfile, docker-compose.yml   one image, Portainer-ready stack        (#9)
+Dockerfile, docker/entrypoint.sh  one image; entrypoint owns /data, runs as uid 10001  (#9)
+docker-compose.yml           local stack, built from the checkout              (#114)
+docker-compose.portainer.yml, stack.env.example  Portainer stack on caddy_net  (#114)
 deploy/Caddyfile.example
 docs/             ARCHITECTURE, adapters, BRAND (+ brand/ source artwork)
 .github/workflows/ci.yml   (GitHub Actions syntax, portable to Gitea Actions)

@@ -103,18 +103,28 @@ docker build -t furnest:browser --build-arg WITH_PLAYWRIGHT=true .  # + Chromium
 docker run --rm -v furnest-data:/data --env-file .env furnest migrate
 ```
 
-The container runs as uid 10001 and keeps all state in the `/data` volume. It sets `WEB_HOST=0.0.0.0`, `WEB_PORT=8000`, `DATA_DIR=/data` and `LOG_FORMAT=json`.
+furnest keeps all state in `/data`. The image sets `WEB_HOST=0.0.0.0`, `WEB_PORT=8000`, `DATA_DIR=/data` and `LOG_FORMAT=json`.
 
-[`docker-compose.yml`](docker-compose.yml) is a Portainer-ready stack. Copy `.env.example` to `stack.env` next to it (or set the variables in Portainer), then choose the image with `FURNEST_IMAGE` / `FURNEST_TAG`:
+furnest runs as uid 10001. The entrypoint (`furnest-entrypoint`) starts as root only to take ownership of `/data`, then drops privileges. A bind-mount directory that Docker created as root therefore works without a manual `chown`. The entrypoint also reclaims root-owned SQLite WAL files left behind by a root `docker exec`. For one-off commands in a running container, go through the entrypoint (`docker exec furnest-web furnest-entrypoint <command>`) or run as the app user (`docker exec -u furnest ...`). Running plain `furnest` as root can leave files the app can't write.
+
+There are two compose files. `migrate` runs once and exits in both, then `web` and `worker` start. Each has a healthcheck (`furnest healthcheck web|worker`) and a restart policy. The worker gets a 30s stop grace period, so running jobs can finish on redeploy. Alternatively, set `DB_AUTO_MIGRATE=true` to have `web` migrate on start.
+
+**Local:** [`docker-compose.yml`](docker-compose.yml) builds the image from your checkout. It reads `.env` and keeps the database in the `furnest-data` volume. The dashboard is published on `127.0.0.1` only.
 
 ```sh
-cp .env.example stack.env   # set AUTH_TOKEN, AUTH_SESSION_SECRET, BASE_URL, ...
-FURNEST_IMAGE=registry.example.com/furnest FURNEST_TAG=v0.1.0 docker compose up -d
+cp .env.example .env               # set AUTH_TOKEN and AUTH_SESSION_SECRET
+docker compose up -d --build       # http://127.0.0.1:8000
 ```
 
-`migrate` runs once and exits, then `web` and `worker` start. Each has a healthcheck (`furnest healthcheck web|worker`), memory limit and restart policy. The worker gets a 30s stop grace period, so running jobs can finish on redeploy. Alternatively, set `DB_AUTO_MIGRATE=true` to have `web` migrate on start.
+**Portainer:** [`docker-compose.portainer.yml`](docker-compose.portainer.yml) runs the published image as a git-backed stack. Point the stack's compose path at that file and set its variables from [`stack.env.example`](stack.env.example) (Portainer writes them to `stack.env`). The database lives on the host at `FURNEST_DATA_PATH`. `web` joins the existing `caddy_net` network (`SHARED_NETWORK`), so Caddy proxies to `furnest-web:8000`. `worker` and `migrate` stay on the stack's own network. To run it by hand:
 
-Put a TLS reverse proxy in front. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the proxy's address.
+```sh
+docker network create caddy_net    # once, if Caddy hasn't already
+cp stack.env.example stack.env     # set FURNEST_IMAGE, FURNEST_DATA_PATH, AUTH_*, BASE_URL, ...
+docker compose -f docker-compose.portainer.yml --env-file stack.env up -d
+```
+
+Caddy terminates TLS. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the `caddy_net` subnet.
 
 [docs/discord-setup.md](docs/discord-setup.md) walks through creating the Discord application and bot, inviting it and setting the interactions endpoint.
 
@@ -125,7 +135,7 @@ Put a TLS reverse proxy in front. [`deploy/Caddyfile.example`](deploy/Caddyfile.
 - **lint:** `ruff check`, `ruff format --check`, `mypy`
 - **test:** `pytest` with coverage. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
 - **migrations:** migration round-trips plus `alembic check`
-- **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker` and validates `docker-compose.yml`
+- **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker`, checks a root-owned data directory is taken over, and validates both compose files
 
 Run the same gates locally with `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 

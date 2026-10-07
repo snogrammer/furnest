@@ -15,6 +15,8 @@ name: Publish
 #                                         must allow binfmt registration (privileged).
 #            PORTAINER_URL                e.g. https://portainer.example.com
 #            PORTAINER_STACK_ID, PORTAINER_ENDPOINT_ID (default 1)
+# The Portainer stack is git-backed, with docker-compose.portainer.yml as its
+# compose path (docker-compose.yml is the local build-from-source stack).
 # Without REGISTRY nothing is built, and the `config` job warns about it. Without
 # PORTAINER_URL/PORTAINER_STACK_ID the image is pushed but no redeploy happens.
 #
@@ -61,7 +63,7 @@ jobs:
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_STACK_ID: ${{ vars.PORTAINER_STACK_ID }}
       PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID || '1' }}
-      # Containers polled after redeploy (container_name in docker-compose.yml).
+      # Containers polled after redeploy (container_name in docker-compose.portainer.yml).
       PORTAINER_CONTAINERS: "furnest-web furnest-worker"
     steps:
       - name: Checkout

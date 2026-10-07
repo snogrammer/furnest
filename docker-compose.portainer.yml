@@ -1,0 +1,102 @@
+# furnest as a git-backed Portainer stack, running the published image.
+#
+# Portainer writes `stack.env` from the stack's environment variables (see
+# stack.env.example; .env.example lists every app setting). These pick the image,
+# the host path and the network:
+#
+#   FURNEST_IMAGE      registry path, e.g. registry.example.com/org/furnest
+#   FURNEST_TAG        tag to run (default: latest). The publish workflow's
+#                      redeploy pulls `latest`; pin `v1.2.3` or a commit `<sha>`
+#                      for a fixed version.
+#   FURNEST_DATA_PATH  host directory for state (the SQLite database)
+#   SHARED_NETWORK     existing Docker network shared with Caddy (default: caddy_net)
+#   FURNEST_BIND_ADDR  host address the dashboard port is published on
+#                      (default: 127.0.0.1; 0.0.0.0 for a proxy on another host)
+#   FURNEST_HOST_PORT  host port for the dashboard (default: 8000)
+#
+# furnest runs as uid 10001. If Docker creates FURNEST_DATA_PATH (owned by
+# root), the entrypoint takes ownership of it before dropping privileges, so no
+# manual chown is needed.
+#
+# Start order: `migrate` runs once and exits, then `web` and `worker` start.
+# Both refuse an out-of-date schema. All three share FURNEST_DATA_PATH, so they
+# must run on the same host.
+#
+# Only `web` joins SHARED_NETWORK: Caddy proxies to furnest-web:8000. Set
+# WEB_TRUSTED_PROXIES to that network's subnet so login rate limiting sees the
+# real client IP. `migrate` and `worker` serve nothing and stay on the stack's
+# own network.
+
+x-furnest: &furnest
+  image: ${FURNEST_IMAGE:?set FURNEST_IMAGE}:${FURNEST_TAG:-latest}
+  env_file: stack.env
+  # Container-internal values. These win over stack.env, so a copied .env.example
+  # (WEB_HOST=127.0.0.1) can't make the dashboard unreachable from outside.
+  environment:
+    WEB_HOST: 0.0.0.0
+    WEB_PORT: "8000"
+    DATA_DIR: /data
+  volumes:
+    - ${FURNEST_DATA_PATH:?set FURNEST_DATA_PATH}:/data
+  # tini as PID 1: forwards SIGTERM and reaps Chromium child processes.
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  migrate:
+    <<: *furnest
+    command: ["migrate"]
+    restart: "no"
+    healthcheck:
+      disable: true
+    mem_limit: 256m
+
+  web:
+    <<: *furnest
+    # The publish workflow's redeploy step waits on this name, and Caddy proxies to it.
+    container_name: furnest-web
+    command: ["web"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [caddy]
+    # For a Caddy on the host, or elsewhere with FURNEST_BIND_ADDR=0.0.0.0.
+    ports:
+      - "${FURNEST_BIND_ADDR:-127.0.0.1}:${FURNEST_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "furnest-entrypoint", "healthcheck", "web"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    mem_limit: 512m
+
+  worker:
+    <<: *furnest
+    # The publish workflow's redeploy step waits on this name.
+    container_name: furnest-worker
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "furnest-entrypoint", "healthcheck", "worker"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # Above WORKER_SHUTDOWN_TIMEOUT_SECONDS (25 by default) so running jobs can
+    # finish. Docker's default of 10s would kill them mid-run.
+    stop_grace_period: 30s
+    mem_limit: 1g
+
+networks:
+  # Shared with Caddy. It must already exist (docker network create caddy_net).
+  caddy:
+    name: ${SHARED_NETWORK:-caddy_net}
+    external: true

@@ -1,24 +1,28 @@
-# furnest as a Portainer (or plain `docker compose`) stack.
+# Local development stack: builds the image from this checkout.
 #
-# Configuration comes from `stack.env` next to this file. Copy `.env.example`
-# to `stack.env` and fill it in, or let Portainer write it from the stack's
-# environment variables. Two variables here pick the image:
+#   cp .env.example .env   # set AUTH_TOKEN and AUTH_SESSION_SECRET at least
+#   docker compose up -d --build
+#   open http://127.0.0.1:8000
 #
-#   FURNEST_IMAGE  registry path of the image (default: registry.example.com/furnest)
-#   FURNEST_TAG    tag to run (default: latest). Pin a release (`v1.2.3`) or a
-#                  commit (`<sha>`) for reproducible deploys. The CI redeploy flow
-#                  pulls `latest`.
-#   FURNEST_PORT   host port for the dashboard (default: 8000)
+# WITH_PLAYWRIGHT=true docker compose build   adds Chromium for browser sources.
+# FURNEST_PORT picks the host port for the dashboard (default: 8000).
+#
+# For a Portainer deployment use docker-compose.portainer.yml instead.
 #
 # Start order: `migrate` runs once and exits, then `web` and `worker` start.
-# Both refuse an out-of-date schema. All three share the `furnest-data` volume,
-# which holds the SQLite database, so they must run on the same host.
+# All three share the `furnest-data` volume, which holds the SQLite database.
+# `docker compose down -v` deletes it.
 
 x-furnest: &furnest
-  image: ${FURNEST_IMAGE:-registry.example.com/furnest}:${FURNEST_TAG:-latest}
-  env_file: stack.env
-  # Container-internal values. These win over stack.env, so a copied .env.example
-  # (WEB_HOST=127.0.0.1) can't make the dashboard unreachable from outside.
+  # Built once by `migrate` (below); web and worker run the same local image.
+  image: furnest:local
+  pull_policy: never
+  # The same .env `uv run furnest ...` reads.
+  env_file:
+    - path: .env
+      required: false
+  # Container-internal values. These win over .env, whose WEB_HOST and DATA_DIR
+  # are meant for running on the host.
   environment:
     WEB_HOST: 0.0.0.0
     WEB_PORT: "8000"
@@ -27,56 +31,53 @@ x-furnest: &furnest
     - furnest-data:/data
   # tini as PID 1: forwards SIGTERM and reaps Chromium child processes.
   init: true
-  restart: unless-stopped
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "5"
 
 services:
   migrate:
     <<: *furnest
+    # Only one service builds: three builds of one tag would race.
+    build:
+      context: .
+      args:
+        WITH_PLAYWRIGHT: ${WITH_PLAYWRIGHT:-false}
+    pull_policy: build
     command: ["migrate"]
-    restart: "no"
     healthcheck:
       disable: true
-    mem_limit: 256m
 
   web:
     <<: *furnest
-    container_name: furnest-web
     command: ["web"]
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # Loopback only: the dashboard is for this machine.
     ports:
-      - "${FURNEST_PORT:-8000}:8000"
+      - "127.0.0.1:${FURNEST_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "furnest", "healthcheck", "web"]
+      test: ["CMD", "furnest-entrypoint", "healthcheck", "web"]
       interval: 30s
       timeout: 5s
       start_period: 20s
       retries: 3
-    mem_limit: 512m
 
   worker:
     <<: *furnest
-    container_name: furnest-worker
     command: ["worker"]
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "furnest", "healthcheck", "worker"]
+      test: ["CMD", "furnest-entrypoint", "healthcheck", "worker"]
       interval: 30s
       timeout: 5s
       start_period: 60s
       retries: 3
     # Above WORKER_SHUTDOWN_TIMEOUT_SECONDS (25 by default) so running jobs can
-    # finish. Docker's default of 10s would kill them mid-run.
+    # finish.
     stop_grace_period: 30s
-    mem_limit: 1g
 
 volumes:
   furnest-data:

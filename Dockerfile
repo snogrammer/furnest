@@ -50,8 +50,11 @@ LABEL org.opencontainers.image.title="furnest" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.revision="${GIT_SHA}"
 
+# /data starts out owned by furnest, so a new named volume copies that ownership.
+# A bind mount doesn't, which is what the entrypoint is for.
 RUN groupadd --gid 10001 furnest \
-    && useradd --uid 10001 --gid furnest --no-create-home --shell /usr/sbin/nologin furnest \
+    && useradd --uid 10001 --gid furnest --create-home --home-dir /home/furnest \
+        --shell /usr/sbin/nologin furnest \
     && install -d -o furnest -g furnest -m 0750 /data
 
 ENV PATH="/app/.venv/bin:$PATH" \
@@ -73,15 +76,20 @@ RUN if [ "$WITH_PLAYWRIGHT" = "true" ]; then \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/furnest-entrypoint
+
+# No USER: furnest-entrypoint starts as root only to take ownership of /data (a
+# bind mount Docker created is root-owned), then runs furnest as uid 10001.
 WORKDIR /data
 VOLUME ["/data"]
-USER furnest:furnest
 EXPOSE 8000
 
 # Probes the web process. Compose overrides this for the worker
-# (`furnest healthcheck worker`); `migrate` exits before it matters.
+# (`furnest-entrypoint healthcheck worker`); `migrate` exits before it matters.
+# Through the entrypoint so the probe runs as uid 10001: the worker probe opens
+# the database, and as root it could leave root-owned WAL files behind.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["furnest", "healthcheck", "web"]
+    CMD ["furnest-entrypoint", "healthcheck", "web"]
 
-ENTRYPOINT ["furnest"]
+ENTRYPOINT ["furnest-entrypoint"]
 CMD ["web"]

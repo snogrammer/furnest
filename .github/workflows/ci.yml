@@ -110,13 +110,8 @@ jobs:
           build-args: |
             GIT_SHA=${{ github.sha }}
 
-      - name: Image runs as non-root
-        run: |
-          uid=$(docker run --rm --entrypoint id "$IMAGE" -u)
-          echo "uid=$uid"
-          test "$uid" = 10001
-
-      - name: Smoke test web, worker and migrate
+      # The entrypoint starts as root, so this checks the app process itself.
+      - name: Smoke test web, worker and migrate as non-root
         run: |
           set -euo pipefail
           name="furnest-ci-${{ github.run_id }}"
@@ -129,24 +124,63 @@ jobs:
           docker run --rm -v "$vol:/data" "$IMAGE" migrate
           docker run -d --name "$name-web" -v "$vol:/data" "${env[@]}" "$IMAGE" web
           docker run -d --name "$name-worker" -v "$vol:/data" "$IMAGE" worker
+          healthy=no
           for _ in $(seq 1 30); do
-            if docker exec "$name-web" furnest healthcheck web \
-              && docker exec "$name-worker" furnest healthcheck worker; then
-              echo "web and worker healthy"
-              exit 0
+            if docker exec "$name-web" furnest-entrypoint healthcheck web \
+              && docker exec "$name-worker" furnest-entrypoint healthcheck worker; then
+              healthy=yes
+              break
             fi
             sleep 2
           done
-          echo "::error::containers did not become healthy"
-          docker logs "$name-web" 2>&1 | tail -50
-          docker logs "$name-worker" 2>&1 | tail -50
-          exit 1
+          if [ "$healthy" != yes ]; then
+            echo "::error::containers did not become healthy"
+            docker logs "$name-web" 2>&1 | tail -50
+            docker logs "$name-worker" 2>&1 | tail -50
+            exit 1
+          fi
+          echo "web and worker healthy"
+          for c in "$name-web" "$name-worker"; do
+            uids=$(docker exec "$c" awk '/^Uid:/ {print $2, $3}' /proc/1/status)
+            echo "$c PID 1 uid (real, effective): $uids"
+            test "$uids" = "10001 10001"
+          done
+          # Probes ran through the entrypoint, so nothing in /data is root-owned.
+          stray=$(docker exec "$name-worker" find /data ! -uid 10001)
+          if [ -n "$stray" ]; then
+            echo "::error::files in /data not owned by uid 10001: $stray"
+            exit 1
+          fi
 
-      - name: Compose file validates
+      # Docker creates a missing bind-mount directory owned by root. A root-owned
+      # volume stands in for it (CI can't bind-mount runner paths), plus a stray
+      # root-owned file like the WAL files a `docker exec` as root leaves behind.
+      # The file also matters because Docker resets an *empty* volume to the
+      # image's /data ownership on mount, which would hide the problem.
+      - name: Root-owned data directory is taken over
         run: |
-          cp .env.example stack.env
+          set -euo pipefail
+          vol="furnest-ci-${{ github.run_id }}-rootdata"
+          # shellcheck disable=SC2329 # invoked by the trap
+          cleanup() { docker volume rm "$vol" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --rm --user 0 --entrypoint sh -v "$vol:/data" "$IMAGE" \
+            -c 'chown -R 0:0 /data && chmod 0755 /data && touch /data/furnest.db-shm'
+          docker run --rm -v "$vol:/data" "$IMAGE" migrate
+          stray=$(docker run --rm --user 0 --entrypoint find -v "$vol:/data" "$IMAGE" /data ! -uid 10001)
+          if [ -n "$stray" ]; then
+            echo "::error::files in /data not owned by uid 10001: $stray"
+            exit 1
+          fi
+          docker run --rm --user 0 --entrypoint ls -v "$vol:/data" "$IMAGE" -lan /data
+
+      - name: Compose files validate
+        run: |
           docker compose config -q
           echo "docker-compose.yml is valid"
+          cp stack.env.example stack.env
+          docker compose -f docker-compose.portainer.yml --env-file stack.env config -q
+          echo "docker-compose.portainer.yml is valid"
 
       - name: Remove CI image
         if: always()

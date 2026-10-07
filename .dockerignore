@@ -1,4 +1,5 @@
-# Only pyproject.toml, uv.lock, README.md, LICENSE and src/ are copied into the image.
+# Only pyproject.toml, uv.lock, README.md, LICENSE, src/ and docker/entrypoint.sh are
+# copied into the image.
 .git
 .github
 .gitea
