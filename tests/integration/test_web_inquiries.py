@@ -12,7 +12,13 @@ from sqlalchemy import Engine, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import Settings
-from furnest.db.email_store import EMAIL_SEND, SqlEmailStore, draft_email
+from furnest.db.email_store import (
+    EMAIL_SEND,
+    SqlEmailStore,
+    awaiting_reply,
+    draft_email,
+    record_reply_in,
+)
 from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Email, EmailStatus, Job, Property
 from furnest.db.property_store import SqlPropertyStore
@@ -438,6 +444,32 @@ def test_detail_without_emails(authed_client: TestClient, world: World) -> None:
     html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
 
     assert "No emails yet." in html
+
+
+def test_detail_shows_a_received_reply(authed_client: TestClient, world: World) -> None:
+    property_id, email_id = world.draft()
+    store = SqlEmailStore(world.factory)
+    store.mark_sent(email_id, now=T0)
+    with session_scope(world.factory) as session:
+        (inquiry,) = awaiting_reply(session).values()
+        record_reply_in(
+            session,
+            inquiry,
+            message_id="<reply@example.net>",
+            from_address=LISTER,
+            to_address="furnest@example.com",
+            subject="Re: Inquiry about the flat",
+            body="Yes, come see it.",
+            received_at=T0,
+            at=T0,
+        )
+
+    html = authed_client.get(f"/properties/{property_id}", headers=HTML).text
+
+    assert world.status(property_id) is S.RESPONDED
+    assert '<span class="status status-received">Received</span>' in html
+    assert f"from {LISTER}" in html
+    assert "Yes, come see it." in html
 
 
 def test_inquire_works_without_smtp(

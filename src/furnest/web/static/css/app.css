@@ -708,7 +708,8 @@ button.secondary {
   color: var(--accent);
 }
 
-.status-won {
+.status-won,
+.status-received {
   border-color: var(--ok);
   color: var(--ok);
 }

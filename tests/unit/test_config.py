@@ -12,6 +12,7 @@ from furnest.config import (
     INQUIRY_MODE,
     RUNTIME_SETTINGS,
     Environment,
+    ImapSettings,
     InMemorySettingsStore,
     InquiryMode,
     LlmProvider,
@@ -368,3 +369,26 @@ def test_smtp_defaults_and_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     assert smtp.configured is True
     assert smtp.from_name == "furnest"
     assert smtp.timeout_seconds == 5.0
+
+
+def test_imap_is_off_by_default() -> None:
+    imap = ImapSettings()
+    assert imap.enabled is False
+    assert imap.configured is False
+    assert imap.security is SmtpSecurity.SSL
+    assert imap.lookback_days == 14
+
+
+def test_imap_enabled_requires_a_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("IMAP_ENABLED", "true")
+    monkeypatch.setenv("IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("IMAP_USERNAME", "furnest@example.com")
+    with pytest.raises(ValidationError, match="IMAP_ENABLED=true requires"):
+        ImapSettings()
+
+    monkeypatch.setenv("IMAP_PASSWORD", "imap-password")
+    monkeypatch.setenv("IMAP_SECURITY", "starttls")
+    imap = ImapSettings()
+    assert imap.enabled is True
+    assert imap.configured is True
+    assert imap.security is SmtpSecurity.STARTTLS

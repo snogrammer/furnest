@@ -99,6 +99,7 @@ def worker() -> None:
     from furnest.db.engine import create_engine_from_settings
     from furnest.db.migrate import migration_status
     from furnest.db.session import make_session_factory
+    from furnest.email.imap import schedule_imap_poll
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.notify.digest import schedule_digest
     from furnest.pipeline.ingest import ListingIngestor
@@ -141,6 +142,7 @@ def worker() -> None:
         )
         schedule_unsnooze(worker, pipeline, settings.pipeline)
         schedule_digest(worker, factory, settings)
+        schedule_imap_poll(worker, factory, settings)
         alert_after = settings.discord.alert_after_failures
         try:
             schedule_sources(

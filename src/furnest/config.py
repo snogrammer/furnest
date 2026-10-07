@@ -285,14 +285,35 @@ class SmtpSettings(_Group):
 
 
 class ImapSettings(_Group):
+    """Reply detection (``furnest.email.imap``): off unless ``IMAP_ENABLED`` is set."""
+
     model_config = SettingsConfigDict(env_prefix="IMAP_")
 
+    enabled: bool = False
     host: str | None = None
+    # 993 for ssl; 143 for starttls or none.
     port: Port = 993
     username: str | None = None
     password: SecretStr | None = None
+    security: SmtpSecurity = SmtpSecurity.SSL
     folder: str = "INBOX"
     poll_interval_seconds: PositiveInt = 300
+    # Connect/read timeout for each IMAP operation.
+    timeout_seconds: PositiveFloat = 30.0
+    # How far back one poll looks for replies, at most.
+    lookback_days: PositiveInt = 14
+
+    @property
+    def configured(self) -> bool:
+        """True when there is a server to log in to."""
+        return self.host is not None and self.username is not None and self.password is not None
+
+    @model_validator(mode="after")
+    def _enabled_needs_server(self) -> ImapSettings:
+        if self.enabled and not self.configured:
+            msg = "IMAP_ENABLED=true requires IMAP_HOST, IMAP_USERNAME and IMAP_PASSWORD"
+            raise ValueError(msg)
+        return self
 
 
 class LlmSettings(_Group):

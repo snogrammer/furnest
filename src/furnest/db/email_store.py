@@ -23,6 +23,13 @@ When an inquiry goes out, :meth:`SqlEmailStore.mark_sent` moves its property fro
 ``inquiry_drafted`` to ``inquiry_sent`` in the same transaction, so the status
 only says "sent" once the server has accepted the message (or, for one sent by
 hand, once someone said so).
+
+Replies come back through the IMAP poller (:mod:`furnest.email.imap`).
+:func:`awaiting_reply` lists the inquiries it looks for: emailed ones (not sent by
+hand, which can't be answered by email) whose property is still ``inquiry_sent`` or
+``in_progress``. :func:`record_reply_in` logs a reply as an ``inbound`` row with
+status ``received`` and moves the property to ``responded``, both or neither. The
+reply's own Message-ID is unique in the log, so finding it again changes nothing.
 """
 
 from dataclasses import dataclass
@@ -74,6 +81,9 @@ class NotSendableError(ValueError):
 # What can be sent (again) from the review queue.
 SENDABLE = frozenset({EmailStatus.DRAFT, EmailStatus.FAILED})
 
+# Property states in which a reply to the inquiry means "responded".
+AWAITING_REPLY = frozenset({PropertyStatus.INQUIRY_SENT, PropertyStatus.IN_PROGRESS})
+
 
 @dataclass(frozen=True)
 class StoredEmail:
@@ -119,6 +129,15 @@ class ReviewItem:
     title: str | None
     source: str | None
     listing_url: str | None
+
+
+@dataclass(frozen=True)
+class AwaitingReply:
+    """An emailed inquiry whose property is still waiting to hear back."""
+
+    email_id: int
+    property_id: int
+    sent_at: datetime
 
 
 def _message_id(from_address: str | None) -> str:
@@ -307,6 +326,77 @@ def discard_draft_in(session: Session, email_id: int) -> StoredEmail:
         session.delete(row)
         session.flush()
     return stored
+
+
+def awaiting_reply(session: Session) -> dict[str, AwaitingReply]:
+    """The inquiries a reply would answer, by their Message-ID."""
+    statement = (
+        select(Email)
+        .join(Property, Property.id == Email.property_id)
+        .where(
+            Email.direction == EmailDirection.OUTBOUND,
+            Email.status == EmailStatus.SENT,
+            Email.to_address.is_not(None),
+            Email.from_address.is_not(None),
+            Email.sent_at.is_not(None),
+            Property.status.in_(AWAITING_REPLY),
+        )
+    )
+    awaiting = {}
+    for row in session.scalars(statement):
+        assert row.property_id is not None  # noqa: S101 - the join guarantees it
+        assert row.sent_at is not None  # noqa: S101 - so does the where clause
+        awaiting[row.message_id] = AwaitingReply(row.id, row.property_id, row.sent_at)
+    return awaiting
+
+
+def record_reply_in(
+    session: Session,
+    inquiry: AwaitingReply,
+    *,
+    message_id: str,
+    from_address: str | None,
+    to_address: str | None,
+    subject: str,
+    body: str,
+    received_at: datetime,
+    at: datetime,
+) -> StoredEmail | None:
+    """Log a reply to ``inquiry`` and move its property to ``responded``.
+
+    Returns ``None``, changing nothing, when a row with ``message_id`` is already
+    logged. The property only moves if it is still waiting for a reply; the reply
+    is logged either way.
+    """
+    if session.scalar(select(Email.id).where(Email.message_id == message_id)) is not None:
+        return None
+    row = Email(
+        property_id=inquiry.property_id,
+        direction=EmailDirection.INBOUND,
+        to_address=to_address,
+        from_address=from_address,
+        subject=subject,
+        body_rendered=body,
+        status=EmailStatus.RECEIVED,
+        attempts=0,
+        message_id=message_id,
+        created_at=at,
+        sent_at=received_at,
+    )
+    session.add(row)
+    session.flush()
+    prop = session.get(Property, inquiry.property_id)
+    if prop is not None and prop.status in AWAITING_REPLY:
+        transition_in(
+            session,
+            prop.id,
+            PropertyStatus.RESPONDED,
+            actor=Actor.SYSTEM,
+            at=at,
+            detail="reply received",
+            payload={"email_id": row.id, "reply_to": inquiry.email_id},
+        )
+    return _stored(row)
 
 
 def _awaiting_review() -> ColumnElement[bool]:

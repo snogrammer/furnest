@@ -14,7 +14,8 @@ own messaging and *marked* as sent, which makes the row ``sent`` with no recipie
 
 ``message_id`` is generated once, when the row is created, so every retry sends the
 same Message-ID header. Replies quote it in In-Reply-To/References, which is how
-the IMAP poller (#44) will match them; it logs those as ``inbound`` rows.
+the IMAP poller (``furnest.email.imap``) matches them; it logs each reply as an
+``inbound`` row with status ``received``, keyed by the reply's own Message-ID.
 """
 
 from datetime import datetime
@@ -36,6 +37,7 @@ class EmailStatus(StrEnum):
     QUEUED = "queued"  # waiting to be sent, or between retries (see ``error``)
     SENT = "sent"
     FAILED = "failed"  # refused permanently, or out of retries
+    RECEIVED = "received"  # an inbound reply, found by the IMAP poller
 
 
 class Email(Base):
@@ -58,7 +60,8 @@ class Email(Base):
         ),
         default=EmailDirection.OUTBOUND,
     )
-    # NULL only on a draft whose listing has no email address.
+    # NULL only on a draft whose listing has no email address. On an inbound row,
+    # the mailbox the reply arrived at.
     to_address: Mapped[str | None] = mapped_column(String(320))
     # NULL only on an inquiry drafted while SMTP wasn't set up (filled in on send),
     # or one that was then marked as sent by hand.
