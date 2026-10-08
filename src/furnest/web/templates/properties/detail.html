@@ -18,6 +18,11 @@
     {% if bb %}<div><dt>Size</dt><dd>{{ bb }}{% if primary.listing.sqft %} · {{ primary.listing.sqft }} sqft{% endif %}</dd></div>{% endif %}
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
+  {% if enrichment.risks %}
+  <aside class="risk-banner risk-{{ risk_level }}" role="alert" aria-labelledby="risk-banner-title">
+    <p><strong id="risk-banner-title">Possible scam or risk signals.</strong> {{ enrichment.risks | length }} found: <a href="#risk">see details</a>.</p>
+  </aside>
+  {% endif %}
   {% if p.manual_contact_required %}
   <aside class="manual-contact" aria-labelledby="manual-contact-title">
     <p><strong id="manual-contact-title">Manual contact required.</strong> This listing has no email address: message the lister through {% if primary %}{{ source_name(primary.summary.source) }}{% else %}the listing's site{% endif %}.</p>
@@ -180,6 +185,7 @@
     <p class="price-summary">
       First {{ prices.first.format() }}/mo · lowest {{ prices.lowest.format() }}/mo · now {{ prices.current.format() }}/mo
     </p>
+    {% if price_chart %}<figure class="price-chart-figure">{{ price_chart }}</figure>{% endif %}
     <div class="table-scroll">
     <table class="data-table price-timeline">
       <thead><tr><th scope="col">Date</th><th scope="col">Source</th><th scope="col">Price</th><th scope="col">Change</th></tr></thead>
@@ -261,13 +267,45 @@
   </section>
 
   <section aria-labelledby="enrichment">
-    <h2 id="enrichment">Enrichment</h2>
-    <p class="muted">Price comparisons and alternative listings will show here (P8).</p>
+    <h2 id="enrichment">Price comparison</h2>
+    {% if enrichment.alternatives %}
+    <div class="table-scroll">
+    <table class="data-table comparison">
+      <thead><tr><th scope="col">Source</th><th scope="col">Price</th><th scope="col">vs. this property</th><th scope="col">Match</th></tr></thead>
+      <tbody>
+        <tr class="comparison-self">
+          <th scope="row">This property{% if primary %} <small class="muted">({{ source_name(primary.summary.source) }})</small>{% endif %}</th>
+          <td>{% if primary and primary.summary.monthly_price %}{{ primary.summary.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}</td>
+          <td><span class="muted">–</span></td>
+          <td><span class="muted">–</span></td>
+        </tr>
+        {% for a in enrichment.alternatives %}
+        <tr>
+          <th scope="row"><a href="{{ a.url }}" rel="noopener noreferrer" target="_blank">{{ source_name(a.source) }}</a><br><small class="muted">{{ a.title }}</small></th>
+          <td>{% if a.price %}{{ a.price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}</td>
+          <td>{% if a.difference %}<span class="{{ 'price-down' if a.cheaper else 'price-up' }}">{{ '▼' if a.cheaper else '▲' }} {{ a.difference }}</span>{% elif a.cheaper is none %}<span class="muted">–</span>{% else %}same{% endif %}</td>
+          <td>{{ a.score_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted">No alternative listings found.</p>
+    {% endif %}
   </section>
 
   <section aria-labelledby="risk">
     <h2 id="risk">Risk flags</h2>
-    <p class="muted">Scam and risk signals will show here (P8).</p>
+    {% if enrichment.risks %}
+    <ul class="risk-list">
+      {% for r in enrichment.risks %}
+      <li class="risk-item risk-{{ r.severity }}"><span class="status">{{ r.severity }}</span> <strong>{{ r.kind | replace("_", " ") }}</strong>: {{ r.summary }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No risk signals.</p>
+    {% endif %}
   </section>
 
   <section aria-labelledby="notes">

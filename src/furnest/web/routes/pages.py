@@ -69,6 +69,7 @@ from furnest.notify.embeds import INQUIRABLE
 from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
 from furnest.web.csrf import require_csrf
+from furnest.web.enrichment_views import load_enrichment, price_chart, top_severity
 from furnest.web.html import render_markdown
 from furnest.web.property_views import (
     DEFAULT_TAB,
@@ -169,6 +170,7 @@ def _render_detail(
     if detail.property.merged_into_id is not None:
         return _merged(PropertyMergedError(property_id, detail.property.merged_into_id))
     emails = SqlEmailStore(make_session_factory(request.app.state.engine)).for_property(property_id)
+    enrichment = load_enrichment(make_session_factory(request.app.state.engine), property_id)
     status = detail.property.status
     inquiry = _open_inquiry(status, emails)
     context = {
@@ -195,6 +197,9 @@ def _render_detail(
         "status_label": status_label,
         "audit_label": audit_label,
         "prices": price_timeline(detail.price_history),
+        "price_chart": price_chart(detail.price_history),
+        "enrichment": enrichment,
+        "risk_level": top_severity(enrichment.risks),
         "render_markdown": render_markdown,
         "source_name": _source_namer(request),
     }

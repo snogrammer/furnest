@@ -9,7 +9,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.listing_store import SqlListingStore
-from furnest.db.models import Listing, Property
+from furnest.db.models import EnrichmentResult, Listing, Property, RiskFlag
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
 from furnest.domain import Actor, FilterRule, Money, NormalizedListing, PropertyStatus
@@ -128,8 +128,8 @@ def test_page_shows_everything_about_the_property(
     assert "min beds" in html
     # Description as paragraphs.
     assert "<p>Bright and quiet.</p><p>Close to transit.</p>" in html
-    # Placeholders for later phases.
-    for heading in ("Email log", "Enrichment", "Risk flags"):
+    # Email log and enrichment sections.
+    for heading in ("Email log", "Price comparison", "Risk flags"):
         assert heading in html
     # Timeline, newest first.
     assert html.index("suggested → approved") < html.index("new → suggested")
@@ -309,3 +309,93 @@ def test_relisting_events_on_the_timeline(
 
     assert "All listings removed" in html
     assert f"Relisted (listing #{listing_id}) after 3 days · $2,400.00/mo" in html
+
+
+def test_enrichment_sections_empty(authed_client: TestClient, seed: Seed) -> None:
+    html = get(authed_client, f"/properties/{seed()}")
+
+    assert "No alternative listings found." in html
+    assert "No risk signals." in html
+    assert "risk-banner" not in html
+
+
+def test_comparison_risk_banner_and_chart(
+    authed_client: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    property_id = seed(price=Price(amount=Money.from_major(2000)))
+    with session_scope(session_factory) as session:
+        session.add(
+            EnrichmentResult(
+                property_id=property_id,
+                kind="alternative",
+                source="other",
+                source_id="a1",
+                url="https://example.com/a1",
+                title="Same <b>unit</b>",
+                monthly_price_minor=185000,
+                currency="USD",
+                score=0.91,
+                cheaper=True,
+                data={"price_difference_minor": -15000},
+            )
+        )
+        session.add(
+            RiskFlag(
+                property_id=property_id,
+                kind="off_platform_payment",
+                severity="high",
+                summary="Asks for a wire transfer",
+            )
+        )
+    listings = SqlListingStore(session_factory)
+    detail = SqlPropertyStore(session_factory).detail(property_id)
+    assert detail is not None and detail.primary is not None
+    listing = NormalizedListing.model_validate(
+        {
+            "source": "test",
+            "source_id": detail.primary.listing.source_id,
+            "url": "https://example.com/l",
+            "title": "Place",
+            "price": Price(amount=Money.from_major(1900)),
+        }
+    )
+    listings.upsert_batch("test", [listing], seen_at=T0.replace(day=8))
+
+    html = get(authed_client, f"/properties/{property_id}")
+
+    assert 'class="risk-banner risk-high"' in html
+    assert "Asks for a wire transfer" in html
+    assert "off platform payment" in html
+    assert "$1,850.00/mo" in html
+    assert "▼ -$150.00" in html
+    assert "91%" in html
+    assert "Same &lt;b&gt;unit&lt;/b&gt;" in html
+    assert '<svg class="price-chart"' in html
+
+
+def test_alternative_with_unknown_currency_shows_unknown_price(
+    authed_client: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    property_id = seed()
+    with session_scope(session_factory) as session:
+        session.add(
+            EnrichmentResult(
+                property_id=property_id,
+                kind="alternative",
+                source="other",
+                source_id="a1",
+                url="https://example.com/a1",
+                title="Odd currency",
+                monthly_price_minor=185000,
+                currency="XXZ",
+                score=0.5,
+                cheaper=None,
+                data={"price_difference_minor": -15000},
+            )
+        )
+
+    html = get(authed_client, f"/properties/{property_id}")
+
+    assert "Odd currency" in html
+    assert '<span class="muted">unknown</span>' in html
+    assert "▼" not in html

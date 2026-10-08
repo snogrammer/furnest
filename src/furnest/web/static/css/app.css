@@ -1229,3 +1229,61 @@ a.button {
   flex: 1;
   min-width: 0;
 }
+
+.risk-banner {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 6px;
+}
+
+.risk-banner p {
+  margin: 0;
+}
+
+.risk-high {
+  border-color: #b3261e;
+}
+
+.risk-medium {
+  border-color: #b26a00;
+}
+
+.risk-low {
+  border-color: var(--muted);
+}
+
+.risk-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.price-chart {
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+}
+
+.price-chart-figure {
+  margin: 0 0 1rem;
+}
+
+.price-chart .axis {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.price-chart .tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.price-chart .line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.price-chart .dot {
+  fill: var(--accent);
+}
