@@ -138,6 +138,7 @@ Both compose files run the containers with `no-new-privileges`, all capabilities
 - **audit:** [pip-audit](https://github.com/pypa/pip-audit) on every locked dependency (`uv export`), failing on any known vulnerability
 - **test:** `pytest -n auto` with coverage, spread across the runner's CPUs. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
 - **migrations:** migration round-trips plus `alembic check`
+- **hygiene:** fails on personal data in tracked files (emails, domains, public IPs, phone numbers, precise coordinates; see [CONTRIBUTING.md](CONTRIBUTING.md#open-source-hygiene)) and on secrets anywhere in git history ([gitleaks](https://github.com/gitleaks/gitleaks))
 - **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker`, checks a root-owned data directory is taken over, scans the image with [Trivy](https://trivy.dev/) (fails on fixable HIGH/CRITICAL vulnerabilities in OS packages or Python dependencies), and validates both compose files
 
 Run the same gates locally with `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.

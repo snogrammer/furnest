@@ -20,7 +20,9 @@ address     ``123 Example St``          regex for ``<number> <Name> <St|Ave|...>
                                         ``streetAddress``
 coordinate  rounded to 2 decimals       JSON keys ``lat``/``latitude``/``lng``/...;
                                         the same names as ``data-*`` attributes and
-                                        as keys in script object literals
+                                        as keys in script object literals; and
+                                        ``lat,lng`` / ``lat;lng`` pairs with 3+
+                                        decimals (``ICBM`` meta tags, map links)
 ==========  ==========================  =============================================
 
 How the body is read depends on its content type. JSON is parsed and walked, so a
@@ -82,14 +84,20 @@ _ADDRESS_SLUG = re.compile(
     rf"(?:{_STREET_TYPES})(?=[-/?#])"
 )
 ADDRESS_SLUG_PLACEHOLDER = "123-Example-St"
-# Coordinates outside parsed JSON: map attributes (``data-latitude="38.478259"``) and
-# keys in a script's object literal (``'location': {"lat":37.8085, ...}``).
+# Coordinates outside parsed JSON: map attributes (``data-latitude="39.781721"``) and
+# keys in a script's object literal (``'location': {"lat":39.7817, ...}``).
 _COORDINATE_NAMES = "lat|latitude|lng|lon|long|longitude"
 _COORDINATE_ATTRIBUTE = re.compile(
     rf"(\bdata-(?:{_COORDINATE_NAMES})=[\"'])(-?\d+(?:\.\d+)?)(?=[\"'])", re.IGNORECASE
 )
 _COORDINATE_LITERAL = re.compile(
     rf"([\"'](?:{_COORDINATE_NAMES})[\"']\s*:\s*)(-?\d+\.\d+)", re.IGNORECASE
+)
+# A bare ``lat,lng`` or ``lat;lng`` pair, as in ``<meta name="ICBM">``,
+# ``<meta name="geo.position">`` and ``maps/search/<lat>,<lng>`` links. Only precise
+# values (3+ decimals) are taken, so prices and ratings are left alone.
+_COORDINATE_PAIR = re.compile(
+    r"(?<![\w.])(-?\d{1,2}\.\d{3,})(\s*[,;]\s*)(-?\d{1,3}\.\d{3,})(?![\w.])"
 )
 _SCRIPT_JSON = re.compile(
     r"(<script\b[^>]*\btype=[\"']application/(?:ld\+)?json[\"'][^>]*>)(.*?)(</script>)",
@@ -221,6 +229,10 @@ class _Pass:
         )
         for pattern in (_COORDINATE_ATTRIBUTE, _COORDINATE_LITERAL):
             text = pattern.sub(lambda m: f"{m.group(1)}{self._coordinate(m.group(2))}", text)
+        text = _COORDINATE_PAIR.sub(
+            lambda m: f"{self._coordinate(m.group(1))}{m.group(2)}{self._coordinate(m.group(3))}",
+            text,
+        )
         names = self._names()
         if names is not None:
             text = names.sub(lambda m: self._replace(m, "name", NAME_PLACEHOLDER), text)

@@ -1,0 +1,74 @@
+# Open-source hygiene check (scripts/check_hygiene.py; see CONTRIBUTING.md).
+#
+# example.com/.org/.net, .example, .test, .invalid and localhost are always allowed.
+# Anything added here is public and third-party: never a personal domain or place.
+
+# Hosts that may appear in URLs. A host matches itself and its subdomains.
+allowed_domains = [
+  # Listing sources, their CDNs, and the sites the scam/alternative checks name.
+  "craigslist.org",
+  "zillow.com",
+  "zillowstatic.com",
+  "hotpads.com",
+  "airbnb.com",
+  "muscache.com",
+  "furnishedfinder.com",
+  "apartments.com",
+  "zumper.com",
+  "theblueground.com",
+  "hellolanding.com",
+  # Social links that appear in captured listing pages and the link checks.
+  "facebook.com",
+  "fb.me",
+  "instagram.com",
+  "twitter.com",
+  "tiktok.com",
+  "soundcloud.com",
+  "google.com",
+  # Services furnest talks to.
+  "apify.com",
+  "discord.com",
+  "openstreetmap.org",
+  "tineye.com",
+  "bing.microsoft.com",
+  "serpapi.com",
+  # Standards, specs and documentation.
+  "w3.org",
+  "schema.org",
+  "ietf.org",
+  "rfc-editor.org",
+  "openapis.org",
+  "json-schema.org",
+  "spdx.org",
+  "apache.org",
+  "github.com",
+  "astral.sh",
+  "trivy.dev",
+  "crawlee.dev",
+  "scrapy.org",
+  "readthedocs.io",
+]
+
+# Email domains beyond the reserved ones. Keep this empty: use person@example.com.
+allowed_email_domains = []
+
+# Where precise coordinates may point: the fictional town fixtures and tests use.
+[[placeholder_areas]]
+name = "Springfield, IL"
+lat = [39.5, 40.1]
+lng = [-89.9, -89.3]
+
+[[exempt]]
+path = "tests/unit/test_sanitize.py"
+kinds = ["email", "location"]
+reason = "Sanitizer inputs: real-looking emails and coordinates are what it must scrub."
+
+[[exempt]]
+path = "tests/unit/test_capture.py"
+kinds = ["email"]
+reason = "Capture inputs: a real-looking email the capture must scrub."
+
+[[exempt]]
+path = "src/furnest/web/static/vendor/*"
+kinds = ["domain", "email", "ip"]
+reason = "Vendored third-party code (swagger-ui), kept byte-for-byte."

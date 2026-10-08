@@ -9,7 +9,8 @@ name: CI
 #
 # Security checks: the `audit` job runs pip-audit on the locked dependencies, and
 # `docker-build` scans the built image with Trivy. Both fail on known
-# vulnerabilities that have a fix.
+# vulnerabilities that have a fix. The `hygiene` job fails on anything personal in
+# the tree (scripts/check_hygiene.py) and on secrets anywhere in history (gitleaks).
 on:
   push:
     branches: ["main"]
@@ -65,6 +66,58 @@ jobs:
           uv export --frozen --all-extras --no-emit-project --quiet -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit==${{ env.PIP_AUDIT_VERSION }} --strict --disable-pip --require-hashes \
             --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
+
+  # Nothing personal ships: emails, domains, public IPs, phone numbers and precise
+  # coordinates outside .hygiene.toml's allowlists, plus the private terms in the
+  # HYGIENE_DENYLIST secret (comma-separated; optional). Then gitleaks over every
+  # commit, and a planted token to prove .gitleaks.toml's allowlist can't hide one.
+  hygiene:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      # Standard library only, so no dependencies are installed.
+      - name: Personal data
+        env:
+          HYGIENE_DENYLIST: ${{ secrets.HYGIENE_DENYLIST }}
+        run: uv run --no-project scripts/check_hygiene.py
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/$tarball"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$tarball" -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Secrets in history
+        run: gitleaks git --no-banner --redact --config .gitleaks.toml .
+
+      # A random GitHub-token-shaped value must be reported, or the allowlist (or a
+      # gitleaks upgrade) has stopped secrets being caught.
+      - name: Secret scan catches a planted token
+        run: |
+          set -euo pipefail
+          plant="$RUNNER_TEMP/plant"
+          mkdir -p "$plant"
+          printf 'GITHUB_TOKEN=ghp_%s\n' "$(head -c 64 /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 36)" > "$plant/env"
+          if gitleaks dir --no-banner --redact --config .gitleaks.toml "$plant"; then
+            echo "::error::gitleaks did not report the planted token"
+            exit 1
+          fi
+          echo "planted token reported"
 
   test:
     runs-on: ubuntu-latest

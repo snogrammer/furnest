@@ -239,6 +239,24 @@ def test_coordinates_outside_json_are_rounded() -> None:
     assert sanitize(first.text, HTML).counts == {}
 
 
+def test_bare_coordinate_pairs_are_rounded() -> None:
+    html = (
+        '<meta name="geo.position" content="38.478259;-122.725574">\n'
+        '<meta name="ICBM" content="37.776000, -122.413000">\n'
+        '<a href="https://www.google.com/maps/search/38.478259,-122.725574">map</a>\n'
+        "<p>Rent $1,250.00, 2.5 baths, 4.95 stars</p>"
+    )
+
+    first = sanitize(html, HTML)
+
+    assert 'content="38.48;-122.73"' in first.text
+    assert 'content="37.78, -122.41"' in first.text
+    assert "maps/search/38.48,-122.73" in first.text
+    assert "$1,250.00, 2.5 baths, 4.95 stars" in first.text
+    assert first.counts == {"coordinate": 6}
+    assert sanitize(first.text, HTML).counts == {}
+
+
 def test_json_learns_names_for_free_text_elsewhere() -> None:
     data = [{"description": "Ask Rosalind Quill"}, {"owner": {"name": "Rosalind Quill"}}]
 

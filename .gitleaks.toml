@@ -1,0 +1,15 @@
+# Secret scanning (gitleaks), run over the full git history by the CI `hygiene` job.
+# The default rules apply; the allowlist only covers placeholder values, recognised
+# by shape so they pass wherever they appear, past commits included. Never add a
+# real secret here: rotate it, then rewrite it out of history.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholder secrets in docs, examples and tests"
+regexTarget = "secret"
+regexes = [
+  '''^0+$''',                   # all-zero keys, e.g. DISCORD_PUBLIC_KEY in .env.example
+  '''(?i)test-secret''',        # a-test-secret-0123456789 in tests
+  '''0123456789(?:abcdef)?$''', # ci-token-0123456789abcdef style fillers
+]

@@ -18,3 +18,8 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+      - id: hygiene
+        name: open-source hygiene
+        entry: uv run --no-project scripts/check_hygiene.py
+        language: system
+        types: [text]
