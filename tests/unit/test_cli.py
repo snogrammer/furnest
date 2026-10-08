@@ -148,9 +148,11 @@ class _FakeResponse:
 
 def test_healthcheck_web_probes_local_healthz(monkeypatch: pytest.MonkeyPatch) -> None:
     urls: list[str] = []
+    timeouts: list[float] = []
 
     def fake_urlopen(url: str, timeout: float) -> _FakeResponse:
         urls.append(url)
+        timeouts.append(timeout)
         return _FakeResponse(200)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
@@ -161,6 +163,7 @@ def test_healthcheck_web_probes_local_healthz(monkeypatch: pytest.MonkeyPatch) -
 
     assert result.exit_code == 0, result.output
     assert urls == ["http://127.0.0.1:8123/healthz"]
+    assert timeouts == [3]  # well inside the container healthcheck's own timeout
     assert "answered 200" in result.output
 
 

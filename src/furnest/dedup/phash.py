@@ -42,6 +42,9 @@ from furnest.sources.robots import RobotsCache
 DEFAULT_MATCH_DISTANCE = 8
 # The ``IMAGES_MAX_PIXELS`` default: 40 megapixels.
 DEFAULT_MAX_PIXELS = 40_000_000
+# ``IMAGES_TIMEOUT_SECONDS`` bounds each read; the whole download gets this many times
+# that, so a host dripping bytes just inside the read timeout can't hold a fetch forever.
+_TOTAL_TIMEOUT_FACTOR = 4
 
 
 class ImageFetchError(Exception):
@@ -134,11 +137,12 @@ class ImageFetcher:
         except SourceError as exc:
             raise ImageFetchError("robots.txt unreachable", url=url) from exc
         self._limiter(url).acquire()
+        deadline = self._clock() + self._settings.timeout_seconds * _TOTAL_TIMEOUT_FACTOR
         try:
             with self._http.stream("GET", url) as response:
                 if response.is_error:
                     raise ImageFetchError(f"HTTP {response.status_code}", url=url)
-                return self._read(response, url)
+                return self._read(response, url, deadline)
         except httpx2.TimeoutException as exc:
             raise ImageFetchError("timeout", url=url) from exc
         except httpx2.HTTPError as exc:
@@ -163,7 +167,7 @@ class ImageFetcher:
 
     # --- Internals ----------------------------------------------------------------
 
-    def _read(self, response: httpx2.Response, url: str) -> bytes:
+    def _read(self, response: httpx2.Response, url: str, deadline: float) -> bytes:
         content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
         if not content_type.startswith("image/"):
             raise ImageFetchError(f"not an image ({content_type or 'no content-type'})", url=url)
@@ -176,6 +180,8 @@ class ImageFetcher:
             body.extend(chunk)
             if len(body) > limit:
                 raise ImageFetchError("too large", url=url)
+            if self._clock() > deadline:
+                raise ImageFetchError("timeout", url=url)
         return bytes(body)
 
     def _limiter(self, url: str) -> TokenBucket:

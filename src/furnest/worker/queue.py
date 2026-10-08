@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.base import utcnow
@@ -101,6 +101,9 @@ class ClaimedJob:
     locked_until: datetime
 
 
+LOST_LEASE_ERROR = "worker lost the lease on the final attempt (crashed or killed)"
+
+
 def claim(
     factory: sessionmaker[Session],
     worker_id: str,
@@ -116,6 +119,22 @@ def claim(
         and_(Job.status == JobStatus.RUNNING, Job.locked_until < now),
     )
     with session_scope(factory) as session:
+        # A worker died holding a job on its last attempt: that attempt counted, so the
+        # job is dead rather than reclaimed (one that crashes every worker stops here).
+        session.execute(
+            update(Job)
+            .where(
+                Job.status == JobStatus.RUNNING,
+                Job.locked_until < now,
+                Job.attempts >= Job.max_attempts,
+            )
+            .values(
+                status=JobStatus.DEAD,
+                locked_by=None,
+                locked_until=None,
+                last_error=LOST_LEASE_ERROR,
+            )
+        )
         next_due = select(Job).where(due).order_by(Job.run_after, Job.id).limit(1)
         job = session.scalars(next_due).first()
         if job is None:

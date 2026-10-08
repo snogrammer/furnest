@@ -169,6 +169,44 @@ def test_running_job_with_expired_lease_is_reclaimed(
     assert (reclaimed.id, reclaimed.attempt) == (job_id, 2)
 
 
+def test_a_job_whose_worker_dies_on_every_attempt_ends_up_dead(
+    session_factory: sessionmaker[Session],
+) -> None:
+    now = utcnow()
+    job_id = _enqueue(session_factory, run_after=now, max_attempts=2)
+    other_id = _enqueue(session_factory, run_after=now + timedelta(seconds=1))
+    first = queue.claim(session_factory, "crashes-1", LEASE, now=now)
+    assert first is not None
+    assert first.id == job_id
+    now += LEASE + timedelta(seconds=1)
+    second = queue.claim(session_factory, "crashes-2", LEASE, now=now)
+    assert second is not None
+    assert (second.id, second.attempt) == (job_id, 2)
+
+    # The second worker dies too, on the last attempt: the job is not run a third time.
+    now += LEASE + timedelta(seconds=1)
+    nxt = queue.claim(session_factory, "w", LEASE, now=now)
+
+    assert nxt is not None
+    assert nxt.id == other_id
+    job = _job(session_factory, job_id)
+    assert (job.status, job.attempts) == (JobStatus.DEAD, 2)
+    assert (job.locked_by, job.locked_until) == (None, None)
+    assert job.last_error == queue.LOST_LEASE_ERROR
+
+
+def test_a_live_lease_on_the_final_attempt_is_left_alone(
+    session_factory: sessionmaker[Session],
+) -> None:
+    now = utcnow()
+    job_id = _enqueue(session_factory, run_after=now, max_attempts=1)
+    queue.claim(session_factory, "busy", LEASE, now=now)
+
+    assert queue.claim(session_factory, "w", LEASE, now=now + LEASE / 2) is None
+    assert _job(session_factory, job_id).status is JobStatus.RUNNING
+    assert queue.complete(session_factory, job_id, "busy")
+
+
 def test_stale_worker_cannot_settle_a_reclaimed_job(session_factory: sessionmaker[Session]) -> None:
     now = utcnow()
     job_id = _enqueue(session_factory, run_after=now)

@@ -112,6 +112,9 @@ def test_runs_the_actor_and_returns_its_dataset_items() -> None:
     assert dict(start.url.params) == {"timeout": "600", "waitForFinish": "0"}
     assert dict(poll.url.params) == {"waitForFinish": "60"}
     assert dict(dataset.url.params) == {"clean": "true", "format": "json"}
+    # The server holds a poll up to 60s, so its read timeout covers that plus the usual 7s.
+    assert poll.extensions["timeout"]["read"] == 67
+    assert start.extensions["timeout"]["read"] == 7
 
 
 def test_the_token_goes_in_the_header_never_the_url() -> None:

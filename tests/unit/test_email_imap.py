@@ -234,6 +234,7 @@ def test_open_imap_upgrades_with_starttls(calls: list[tuple[str, Any]]) -> None:
     open_imap(_settings(SmtpSecurity.STARTTLS))
 
     assert [name for name, _ in calls] == ["IMAP4", "starttls"]
+    assert calls[0][1][1]["timeout"] == 5
     assert calls[1][1]["ssl_context"] is not None
 
 
@@ -241,6 +242,7 @@ def test_open_imap_plain(calls: list[tuple[str, Any]]) -> None:
     open_imap(_settings(SmtpSecurity.NONE))
 
     assert [name for name, _ in calls] == ["IMAP4"]
+    assert calls[0][1][1]["timeout"] == 5
 
 
 def test_open_imap_needs_a_host() -> None:

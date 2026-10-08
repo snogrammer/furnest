@@ -28,12 +28,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, timedelta
 from types import FrameType
+from uuid import uuid4
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import Engine
+from sqlalchemy.exc import OperationalError
 
 from furnest.config import Settings
 from furnest.db.base import utcnow
@@ -62,6 +64,10 @@ LEASE_GRACE = timedelta(seconds=60)
 HEARTBEAT_RETENTION = timedelta(days=1)
 # After abandoning, how long to wait for consumers to hand their jobs back.
 _ABANDON_SETTLE_SECONDS = 5.0
+# Pauses between retries of a job's final status write that hit "database is locked"
+# (busy_timeout already ran out once). Without a retry the row stays ``running`` until
+# its lease expires and a job that succeeded runs again.
+_SETTLE_RETRY_DELAYS = (0.2, 0.5, 1.0)
 
 # APScheduler logs every run at INFO; with a heartbeat every few seconds that drowns
 # the useful lines. Its warnings and errors (missed runs, crashes) still come through.
@@ -106,6 +112,9 @@ class Worker:
         self._inflight: dict[int, str] = {}
         self._stop = threading.Event()
         self._abandon = threading.Event()
+        # Scheduled leases held by runs that haven't returned yet: run owner -> lease.
+        # Whatever is left once shutdown gives up waiting is released on the way out.
+        self._leases: dict[str, str] = {}
 
         self._scheduler = BackgroundScheduler(timezone=UTC)
         self._scheduler.add_job(
@@ -217,7 +226,25 @@ class Worker:
             log.warning("worker_shutdown_timeout", running=running)
             self._abandon.set()
             self._wait_idle(_ABANDON_SETTLE_SECONDS, stop_on_abandon=False)
+        self._release_abandoned_leases()
         log.info("worker_stopped", worker_id=self.identity.worker_id)
+
+    def _release_abandoned_leases(self) -> None:
+        """Drop the leases of scheduled runs we gave up on.
+
+        Their threads die with the process, so keeping the lease until its TTL (the
+        source's timeout plus grace, often 10+ minutes) would only block the next
+        worker from running that job after a restart.
+        """
+        with self._cond:
+            held = dict(self._leases)
+            self._leases.clear()
+        for owner, lease in held.items():
+            try:
+                locks.release(self._factory, lease, owner)
+                log.warning("scheduled_lease_released_at_shutdown", lease=lease)
+            except Exception:
+                log.exception("lease_release_failed", lease=lease)
 
     def _wait_idle(self, timeout: float, *, stop_on_abandon: bool) -> bool:
         deadline = time.monotonic() + timeout
@@ -268,12 +295,19 @@ class Worker:
 
     def _run_scheduled_locked(self, run: _ScheduledRun) -> None:
         name, timeout = run.name, run.timeout
-        lease, owner = f"scheduled:{name}", self.identity.worker_id
+        # A fresh owner per run, not the worker id: a run that timed out keeps its
+        # thread (and lease) until it really returns, and must block the next run in
+        # this worker as well as in others. Its late release then only drops its own row.
+        lease, owner = f"scheduled:{name}", f"{self.identity.worker_id}:{uuid4().hex[:8]}"
         if not locks.acquire(self._factory, lease, owner, timeout + LEASE_GRACE):
-            log.info("scheduled_job_skipped", job=name, reason="running elsewhere")
+            log.info("scheduled_job_skipped", job=name, reason="already running")
             return
+        with self._cond:
+            self._leases[owner] = lease
 
         def release() -> None:
+            with self._cond:
+                self._leases.pop(owner, None)
             try:
                 locks.release(self._factory, lease, owner)
             except Exception:
@@ -339,11 +373,13 @@ class Worker:
             outcome = run_with_timeout(registration.handler, ctx, abandon=self._abandon)
 
         if outcome.kind is OutcomeKind.OK:
-            queue.complete(self._factory, job.id, worker_id)
+            _settle(queue.complete, self._factory, job.id, worker_id)
             log.info("job_succeeded", job_id=job.id, job_type=job.kind, attempt=job.attempt)
             return
         if outcome.kind is OutcomeKind.ABANDONED:
-            queue.requeue(self._factory, job.id, worker_id, "interrupted by worker shutdown")
+            _settle(
+                queue.requeue, self._factory, job.id, worker_id, "interrupted by worker shutdown"
+            )
             log.warning("job_requeued", job_id=job.id, job_type=job.kind, reason="shutdown")
             return
 
@@ -356,7 +392,9 @@ class Worker:
             cap=self._config.retry_max_seconds,
             rng=self._rng,
         )
-        status = queue.fail(self._factory, job.id, worker_id, error_text(error), retry_in=retry_in)
+        status = _settle(
+            queue.fail, self._factory, job.id, worker_id, error_text(error), retry_in=retry_in
+        )
         log.info(
             "job_failed_attempt",
             job_id=job.id,
@@ -366,6 +404,21 @@ class Worker:
             status=status,
             retry_in_seconds=None if status is not JobStatus.FAILED else retry_in.total_seconds(),
         )
+
+
+def _settle[**P, R](write: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
+    """Record a job's outcome, retrying while SQLite reports the database locked.
+
+    Gives up (re-raising) after ``_SETTLE_RETRY_DELAYS``; the row's lease running out
+    is then the backstop, and the job runs again.
+    """
+    for delay in _SETTLE_RETRY_DELAYS:
+        try:
+            return write(*args, **kwargs)
+        except OperationalError as exc:
+            log.warning("job_settle_retry", error=error_text(exc), retry_in_seconds=delay)
+            time.sleep(delay)
+    return write(*args, **kwargs)
 
 
 def _failure(outcome: Outcome, what: str, timeout: timedelta) -> BaseException | None:

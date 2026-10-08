@@ -209,3 +209,28 @@ def test_rate_limit_is_per_host(fetcher: Callable[..., ImageFetcher], t: FakeTim
 
     images.fetch("https://a.example.com/2.jpg")
     assert t.slept == [pytest.approx(1.0)]
+
+
+def test_a_slow_drip_stream_hits_the_total_deadline(
+    fetcher: Callable[..., ImageFetcher], t: FakeTime
+) -> None:
+    sent: list[int] = []
+
+    def drip() -> Iterator[bytes]:
+        for _ in range(100):
+            sent.append(1)
+            t.now += 5  # every chunk arrives inside the 15s read timeout
+            yield b"x"
+
+    host = Host(httpx2.Response(200, content=drip(), headers={"content-type": "image/jpeg"}))
+
+    with pytest.raises(ImageFetchError, match="timeout"):
+        fetcher(host, timeout_seconds=15).fetch(URL)
+
+    assert len(sent) == 13  # 4 x 15s allowed, then the 13th chunk passes it
+
+
+def test_the_configured_timeout_reaches_the_client(fetcher: Callable[..., ImageFetcher]) -> None:
+    images = fetcher(Host(jpeg()), timeout_seconds=7)
+
+    assert images._http.timeout == httpx2.Timeout(7.0)

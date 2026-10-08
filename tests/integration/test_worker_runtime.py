@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Engine, func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import Settings, WorkerSettings
@@ -240,6 +241,68 @@ def test_consumer_survives_database_errors(
     start_worker(registry)
 
     wait_for(lambda: _status(session_factory, job_id) is JobStatus.SUCCEEDED)
+
+
+def _locked() -> OperationalError:
+    return OperationalError("UPDATE jobs", {}, Exception("database is locked"))
+
+
+def test_a_locked_database_when_recording_the_outcome_is_retried(
+    start_worker: StartWorker,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_complete = queue.complete
+    calls: list[int] = []
+
+    def locked_once(factory: sessionmaker[Session], job_id: int, worker_id: str) -> bool:
+        calls.append(job_id)
+        if len(calls) == 1:
+            raise _locked()
+        return real_complete(factory, job_id, worker_id)
+
+    monkeypatch.setattr(queue, "complete", locked_once)
+    monkeypatch.setattr(runtime, "_SETTLE_RETRY_DELAYS", (0.01, 0.01))
+    runs: list[JobContext] = []
+    registry = JobRegistry()
+    registry.register("echo", runs.append)
+    job_id = _enqueue(session_factory, "echo")
+
+    start_worker(registry)
+
+    wait_for(lambda: _status(session_factory, job_id) is JobStatus.SUCCEEDED)
+    assert len(calls) == 2
+    assert len(runs) == 1, "the job did not run again"
+
+
+def test_a_database_that_stays_locked_leaves_the_job_to_its_lease(
+    start_worker: StartWorker,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def always_locked(_factory: sessionmaker[Session], job_id: int, _worker_id: str) -> bool:
+        calls.append(job_id)
+        raise _locked()
+
+    monkeypatch.setattr(queue, "complete", always_locked)
+    monkeypatch.setattr(runtime, "_SETTLE_RETRY_DELAYS", (0.01, 0.01))
+    registry = JobRegistry()
+    registry.register("echo", lambda _ctx: None)
+    job_id = _enqueue(session_factory, "echo")
+
+    _, thread = start_worker(registry)
+
+    wait_for(lambda: len(calls) == 3)
+    time.sleep(0.2)
+    assert thread.is_alive()
+    job = _job(session_factory, job_id)
+    assert (job.status, job.attempts) == (
+        JobStatus.RUNNING,
+        1,
+    )  # left to the lease; a later claim reruns it
+    assert job.locked_until is not None
 
 
 def test_jobs_run_concurrently_up_to_the_configured_limit(
@@ -548,6 +611,70 @@ def test_stuck_scheduled_job_is_abandoned_at_shutdown(start_worker: StartWorker)
     thread.join(timeout=10)
 
     assert not thread.is_alive()
+
+
+def test_a_scheduled_job_ignoring_cancel_has_its_lease_released_at_shutdown(
+    start_worker: StartWorker, session_factory: sessionmaker[Session]
+) -> None:
+    started, unblock = threading.Event(), threading.Event()
+
+    def deaf(_ctx: JobContext) -> None:
+        started.set()
+        unblock.wait(30)  # never looks at ctx.cancelled
+
+    worker, thread = start_worker(
+        setup=lambda w: w.schedule("deaf", deaf, interval=timedelta(milliseconds=50)),
+        shutdown_timeout_seconds=1,
+    )
+    assert started.wait(5)
+    try:
+        worker.request_stop()
+        thread.join(timeout=15)
+
+        assert not thread.is_alive()
+        with session_scope(session_factory) as session:
+            # Otherwise the next worker couldn't run "deaf" until timeout + grace.
+            assert session.get(JobLock, "scheduled:deaf") is None
+    finally:
+        unblock.set()
+
+
+def test_a_timed_out_scheduled_run_blocks_the_next_one_in_the_same_worker(
+    start_worker: StartWorker, session_factory: sessionmaker[Session], failures: Failures
+) -> None:
+    running, peak, runs, lock = [0], [0], [0], threading.Lock()
+    unblock = threading.Event()
+
+    def deaf(_ctx: JobContext) -> None:
+        with lock:
+            running[0] += 1
+            runs[0] += 1
+            peak[0] = max(peak[0], running[0])
+        unblock.wait(30)  # carries on long after its timeout
+        with lock:
+            running[0] -= 1
+
+    worker, _ = start_worker(
+        setup=lambda w: w.schedule(
+            "deaf",
+            deaf,
+            interval=timedelta(milliseconds=50),
+            timeout=timedelta(milliseconds=100),
+        )
+    )
+    try:
+        wait_for(lambda: len(failures) >= 1)  # the first run timed out
+        time.sleep(0.5)  # ~10 more ticks
+
+        assert (runs[0], peak[0]) == (1, 1)
+        with session_scope(session_factory) as session:
+            lease = session.get(JobLock, "scheduled:deaf")
+            assert lease is not None
+            assert lease.owner.startswith(f"{worker.identity.worker_id}:")
+    finally:
+        unblock.set()
+    # Once the stuck run really returns it drops its lease, and the job runs again.
+    wait_for(lambda: runs[0] >= 2)
 
 
 def test_nothing_new_starts_once_stopping(
