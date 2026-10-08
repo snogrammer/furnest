@@ -5,6 +5,7 @@ from furnest.db.models.criteria import CriteriaVersion
 from furnest.db.models.discord import DiscordInteraction
 from furnest.db.models.email import Email, EmailDirection, EmailStatus
 from furnest.db.models.email_template import EmailTemplate
+from furnest.db.models.geocode import GeocodeCacheEntry
 from furnest.db.models.jobs import Job, JobLock, JobStatus
 from furnest.db.models.listing import (
     Listing,
@@ -27,6 +28,7 @@ __all__ = [
     "EmailDirection",
     "EmailStatus",
     "EmailTemplate",
+    "GeocodeCacheEntry",
     "Job",
     "JobLock",
     "JobStatus",

@@ -12,6 +12,7 @@ from furnest.config import (
     INQUIRY_MODE,
     RUNTIME_SETTINGS,
     Environment,
+    GeocodingProvider,
     ImapSettings,
     InMemorySettingsStore,
     InquiryMode,
@@ -236,6 +237,41 @@ def test_llm_timeout_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "0")
 
     with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_geocoding_is_off_by_default() -> None:
+    geocoding = Settings().geocoding
+
+    assert geocoding.provider is GeocodingProvider.NONE
+    assert geocoding.requests_per_minute == 60
+    assert geocoding.miss_ttl_days == 30
+
+
+def test_nominatim_geocoding_loads_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEOCODING_PROVIDER", "nominatim")
+    monkeypatch.setenv("GEOCODING_BASE_URL", "https://geocoder.example.com")
+    monkeypatch.setenv("GEOCODING_USER_AGENT", "furnest (admin@example.com)")
+    monkeypatch.setenv("GEOCODING_REQUESTS_PER_MINUTE", "120")
+
+    geocoding = Settings().geocoding
+
+    assert geocoding.provider is GeocodingProvider.NOMINATIM
+    assert geocoding.requests_per_minute == 120
+
+
+@pytest.mark.parametrize("missing", ["GEOCODING_BASE_URL", "GEOCODING_USER_AGENT"])
+def test_nominatim_geocoding_requires_base_url_and_user_agent(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    monkeypatch.setenv("GEOCODING_PROVIDER", "nominatim")
+    monkeypatch.setenv("GEOCODING_BASE_URL", "https://geocoder.example.com")
+    monkeypatch.setenv("GEOCODING_USER_AGENT", "furnest (admin@example.com)")
+    monkeypatch.delenv(missing)
+
+    with pytest.raises(
+        ValidationError, match="requires GEOCODING_BASE_URL and GEOCODING_USER_AGENT"
+    ):
         Settings()
 
 

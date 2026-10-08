@@ -347,8 +347,25 @@ class GeocodingSettings(_Group):
 
     provider: GeocodingProvider = GeocodingProvider.NONE
     base_url: HttpUrl | None = None
+    # Sent as ``key`` to Nominatim-compatible hosts that require one; unused otherwise.
     api_key: SecretStr | None = None
     user_agent: str | None = None
+    # 60/min is 1 req/s, the most public Nominatim allows. A self-hosted one can go higher.
+    requests_per_minute: PositiveFloat = 60.0
+    timeout_seconds: PositiveFloat = 10.0
+    # A "not found" is cached this long before the address is tried again.
+    miss_ttl_days: PositiveInt = 30
+
+    @model_validator(mode="after")
+    def _nominatim_needs_endpoint(self) -> GeocodingSettings:
+        if self.provider is GeocodingProvider.NOMINATIM and (
+            self.base_url is None or not self.user_agent
+        ):
+            msg = (
+                "GEOCODING_PROVIDER=nominatim requires GEOCODING_BASE_URL and GEOCODING_USER_AGENT"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class ReverseImageSettings(_Group):
