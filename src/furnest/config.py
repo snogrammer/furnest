@@ -456,6 +456,23 @@ class EnrichmentSettings(_Group):
     timeout_seconds: PositiveInt = 600
 
 
+class RiskSettings(_Group):
+    """Scam and risk signals run when a property is approved (``furnest.enrichment.risk``)."""
+
+    model_config = SettingsConfigDict(env_prefix="RISK_")
+
+    enabled: bool = True
+    # Flag a price at least this many percent below the median of comparable listings.
+    price_below_median_pct: float = Field(default=40.0, gt=0, lt=100)
+    # Comparables are other active listings with the same bedroom count and currency
+    # within this many kilometers.
+    comparable_radius_km: PositiveFloat = 2.0
+    # Fewest comparables needed before the price is judged.
+    min_comparables: PositiveInt = 3
+    # Photos at most this many bits apart (pHash) count as the same photo.
+    phash_distance: Annotated[int, Field(ge=0)] = 4
+
+
 # Adapter names: lower-case identifiers, also used as keys in SOURCES_ADAPTERS.
 ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
@@ -546,6 +563,7 @@ class Settings(BaseModel):
     images: ImageSettings = Field(default_factory=ImageSettings)
     grouping: GroupingSettings = Field(default_factory=GroupingSettings)
     enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
+    risk: RiskSettings = Field(default_factory=RiskSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 

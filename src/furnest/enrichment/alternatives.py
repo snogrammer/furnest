@@ -109,9 +109,17 @@ class Match:
     signals: dict[str, float]
 
 
-def _load(session: Session, property_id: int) -> Subject | None:
+def load_enrichable(session: Session, property_id: int) -> Property | None:
+    """The property, unless it was merged, deleted or moved out of the pipeline."""
     row = session.get(Property, property_id)
     if row is None or row.merged_into_id is not None or row.status not in ENRICHABLE:
+        return None
+    return row
+
+
+def _load(session: Session, property_id: int) -> Subject | None:
+    row = load_enrichable(session, property_id)
+    if row is None:
         return None
     primary = primary_listing(session, property_id)
     if primary is None:

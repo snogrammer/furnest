@@ -103,6 +103,7 @@ def worker() -> None:
     from furnest.email.imap import schedule_imap_poll
     from furnest.enrichment.alternatives import register_alternatives
     from furnest.enrichment.geocoding import build_geocoder
+    from furnest.enrichment.risk import register_risk
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.notify.digest import schedule_digest
     from furnest.pipeline.images import schedule_image_hashing
@@ -146,6 +147,7 @@ def worker() -> None:
             geocoder=build_geocoder(settings.geocoding, factory),
             fetcher=fetcher,
         )
+        register_risk(jobs, factory, settings.risk)
         worker = Worker(settings, engine, jobs)
         ingestor = ListingIngestor(
             factory,
