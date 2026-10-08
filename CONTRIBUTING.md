@@ -11,7 +11,7 @@ uv run mypy
 uv run pytest
 ```
 
-Tests never touch the network: `pytest-socket` makes any socket connection fail. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#conventions) for the conventions. Work is tracked one issue per PR, on a branch named `issue-<n>-<slug>`, with `Closes #<n>` in the PR body.
+Tests never touch the network: `pytest-socket` makes any socket connection fail. `uv run pytest -n auto` runs the suite in parallel ([pytest-xdist](https://pytest-xdist.readthedocs.io/)), the same way CI does. Database tests share one migrated template per process: the `migrated_engine` fixture copies it instead of running Alembic for every test. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#conventions) for the conventions. Work is tracked one issue per PR, on a branch named `issue-<n>-<slug>`, with `Closes #<n>` in the PR body.
 
 ## Refreshing fixtures
 

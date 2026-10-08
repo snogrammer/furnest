@@ -1,6 +1,7 @@
 """Shared pytest configuration. Fixtures common to all test tiers go here."""
 
 import logging
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,6 +16,23 @@ from furnest.config import env_var_names, get_settings
 from furnest.db.engine import create_sqlite_engine
 from furnest.db.migrate import upgrade
 from furnest.db.session import make_session_factory
+
+
+def _quiet_structlog() -> None:
+    """Send unconfigured structlog output through stdlib logging instead of stdout.
+
+    structlog's default ``PrintLogger`` writes to the live ``sys.stdout``. Worker
+    threads can log between test phases, when pytest isn't capturing, and those lines
+    end up in the progress output. Routed through stdlib, they reach ``caplog``
+    during a test and are dropped otherwise.
+    """
+    structlog.configure(logger_factory=structlog.stdlib.LoggerFactory())
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    _quiet_structlog()
+    # Without any handler, stdlib's lastResort would still print WARNING and above.
+    logging.getLogger().addHandler(logging.NullHandler())
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +60,7 @@ def reset_observability() -> Iterator[None]:
     root.setLevel(logging.WARNING)
     logging.captureWarnings(False)
     structlog.reset_defaults()
+    _quiet_structlog()
     structlog.contextvars.clear_contextvars()
     sentry_sdk.get_client().close()
     sentry_sdk.get_global_scope().set_client(None)
@@ -62,10 +81,33 @@ def engine(db_url: str) -> Iterator[Engine]:
     engine.dispose()
 
 
+@pytest.fixture(scope="session")
+def migrated_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A database file upgraded to head, built once per test process.
+
+    Running every migration for each test was most of the suite's runtime; copying a
+    finished file is near-free.
+    """
+    path = tmp_path_factory.mktemp("migrated") / "template.db"
+    template = create_sqlite_engine(f"sqlite:///{path}")
+    try:
+        upgrade(template)
+    finally:
+        template.dispose()
+    # Closing the last connection checkpoints the WAL into the file and deletes it.
+    assert not path.with_name(f"{path.name}-wal").exists()
+    return path
+
+
 @pytest.fixture
-def migrated_engine(engine: Engine) -> Engine:
-    """``engine``, upgraded to head."""
-    upgrade(engine)
+def migrated_engine(engine: Engine, migrated_template: Path) -> Engine:
+    """``engine``, upgraded to head (a copy of ``migrated_template``).
+
+    ``engine`` connects lazily, so the file can be put in place before first use.
+    """
+    target = Path(engine.url.database or "")
+    assert not target.exists(), f"{target} was opened before migrated_engine copied it"
+    shutil.copyfile(migrated_template, target)
     return engine
 
 

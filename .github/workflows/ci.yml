@@ -56,8 +56,11 @@ jobs:
 
       # Network sockets are refused (pytest-socket, see addopts in pyproject.toml),
       # and coverage below [tool.coverage.report] fail_under fails the job.
+      # -n auto: one xdist worker per CPU; pytest-cov combines their coverage.
       - name: Tests with coverage
-        run: uv run pytest -m "not migrations" --tb=short --cov-report=term --cov-report=xml
+        run: |
+          echo "CPUs: $(nproc)"
+          uv run pytest -m "not migrations" -n auto --tb=short --cov-report=term --cov-report=xml
 
   migrations:
     runs-on: ubuntu-latest

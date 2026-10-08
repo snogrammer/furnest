@@ -133,7 +133,7 @@ Caddy terminates TLS. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request to `main`, on pushes to `main` and on `v*` tags. GitHub Actions and Gitea Actions both run it unchanged:
 
 - **lint:** `ruff check`, `ruff format --check`, `mypy`
-- **test:** `pytest` with coverage. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
+- **test:** `pytest -n auto` with coverage, spread across the runner's CPUs. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
 - **migrations:** migration round-trips plus `alembic check`
 - **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker`, checks a root-owned data directory is taken over, and validates both compose files
 
