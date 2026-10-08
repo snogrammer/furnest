@@ -103,6 +103,8 @@ class GeocodingProvider(StrEnum):
 class ReverseImageProvider(StrEnum):
     NONE = "none"
     SERPAPI = "serpapi"
+    TINEYE = "tineye"
+    BING = "bing"
 
 
 # --- Environment groups ------------------------------------------------------
@@ -372,7 +374,13 @@ class ReverseImageSettings(_Group):
     model_config = SettingsConfigDict(env_prefix="REVERSE_IMAGE_")
 
     provider: ReverseImageProvider = ReverseImageProvider.NONE
+    # Without a key the search is switched off, whatever the provider.
     api_key: SecretStr | None = None
+    timeout_seconds: PositiveFloat = 30.0
+    # Most matches kept per photo.
+    max_results: PositiveInt = 10
+    # Photos of a property searched per run; each one is a billed provider call.
+    max_photos: PositiveInt = 3
 
 
 class ImageSettings(_Group):

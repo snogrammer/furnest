@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from furnest.db.base import Base, UTCDateTime, utcnow
 
 ALTERNATIVE = "alternative"
+REVERSE_IMAGE = "reverse_image"
 
 
 class EnrichmentResult(Base):

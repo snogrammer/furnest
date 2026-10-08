@@ -95,7 +95,7 @@ Each phase adds its tables in its own Alembic migration.
 | `email_templates` | Editable inquiry templates and signature | P6 |
 | `emails` | Every email with its rendered body: direction, to/from, status (`draft`/`queued`/`sent`/`failed`; to is NULL only on a draft), attempts, last error, Message-ID, sent time; FK to property | P6 |
 | `listing_images` | Image URLs and perceptual hashes (`phash`, `hash_error`, `hashed_at`) | P3, P7 |
-| `enrichment_results` | Findings per property, one row per `(property_id, kind, source, source_id)`: today the `alternative` listings the finder matched (URL, title, monthly price, `cheaper`, similarity score and signals); later reverse-image hits | P8 |
+| `enrichment_results` | Findings per property, one row per `(property_id, kind, source, source_id)`: today the `alternative` listings the finder matched (URL, title, monthly price, `cheaper`, similarity score and signals); `reverse_image` pages showing the property's photos (#55) | P8 |
 | `geocode_cache` | Geocoder answers by query key: coordinates, canonical address, precision, or "not found" (`found` false) | P8 |
 | `risk_flags` | Scam and risk signals shown on the property page | P8 |
 
