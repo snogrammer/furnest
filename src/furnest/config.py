@@ -169,9 +169,17 @@ class AuthSettings(_Group):
     session_secret: SecretStr | None = None
     cookie_secure: bool = True
     session_max_age_seconds: PositiveInt = 7 * 24 * 3600
-    # Failed logins allowed per client IP within the window before it is locked out.
+    # Failed logins and wrong Bearer tokens allowed per client IP (IPv6: per /64)
+    # within the window before it is locked out.
     login_max_attempts: PositiveInt = 5
     login_window_seconds: PositiveInt = 300
+
+
+def _split_csv(value: object) -> object:
+    """``a, b`` from the environment as ``["a", "b"]``; for ``NoDecode`` list fields."""
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return value
 
 
 class WebSettings(_Group):
@@ -184,12 +192,7 @@ class WebSettings(_Group):
     # Empty means forwarded headers are ignored and the socket peer is the client.
     trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
-    @field_validator("trusted_proxies", mode="before")
-    @classmethod
-    def _split_csv(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
+    _split_trusted_proxies = field_validator("trusted_proxies", mode="before")(_split_csv)
 
 
 class WorkerSettings(_Group):
@@ -251,6 +254,9 @@ class DiscordSettings(_Group):
     public_key: str | None = None
     bot_token: SecretStr | None = None
     channel_id: str | None = None
+    # Discord user ids allowed to press the buttons. Empty: anyone who can see the
+    # channel. Clicks from any other channel than ``channel_id`` are always refused.
+    allowed_user_ids: Annotated[list[str], NoDecode] = Field(default_factory=list)
     request_timeout_seconds: PositiveFloat = 10.0
     # Retries after the first attempt for 5xx responses and transport errors. A 429 is
     # waited out as Discord asks (a few times at most) and has its own budget.
@@ -264,6 +270,8 @@ class DiscordSettings(_Group):
     digest_top: PositiveInt = 5
     # Alert once a source has failed this many runs in a row; 0 turns alerts off.
     alert_after_failures: Annotated[int, Field(ge=0)] = 3
+
+    _split_allowed_user_ids = field_validator("allowed_user_ids", mode="before")(_split_csv)
 
     @field_validator("public_key")
     @classmethod

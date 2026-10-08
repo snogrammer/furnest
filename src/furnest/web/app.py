@@ -103,7 +103,7 @@ def create_app(
     app.state.discord_dispatcher = dispatcher = InteractionDispatcher()
     register_buttons(dispatcher, settings)
     app.state.csrf_signer = csrf_signer = CsrfSigner(authenticator.secret)
-    app.state.login_limiter = SlidingWindowLimiter(
+    app.state.auth_limiter = SlidingWindowLimiter(
         settings.auth.login_max_attempts, settings.auth.login_window_seconds
     )
     app.add_middleware(

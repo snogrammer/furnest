@@ -39,7 +39,7 @@ from furnest.config import Settings
 from furnest.db.base import utcnow
 from furnest.db.models import JobStatus
 from furnest.db.session import make_session_factory
-from furnest.logging import get_logger
+from furnest.logging import error_text, get_logger
 from furnest.observability import capture_job_failure
 from furnest.worker import heartbeat, locks, queue
 from furnest.worker.execution import (
@@ -356,9 +356,7 @@ class Worker:
             cap=self._config.retry_max_seconds,
             rng=self._rng,
         )
-        status = queue.fail(
-            self._factory, job.id, worker_id, f"{type(error).__name__}: {error}", retry_in=retry_in
-        )
+        status = queue.fail(self._factory, job.id, worker_id, error_text(error), retry_in=retry_in)
         log.info(
             "job_failed_attempt",
             job_id=job.id,

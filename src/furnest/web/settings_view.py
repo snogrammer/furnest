@@ -147,13 +147,19 @@ def display(value: object) -> str | None:
 
 
 def mask_url(text: str) -> str:
-    """``text`` with the password of a ``scheme://user:password@host`` URL replaced."""
+    """``text`` with the password of a ``scheme://user:password@host`` URL replaced.
+
+    A URL with a user but no password (``https://TOKEN@proxy``) usually carries a
+    token there, so the whole user part is masked.
+    """
     if "://" not in text or "@" not in text:
         return text
     parts = urlsplit(text)
-    if parts.password is None:
-        return text
     userinfo, _, hostinfo = parts.netloc.rpartition("@")
+    if parts.password is None:
+        if not userinfo:
+            return text
+        return urlunsplit(parts._replace(netloc=f"{MASK}@{hostinfo}"))
     user = userinfo.split(":", 1)[0]
     return urlunsplit(parts._replace(netloc=f"{user}:{MASK}@{hostinfo}"))
 

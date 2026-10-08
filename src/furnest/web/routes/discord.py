@@ -9,7 +9,10 @@ CSRF. Its own checks, in order:
    than ``DISCORD_INTERACTION_MAX_AGE_SECONDS`` off, gets a 401. Discord itself sends
    badly signed requests when the endpoint is registered and expects exactly that.
 3. **PING?** Answered with PONG, without touching the database.
-4. **Seen before?** The interaction id is recorded in ``discord_interactions`` in the
+4. **Allowed?** A signature only proves Discord sent the click. Clicks from outside
+   ``DISCORD_CHANNEL_ID``, or, when ``DISCORD_ALLOWED_USER_IDS`` is set, from anyone
+   not on it, get an ephemeral refusal and change nothing.
+5. **Seen before?** The interaction id is recorded in ``discord_interactions`` in the
    same transaction as the dispatcher's work. A repeat gets a deferred-update ack and
    does nothing.
 
@@ -34,8 +37,10 @@ from furnest.notify.interactions import (
     InteractionType,
     JsonObject,
     deferred_update,
+    ephemeral,
     is_fresh,
     pong,
+    refusal,
     verify_signature,
 )
 from furnest.web.discord_dispatch import InteractionDispatcher
@@ -76,6 +81,20 @@ async def interactions(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="malformed interaction") from exc
     if interaction.type is InteractionType.PING:
         return JSONResponse(pong())
+    refused = refusal(
+        interaction,
+        channel_id=settings.discord.channel_id,
+        allowed_user_ids=settings.discord.allowed_user_ids,
+    )
+    if refused is not None:
+        log.warning(
+            "discord_interaction_refused",
+            reason=refused,
+            interaction_id=interaction.id,
+            user_id=interaction.user_id,
+            channel_id=interaction.channel_id,
+        )
+        return JSONResponse(ephemeral("You're not allowed to act on furnest listings here."))
 
     def handle() -> tuple[JsonObject, bool]:
         dispatcher: InteractionDispatcher = request.app.state.discord_dispatcher

@@ -50,7 +50,7 @@ from furnest.db.criteria_store import CriteriaRecord, CriteriaStore
 from furnest.db.listing_store import RunCounts, SqlListingStore, UpsertResult
 from furnest.db.models import SourceRunStatus
 from furnest.domain import AmenityExtractor
-from furnest.logging import get_logger
+from furnest.logging import error_text, get_logger
 from furnest.matching import match_listing
 from furnest.pipeline.rerun import ResultSink, discard
 from furnest.sources.base import SourceAdapter
@@ -128,7 +128,7 @@ class ListingIngestor:
                 run_id,
                 status=SourceRunStatus.FAILED,
                 at=self._clock(),
-                error=f"{type(exc).__name__}: {exc}",
+                error=error_text(exc),
             )
             raise
 

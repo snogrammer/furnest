@@ -1,12 +1,12 @@
 """``/login`` and ``/logout``. Both are reachable without a session, both need CSRF.
 
-Failed logins count against the client IP's rate limit. Once it is exhausted,
+Failed logins count against the client's rate limit (shared with wrong Bearer
+tokens, see :mod:`furnest.web.auth`). Once it is exhausted,
 ``POST /login`` answers 429 without even looking at the submitted token, so a
 lockout cannot be used to keep guessing. A successful login clears the count and
 rotates the CSRF token.
 """
 
-import math
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Query, Request
@@ -15,24 +15,20 @@ from starlette.responses import Response
 
 from furnest.logging import get_logger
 from furnest.web.auth import (
+    auth_limiter,
     auth_method,
     clear_session_cookie,
+    client_key,
+    retry_after_header,
     safe_next,
     set_session_cookie,
 )
 from furnest.web.csrf import new_token, require_csrf, set_csrf_cookie
-from furnest.web.ratelimit import SlidingWindowLimiter
 from furnest.web.templating import templates
 
 log = get_logger(__name__)
 
 router = APIRouter(dependencies=[Depends(require_csrf)])
-
-
-def _client_ip(request: Request) -> str:
-    # The socket peer, or the forwarded client when it came through a trusted proxy
-    # (ProxyHeadersMiddleware rewrites the scope before we get here).
-    return request.client.host if request.client else "unknown"
 
 
 def _login_page(request: Request, next_path: str, *, error: str | None, status: int) -> Response:
@@ -58,8 +54,8 @@ def login(
     next_path: Annotated[str | None, Form(alias="next")] = None,
 ) -> Response:
     target = safe_next(next_path)
-    limiter: SlidingWindowLimiter = request.app.state.login_limiter
-    ip = _client_ip(request)
+    limiter = auth_limiter(request)
+    ip = client_key(request)
 
     retry_after = limiter.retry_after(ip)
     if retry_after is not None:
@@ -67,7 +63,7 @@ def login(
         response = _login_page(
             request, target, error="Too many failed attempts. Try again later.", status=429
         )
-        response.headers["Retry-After"] = str(max(1, math.ceil(retry_after)))
+        response.headers.update(retry_after_header(retry_after))
         return response
 
     if not request.app.state.authenticator.token_matches(token):
@@ -88,5 +84,5 @@ def logout(request: Request) -> Response:
     response = RedirectResponse("/login", status_code=303)
     clear_session_cookie(request, response)
     set_csrf_cookie(request, response, new_token())
-    log.info("logout", client_ip=_client_ip(request))
+    log.info("logout", client_ip=client_key(request))
     return response

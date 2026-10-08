@@ -5,9 +5,10 @@ import time
 import pytest
 from itsdangerous import TimestampSigner, URLSafeTimedSerializer
 from pydantic import SecretStr
+from starlette.requests import Request
 
 from furnest.config import AuthSettings
-from furnest.web.auth import AuthConfigError, Authenticator, safe_next
+from furnest.web.auth import AuthConfigError, Authenticator, client_key, safe_next
 from furnest.web.csrf import CsrfSigner
 
 pytestmark = pytest.mark.unit
@@ -116,6 +117,27 @@ def test_expired_session_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 )
 def test_safe_next(target: str | None, expected: str) -> None:
     assert safe_next(target) == expected
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("203.0.113.7", "203.0.113.7"),
+        # One /64 is one key, so a host can't rotate addresses within it.
+        ("2001:db8:1:2:aaaa::1", "2001:db8:1:2::/64"),
+        ("2001:db8:1:2:ffff::9", "2001:db8:1:2::/64"),
+        ("::ffff:198.51.100.9", "198.51.100.9"),
+        ("testclient", "testclient"),
+    ],
+)
+def test_client_key(host: str, expected: str) -> None:
+    request = Request({"type": "http", "client": (host, 1234), "headers": []})
+
+    assert client_key(request) == expected
+
+
+def test_client_key_without_peer() -> None:
+    assert client_key(Request({"type": "http", "headers": []})) == "unknown"
 
 
 def test_csrf_signer_roundtrip_and_tamper() -> None:

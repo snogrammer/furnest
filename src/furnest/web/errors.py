@@ -1,14 +1,17 @@
 """Error responses: HTML pages for browsers, JSON for everything else (and for
 the JSON API under ``/api/v1``, whoever asks).
 
-Neither ever includes a stack trace. Unhandled exceptions are logged here (and
-reach Sentry through its FastAPI integration when it is enabled).
+Neither ever includes a stack trace, and a 422 doesn't echo the submitted values
+back (FastAPI's default puts each bad ``input`` in the response). Unhandled
+exceptions are logged here (and reach Sentry through its FastAPI integration when
+it is enabled).
 
 Starlette runs the 500 handler in ``ServerErrorMiddleware``, which sits outside all
 user middleware, so that response gets its security headers set here directly.
 """
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
@@ -42,6 +45,16 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
 
 
+async def validation_exception_handler(request: Request, exc: Exception) -> Response:
+    if not isinstance(exc, RequestValidationError):  # pragma: no cover - registration
+        raise exc
+    errors = [
+        {"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]}
+        for error in exc.errors()
+    ]
+    return JSONResponse({"detail": errors}, status_code=422)
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
     log.error("unhandled_exception", method=request.method, path=request.url.path, exc_info=exc)
     response: Response
@@ -55,4 +68,5 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> Respo
 
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

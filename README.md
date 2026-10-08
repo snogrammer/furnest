@@ -72,8 +72,8 @@ One token protects everything except the health probes, static files and the log
 
 - **Browser:** sign in at `/login` with the token. You get a signed, HttpOnly, SameSite=Lax session cookie that lasts `AUTH_SESSION_MAX_AGE_SECONDS` (7 days by default). It is marked Secure when `AUTH_COOKIE_SECURE=true` (the default) or the request arrived over HTTPS. Sessions are stateless, so logging out only clears that browser's cookie. To sign out every browser, rotate `AUTH_TOKEN` or `AUTH_SESSION_SECRET`.
 - **API/scripts:** send `Authorization: Bearer <AUTH_TOKEN>`. Without valid credentials an API request gets `401`, and a browser page load is redirected to `/login`.
-- **CSRF:** every form post and htmx request carries a token tied to a signed cookie. Requests authenticated with Bearer are exempt.
-- **Login rate limit:** after `AUTH_LOGIN_MAX_ATTEMPTS` failed logins from one IP within `AUTH_LOGIN_WINDOW_SECONDS`, `/login` answers `429` with `Retry-After` until the window slides. Behind a reverse proxy, list its address(es) in `WEB_TRUSTED_PROXIES` so the real client IP and scheme come from `X-Forwarded-For`/`X-Forwarded-Proto`. Otherwise those headers are ignored.
+- **CSRF:** every form post and htmx request carries a token tied to a signed cookie. Requests authenticated with a valid Bearer token are exempt.
+- **Rate limit:** failed logins and wrong Bearer tokens share one budget per client IP (per /64 for IPv6). After `AUTH_LOGIN_MAX_ATTEMPTS` failures within `AUTH_LOGIN_WINDOW_SECONDS`, `/login` and Bearer requests answer `429` with `Retry-After` until the window slides, even with the right token. Behind a reverse proxy, list its address(es) in `WEB_TRUSTED_PROXIES` so the real client IP and scheme come from `X-Forwarded-For`/`X-Forwarded-Proto`. Otherwise those headers are ignored.
 
 ### JSON API
 
@@ -124,7 +124,9 @@ cp stack.env.example stack.env     # set FURNEST_IMAGE, FURNEST_DATA_PATH, AUTH_
 docker compose -f docker-compose.portainer.yml --env-file stack.env up -d
 ```
 
-Caddy terminates TLS. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the `caddy_net` subnet.
+Caddy terminates TLS. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is a starting point: it sends HSTS and caps request bodies at 1 MB, which furnest leaves to the proxy. `/discord/interactions` must be reachable from the internet, but you can restrict the dashboard to trusted networks. Set `WEB_TRUSTED_PROXIES` to the exact `caddy_net` subnet.
+
+Both compose files run the containers with `no-new-privileges`, all capabilities dropped except the five the entrypoint needs to take ownership of `/data` and switch users (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETUID`, `SETGID`), and a PID limit. The app process itself ends up with no capabilities.
 
 [docs/discord-setup.md](docs/discord-setup.md) walks through creating the Discord application and bot, inviting it and setting the interactions endpoint.
 
@@ -133,9 +135,10 @@ Caddy terminates TLS. [`deploy/Caddyfile.example`](deploy/Caddyfile.example) is 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request to `main`, on pushes to `main` and on `v*` tags. GitHub Actions and Gitea Actions both run it unchanged:
 
 - **lint:** `ruff check`, `ruff format --check`, `mypy`
+- **audit:** [pip-audit](https://github.com/pypa/pip-audit) on every locked dependency (`uv export`), failing on any known vulnerability
 - **test:** `pytest -n auto` with coverage, spread across the runner's CPUs. Below `fail_under` in `pyproject.toml` the job fails. Tests can't open network sockets ([pytest-socket](https://github.com/miketheman/pytest-socket)), so a test that would hit a live site fails instead.
 - **migrations:** migration round-trips plus `alembic check`
-- **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker`, checks a root-owned data directory is taken over, and validates both compose files
+- **docker-build:** builds the image without pushing it, checks it runs as non-root, smoke-tests `migrate`/`web`/`worker`, checks a root-owned data directory is taken over, scans the image with [Trivy](https://trivy.dev/) (fails on fixable HIGH/CRITICAL vulnerabilities in OS packages or Python dependencies), and validates both compose files
 
 Run the same gates locally with `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 

@@ -163,7 +163,9 @@ def test_display_refuses_unknown_types() -> None:
     ("text", "masked"),
     [
         ("http://u:p@h:1/x", "http://u:***@h:1/x"),
-        ("http://u@h/", "http://u@h/"),
+        # A user without a password is usually a token.
+        ("http://tok@h/", "http://***@h/"),
+        ("http://@h/", "http://@h/"),
         ("sqlite:////data/furnest.db", "sqlite:////data/furnest.db"),
         ("furnest/0 (+https://example.com/furnest)", "furnest/0 (+https://example.com/furnest)"),
         ("me@example.com", "me@example.com"),

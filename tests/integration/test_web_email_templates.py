@@ -288,6 +288,27 @@ def test_htmx_preview_refuses_oversized_input(authed_client: TestClient, csrf: C
     assert "Too long to preview." in response.text
 
 
+@pytest.mark.parametrize("path", ["/email-templates", "/email-templates/preview"])
+def test_over_limit_template_is_not_rendered(
+    authed_client: TestClient, csrf: Csrf, path: str
+) -> None:
+    # Over the editor limit but within the form slack: the editor comes back
+    # without rendering it (a long template could be slow to render).
+    response = post(
+        authed_client, csrf, path, name="big", is_new="true", subject="s", body="{{ 1 }}" * 2_900
+    )
+
+    assert "Too long to preview." in response.text
+
+
+def test_far_oversized_form_is_refused_unread(authed_client: TestClient, csrf: Csrf) -> None:
+    response = post(
+        authed_client, csrf, "/email-templates", name="big", subject="s", body="b" * 30_000
+    )
+
+    assert response.status_code == 422
+
+
 def test_preview_without_htmx_returns_the_editor(authed_client: TestClient, csrf: Csrf) -> None:
     response = post(
         authed_client,

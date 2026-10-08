@@ -51,6 +51,11 @@ router = APIRouter(
 NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}")
 # Paths under /email-templates that a template name would shadow.
 RESERVED_NAMES = frozenset({"new", "preview", "signature"})
+# Form slack over the editor's limits, so save can say what's wrong; anything
+# bigger is refused before it is read. Over-limit templates are never rendered.
+_SUBJECT_FORM_MAX = MAX_SUBJECT_LENGTH + 1_000
+_BODY_FORM_MAX = MAX_BODY_LENGTH + 1_000
+TOO_LONG_TO_PREVIEW = "Too long to preview."
 
 
 def _is_htmx(request: Request) -> bool:
@@ -105,10 +110,13 @@ def _render_editor(
 ) -> Response:
     preview: RenderedEmail | None = None
     preview_error: str | None = None
-    try:
-        preview = _preview(request, store, subject, body)
-    except TemplateRenderError as exc:
-        preview_error = str(exc)
+    if len(subject) > MAX_SUBJECT_LENGTH or len(body) > MAX_BODY_LENGTH:
+        preview_error = TOO_LONG_TO_PREVIEW
+    else:
+        try:
+            preview = _preview(request, store, subject, body)
+        except TemplateRenderError as exc:
+            preview_error = str(exc)
     context: dict[str, Any] = {
         "name": name,
         "subject": subject,
@@ -160,8 +168,8 @@ def new(request: Request) -> Response:
 def save(
     request: Request,
     name: Annotated[str, Form()] = "",
-    subject: Annotated[str, Form()] = "",
-    body: Annotated[str, Form()] = "",
+    subject: Annotated[str, Form(max_length=_SUBJECT_FORM_MAX)] = "",
+    body: Annotated[str, Form(max_length=_BODY_FORM_MAX)] = "",
     is_new: Annotated[bool, Form()] = False,
 ) -> Response:
     store = _store(request)
@@ -211,8 +219,8 @@ def save(
 def preview(
     request: Request,
     name: Annotated[str, Form()] = "",
-    subject: Annotated[str, Form()] = "",
-    body: Annotated[str, Form()] = "",
+    subject: Annotated[str, Form(max_length=_SUBJECT_FORM_MAX)] = "",
+    body: Annotated[str, Form(max_length=_BODY_FORM_MAX)] = "",
     is_new: Annotated[bool, Form()] = False,
 ) -> Response:
     store = _store(request)
@@ -223,7 +231,7 @@ def preview(
         )
     context: dict[str, Any] = {"preview": None, "preview_error": None}
     if len(subject) > MAX_SUBJECT_LENGTH or len(body) > MAX_BODY_LENGTH:
-        context["preview_error"] = "Too long to preview."
+        context["preview_error"] = TOO_LONG_TO_PREVIEW
     else:
         try:
             context["preview"] = _preview(request, store, subject, body)

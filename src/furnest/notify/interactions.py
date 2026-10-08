@@ -24,6 +24,7 @@ anything that doesn't have the fields we rely on, and the route turns that into 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
@@ -141,6 +142,22 @@ class Interaction:
             message_id=_str(_obj(data, "message"), "id"),
             fields=_text_inputs(payload.get("components")),
         )
+
+
+def refusal(
+    interaction: Interaction, *, channel_id: str | None, allowed_user_ids: Sequence[str]
+) -> str | None:
+    """Why ``interaction`` may not act, or ``None`` when it may.
+
+    A valid signature only proves Discord sent the click, not who made it. The click
+    must come from the configured channel, and, when ``allowed_user_ids`` is set,
+    from one of those users.
+    """
+    if channel_id is not None and interaction.channel_id != channel_id:
+        return "wrong channel"
+    if allowed_user_ids and interaction.user_id not in allowed_user_ids:
+        return "user not allowed"
+    return None
 
 
 def pong() -> JsonObject:

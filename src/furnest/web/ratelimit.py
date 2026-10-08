@@ -1,4 +1,4 @@
-"""In-memory sliding-window rate limiter, used for login attempts.
+"""In-memory sliding-window rate limiter, used for failed login and Bearer attempts.
 
 Each key (a client IP) keeps the timestamps of its recent hits; a key is limited
 once ``limit`` hits fall inside the trailing ``window``. State is per process, which

@@ -8,6 +8,11 @@ usual escapes) are refused, and so are methods that mutate a list or dict. The
 context holds only plain values (:class:`InquiryContext`), never ORM rows or
 pydantic models, so there is nothing behind it to reach.
 
+Rendering is also kept cheap, so a template can't tie up or exhaust the web
+process: number literals, arithmetic results, ``|int``/``|float`` and ``range()``
+are capped at :data:`MAX_RENDER_LENGTH`, ``*`` can't build an oversized string or
+list, and rendering stops once the output passes that length.
+
 Undefined names fail (``StrictUndefined``) rather than render as blanks, so a typo
 like ``{{ listing.titel }}`` is caught when the template is previewed or saved, not
 in a sent email. Optional facts the listing doesn't have are ``None``; templates
@@ -21,8 +26,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
-from jinja2 import StrictUndefined, TemplateError, TemplateSyntaxError
+from jinja2 import StrictUndefined, TemplateError, TemplateSyntaxError, nodes
+from jinja2.exceptions import SecurityError
+from jinja2.filters import do_float, do_int
+from jinja2.runtime import Context
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 from pydantic import HttpUrl
 
@@ -59,10 +68,61 @@ def long_date(value: date) -> str:
     return f"{value:%B} {value.day}, {value.year}"
 
 
-_env = ImmutableSandboxedEnvironment(
-    undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True
-)
+# Upper bound for a rendered part, and for any number a template works with.
+MAX_RENDER_LENGTH = 100_000
+_MAX_RANGE = 1_000
+_MAX_EXPONENT = 64
+
+
+def _bounded_number(value: Any) -> Any:  # noqa: ANN401 - whatever the template computed
+    is_number = isinstance(value, int | float) and not isinstance(value, bool)
+    if is_number and not abs(value) <= MAX_RENDER_LENGTH:  # also catches nan and inf
+        msg = f"numbers are limited to {MAX_RENDER_LENGTH:,}"
+        raise SecurityError(msg)
+    return value
+
+
+def _bounded_range(*args: int) -> range:
+    span = range(*args)
+    if len(span) > _MAX_RANGE:
+        msg = f"range() is limited to {_MAX_RANGE:,} items"
+        raise SecurityError(msg)
+    return span
+
+
+class _BoundedEnvironment(ImmutableSandboxedEnvironment):
+    """The sandbox, with ``*`` and ``**`` checked before and after they run."""
+
+    intercepted_binops = frozenset({"*", "**"})
+
+    def call_binop(
+        self,
+        context: Context,
+        operator: str,
+        left: Any,  # noqa: ANN401 - template values
+        right: Any,  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
+        if operator == "**" and isinstance(right, int | float) and abs(right) > _MAX_EXPONENT:
+            msg = f"exponents are limited to {_MAX_EXPONENT}"
+            raise SecurityError(msg)
+        # Size a repetition ("x" * n) before building it.
+        for sequence, times in ((left, right), (right, left)):
+            if (
+                isinstance(sequence, str | list | tuple)
+                and isinstance(times, int)
+                and len(sequence) * times > MAX_RENDER_LENGTH
+            ):
+                msg = f"results are limited to {MAX_RENDER_LENGTH:,} items"
+                raise SecurityError(msg)
+        return _bounded_number(super().call_binop(context, operator, left, right))
+
+
+_env = _BoundedEnvironment(undefined=StrictUndefined, autoescape=False, keep_trailing_newline=True)
 _env.filters["long_date"] = long_date
+_env.filters["int"] = lambda *a, **kw: _bounded_number(do_int(*a, **kw))
+_env.filters["float"] = lambda *a, **kw: _bounded_number(do_float(*a, **kw))
+_env.globals["range"] = _bounded_range
+del _env.globals["lipsum"]  # one call can generate megabytes of filler
 
 
 @dataclass(frozen=True)
@@ -198,13 +258,27 @@ def sample_context(criteria: Criteria | None, signature: str) -> InquiryContext:
 
 def _render_part(part: str, source: str, context: InquiryContext) -> str:
     try:
-        return _env.from_string(source).render(
+        ast = _env.parse(source)
+        for const in ast.find_all(nodes.Const):
+            _bounded_number(const.value)
+        chunks = _env.from_string(ast).generate(
             listing=context.listing,
             contact_name=context.contact_name,
             move_in_date=context.move_in_date,
             lease_months=context.lease_months,
             signature=context.signature,
         )
+        rendered: list[str] = []
+        length = 0
+        for chunk in chunks:
+            length += len(chunk)
+            if length > MAX_RENDER_LENGTH:
+                msg = f"renders to more than {MAX_RENDER_LENGTH:,} characters"
+                raise TemplateRenderError(part, msg)
+            rendered.append(chunk)
+        return "".join(rendered)
+    except TemplateRenderError:
+        raise
     except TemplateSyntaxError as exc:
         raise TemplateRenderError(part, exc.message or str(exc), exc.lineno) from exc
     except TemplateError as exc:  # UndefinedError and SecurityError are TemplateErrors

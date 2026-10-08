@@ -6,8 +6,12 @@ framing. That is why htmx is vendored instead of loaded from a CDN, and why
 Images may also come from any ``https:`` origin, because listing photos live on
 the sources' CDNs (the detail page, #30); pages load them with
 ``referrerpolicy="no-referrer"``, and #49 may serve local copies instead. HSTS is
-the reverse proxy's job (``deploy/Caddyfile.example``, #9), since only it knows
-whether the site is served over HTTPS.
+the reverse proxy's job, since only it knows whether the site is served over HTTPS;
+``deploy/Caddyfile.example`` sets it, along with a request body size limit.
+
+Every response except static files (``/static``, the favicon) is also
+``Cache-Control: no-store``: pages and API answers hold the user's data and should
+not linger in browser or proxy caches after logout.
 """
 
 from starlette.datastructures import MutableHeaders
@@ -35,10 +39,16 @@ SECURITY_HEADERS: dict[str, str] = {
 }
 
 
-def apply_security_headers(headers: MutableHeaders) -> None:
+# Paths whose responses may be cached: the same files for every user.
+_CACHEABLE = ("/static/", "/favicon.ico")
+
+
+def apply_security_headers(headers: MutableHeaders, *, cacheable: bool = False) -> None:
     """Set each security header unless the response already chose its own value."""
     for name, value in SECURITY_HEADERS.items():
         headers.setdefault(name, value)
+    if not cacheable:
+        headers.setdefault("Cache-Control", "no-store")
 
 
 class SecurityHeadersMiddleware:
@@ -52,9 +62,11 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
+        cacheable = scope["path"].startswith(_CACHEABLE)
+
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                apply_security_headers(MutableHeaders(scope=message))
+                apply_security_headers(MutableHeaders(scope=message), cacheable=cacheable)
             await send(message)
 
         await self.app(scope, receive, send_with_headers)

@@ -7,11 +7,23 @@
 #
 # In the stack's environment (see stack.env.example), set:
 #   BASE_URL=https://furnest.example.com
-#   WEB_TRUSTED_PROXIES=<caddy_net's subnet, e.g. 172.16.0.0/12>
-# so login rate limiting sees the real client IP and HTTPS is detected.
+#   WEB_TRUSTED_PROXIES=<caddy_net's exact subnet, e.g. 172.18.0.0/16>
+# so login rate limiting sees the real client IP and HTTPS is detected. Every
+# address in that range may set X-Forwarded-For, so keep it as narrow as you can.
 
 furnest.example.com {
 	encode zstd gzip
+
+	# furnest leaves HSTS to the proxy, since only the proxy knows the site is
+	# served over HTTPS. Drop includeSubDomains if a subdomain still serves HTTP.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# No furnest request comes close to this (the largest form, an email
+	# template, is ~20 KB). It keeps oversized bodies away from routes that read
+	# them before checking auth, like /login and /discord/interactions.
+	request_body {
+		max_size 1MB
+	}
 
 	# /discord/interactions MUST stay reachable from the public internet: Discord
 	# calls it for every button press, and every request is checked against the

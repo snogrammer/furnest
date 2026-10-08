@@ -227,3 +227,57 @@ def test_old_interaction_ids_are_pruned(post: Post, session_factory: sessionmake
     post(click())
 
     assert sorted(recorded(session_factory)) == ["1100000000000000001", "2"]
+
+
+# --- Who may click -----------------------------------------------------------------
+
+CHANNEL = "1200000000000000000"
+CLICKER = "1400000000000000000"
+
+
+@pytest.fixture
+def restricted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only ``CLICKER`` in ``CHANNEL`` may act. Request it before ``post`` so the app
+    is built with it."""
+    monkeypatch.setenv("DISCORD_CHANNEL_ID", CHANNEL)
+    monkeypatch.setenv("DISCORD_ALLOWED_USER_IDS", f"1, {CLICKER}")
+
+
+def test_allowed_user_in_the_channel_may_click(
+    restricted: None, post: Post, session_factory: sessionmaker[Session]
+) -> None:
+    response = post(click())
+
+    assert response.json() == {"type": ResponseType.DEFERRED_UPDATE_MESSAGE}
+    assert len(jobs(session_factory)) == 1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"channel_id": "999"}, id="other-channel"),
+        pytest.param({"member": {"user": {"id": "999", "username": "x"}}}, id="other-user"),
+        pytest.param({"member": {}, "user": {"id": "999"}}, id="dm-from-other-user"),
+        pytest.param({"member": {}}, id="no-user"),
+    ],
+)
+def test_other_clicks_are_refused_and_change_nothing(
+    restricted: None,
+    post: Post,
+    session_factory: sessionmaker[Session],
+    overrides: dict[str, Any],
+) -> None:
+    response = post(click(**overrides))
+
+    body = response.json()
+    assert body["type"] == ResponseType.CHANNEL_MESSAGE_WITH_SOURCE
+    assert body["data"]["flags"] == EPHEMERAL
+    assert "not allowed" in body["data"]["content"]
+    assert recorded(session_factory) == []
+    assert jobs(session_factory) == []
+
+
+def test_ping_is_answered_even_when_restricted(restricted: None, post: Post) -> None:
+    response = post({"id": "1", "type": 1, "token": "t", "application_id": "2"})
+
+    assert response.json() == {"type": ResponseType.PONG}

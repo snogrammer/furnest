@@ -31,6 +31,15 @@ x-furnest: &furnest
     - furnest-data:/data
   # tini as PID 1: forwards SIGTERM and reaps Chromium child processes.
   init: true
+  # Least privilege. The entrypoint starts as root only to take ownership of /data
+  # and drop to uid 10001 (setpriv), which needs these capabilities and no others.
+  # no-new-privileges keeps the app from ever regaining them.
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+  # Room for Chromium's processes and threads when WITH_PLAYWRIGHT is on.
+  pids_limit: 512
 
 services:
   migrate:

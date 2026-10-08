@@ -224,6 +224,21 @@ def test_coordinates_are_rounded_keeping_their_type() -> None:
     assert out["geo"] == {"lat": 39.74, "lon": "not a number", "lng": None}
 
 
+def test_coordinates_outside_json_are_rounded() -> None:
+    html = (
+        '<div id="map" data-latitude="38.478259" data-longitude="-122.725574"'
+        ' data-accuracy="10"></div>\n'
+        '<script>init({\'location\': {"lat":37.8085,"lon":-122.2668,"radius":3}});</script>'
+    )
+
+    first = sanitize(html, HTML)
+
+    assert 'data-latitude="38.48" data-longitude="-122.73" data-accuracy="10"' in first.text
+    assert '"lat":37.81,"lon":-122.27,"radius":3' in first.text
+    assert first.counts == {"coordinate": 4}
+    assert sanitize(first.text, HTML).counts == {}
+
+
 def test_json_learns_names_for_free_text_elsewhere() -> None:
     data = [{"description": "Ask Rosalind Quill"}, {"owner": {"name": "Rosalind Quill"}}]
 

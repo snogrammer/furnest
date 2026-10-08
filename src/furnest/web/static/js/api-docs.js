@@ -11,5 +11,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // The schema needs the session cookie; "Try it out" needs the Bearer token
     // entered under "Authorize", since /api/v1 doesn't accept the cookie.
     withCredentials: true,
+    // No badge from validator.swagger.io: it would send this site's spec URL there.
+    validatorUrl: null,
   });
 });

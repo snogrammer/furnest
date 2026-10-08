@@ -30,6 +30,7 @@ import re
 import sys
 from collections.abc import Iterable, Mapping
 from typing import Any, TextIO
+from urllib.parse import unquote, urlsplit
 
 import structlog
 from pydantic import SecretBytes, SecretStr
@@ -55,7 +56,7 @@ _SECRET_TEXT: tuple[tuple[re.Pattern[str], str], ...] = (
     # Query-string or key=value pairs: "?api_key=abc", "password=hunter2".
     (
         re.compile(
-            r"\b(passw(?:or)?d|secret|token|api[_-]?key|access_token)=[^\s&\"']+",
+            r"\b(passw(?:or)?d|secret|token|api[_-]?key|access_token|key)=[^\s&\"']+",
             re.IGNORECASE,
         ),
         rf"\1={REDACTED}",
@@ -108,9 +109,22 @@ class Redactor:
         return text
 
 
+def _url_credentials(url: object) -> list[str]:
+    """The secret part of a URL's userinfo: its password, or the user when there is
+    no password (``https://TOKEN@proxy``)."""
+    if url is None:
+        return []
+    parts = urlsplit(str(url))
+    if parts.password:
+        return [unquote(parts.password)]
+    if parts.username:
+        return [unquote(parts.username)]
+    return []
+
+
 def secret_values(settings: Settings) -> list[str]:
     """The plaintext of every ``SecretStr`` setting that is set, per-adapter
-    ``SOURCES_ADAPTERS`` API keys included."""
+    ``SOURCES_ADAPTERS`` API keys and proxy URL credentials included."""
     values: list[str] = []
     for group_name in type(settings).model_fields:
         group = getattr(settings, group_name)
@@ -118,9 +132,11 @@ def secret_values(settings: Settings) -> list[str]:
             value = getattr(group, field_name)
             if isinstance(value, SecretStr) and value.get_secret_value():
                 values.append(value.get_secret_value())
+    values.extend(_url_credentials(settings.sources.proxy_url))
     for overrides in settings.sources.adapters.values():
         if overrides.api_key is not None and overrides.api_key.get_secret_value():
             values.append(overrides.api_key.get_secret_value())
+        values.extend(_url_credentials(overrides.proxy_url))
     return values
 
 
@@ -139,13 +155,25 @@ class _StderrHandler(logging.StreamHandler[TextIO]):
         super().emit(record)
 
 
+# The redactor configure_logging set up; patterns only until it runs.
+_active = Redactor()
+
+
+def error_text(exc: BaseException) -> str:
+    """``Type: message`` for an error that is stored or shown, not just logged
+    (source health, job and email failures, Discord alerts), with secrets removed
+    the same way the logs remove them."""
+    return _active.redact_text(f"{type(exc).__name__}: {exc}")
+
+
 def configure_logging(settings: LoggingSettings, *, secrets: Iterable[str] = ()) -> Redactor:
     """Route structlog and stdlib logging through one redacting pipeline to stderr.
 
     Safe to call more than once: the previous furnest handler is replaced, not
     stacked. Returns the ``Redactor`` so Sentry can reuse it.
     """
-    redactor = Redactor(secrets)
+    global _active  # one logging setup per process
+    redactor = _active = Redactor(secrets)
     shared: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,

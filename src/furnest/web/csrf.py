@@ -4,12 +4,13 @@ The ``furnest_csrf`` cookie holds a random token signed with ``AUTH_SESSION_SECR
 Pages echo the raw token back in a hidden ``csrf_token`` form field (``csrf_field``
 macro) and, for htmx requests, in the ``X-CSRF-Token`` header (``hx-headers`` on
 ``<body>``). An unsafe request passes only when what it sends matches the token in
-its cookie. The signature stops a cookie planted from a sibling subdomain from being
-accepted.
+its cookie. The signature stops a made-up cookie value from being accepted. It
+does not stop a sibling subdomain from planting a validly signed pair fetched from
+``/login``, since the token isn't bound to the session (#155).
 
 The same mechanism guards the login form, so it works before there is a session.
-Requests authenticated with a Bearer token are exempt: browsers never attach that
-header on their own, so there is nothing to forge.
+Requests authenticated with a valid Bearer token are exempt: browsers never attach
+that header on their own, so there is nothing to forge. A wrong one gets no pass.
 
 ``CsrfMiddleware`` reads the cookie at the start of each request. A template that
 needs a token and finds none mints one, and the middleware then sets the cookie
@@ -27,7 +28,7 @@ from starlette.requests import cookie_parser
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from furnest.web.auth import bearer_token, cookie_secure
+from furnest.web.auth import auth_method, cookie_secure
 
 CSRF_COOKIE = "furnest_csrf"
 CSRF_HEADER = "X-CSRF-Token"
@@ -85,9 +86,9 @@ def set_csrf_cookie(request: Request, response: Response, token: str) -> None:
 
 async def require_csrf(request: Request) -> None:
     """Dependency: reject unsafe requests whose token does not match their cookie."""
-    if request.method in _SAFE_METHODS or bearer_token(request) is not None:
-        # A wrong Bearer token is rejected by require_auth (or never reaches a
-        # cookie-protected action), so skipping CSRF for it grants nothing.
+    if request.method in _SAFE_METHODS or auth_method(request) == "bearer":
+        # A valid Bearer token can't be forged cross-site (browsers never attach
+        # it on their own). A wrong one gets no exemption.
         return
     expected: str | None = getattr(request.state, _FROM_COOKIE, None)
     supplied = request.headers.get(CSRF_HEADER)

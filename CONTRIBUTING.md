@@ -11,6 +11,17 @@ uv run mypy
 uv run pytest
 ```
 
+CI also audits the locked dependencies and scans the built image. To run them locally:
+
+```sh
+uv export --frozen --all-extras --no-emit-project --quiet -o /tmp/requirements.txt
+uvx pip-audit --strict --disable-pip --require-hashes -r /tmp/requirements.txt
+docker build -t furnest:local . && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:0.69.3 image --ignore-unfixed --severity HIGH,CRITICAL furnest:local
+```
+
+When Trivy flags an OS package, bump the `PYTHON_IMAGE` digest in the `Dockerfile` to the current `python:3.12-slim-bookworm`.
+
 Tests never touch the network: `pytest-socket` makes any socket connection fail. `uv run pytest -n auto` runs the suite in parallel ([pytest-xdist](https://pytest-xdist.readthedocs.io/)), the same way CI does. Database tests share one migrated template per process: the `migrated_engine` fixture copies it instead of running Alembic for every test. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#conventions) for the conventions. Work is tracked one issue per PR, on a branch named `issue-<n>-<slug>`, with `Closes #<n>` in the PR body.
 
 ## Refreshing fixtures

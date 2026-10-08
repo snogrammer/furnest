@@ -215,3 +215,36 @@ def test_subject_errors_name_the_subject(context: InquiryContext) -> None:
 def test_sandbox_blocks_unsafe_access(context: InquiryContext, source: str) -> None:
     with pytest.raises(TemplateRenderError, match=r"unsafe|undefined|no attribute"):
         render("s", source, context)
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        pytest.param("{{ 'x' * 10**10 }}", "numbers are limited", id="huge-literal"),
+        pytest.param("{{ 'xx' * 99999 }}", "results are limited", id="long-repeat"),
+        pytest.param("{{ [1, 2] * 60000 }}", "results are limited", id="long-list"),
+        pytest.param("{{ 2 ** 100 }}", "exponents are limited", id="power"),
+        pytest.param("{{ 999 * 999 }}", "numbers are limited", id="big-product"),
+        pytest.param("{{ '9999999' | int }}", "numbers are limited", id="int-filter"),
+        pytest.param("{{ '1e9' | float }}", "numbers are limited", id="float-filter"),
+        pytest.param("{% for i in range(5000) %}{% endfor %}", "range", id="range"),
+        pytest.param(
+            "{% for i in range(999) %}{% for j in range(999) %}x{% endfor %}{% endfor %}",
+            "renders to more than",
+            id="output",
+        ),
+        pytest.param("{{ lipsum(99999) }}", "undefined", id="lipsum"),
+    ],
+)
+def test_rendering_is_bounded(context: InquiryContext, source: str, message: str) -> None:
+    with pytest.raises(TemplateRenderError, match=message):
+        render("s", source, context)
+
+
+def test_small_arithmetic_and_loops_still_work(context: InquiryContext) -> None:
+    source = (
+        "{{ lease_months * 2 }} {{ 2 ** 3 }} {{ '-' * 3 }}"
+        "{% for i in range(3) %}{{ i }}{% endfor %}"
+    )
+
+    assert render("s", source, context).body == "12 8 ---012"

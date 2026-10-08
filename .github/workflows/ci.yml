@@ -6,6 +6,10 @@ name: CI
 #
 # Images are built here but never pushed. publish.yml pushes after CI passes
 # on main, and on version tags.
+#
+# Security checks: the `audit` job runs pip-audit on the locked dependencies, and
+# `docker-build` scans the built image with Trivy. Both fail on known
+# vulnerabilities that have a fix.
 on:
   push:
     branches: ["main"]
@@ -15,6 +19,9 @@ on:
 
 env:
   UV_VERSION: "0.11.16"
+  PIP_AUDIT_VERSION: "2.10.1"
+  # Pinned by digest as well as tag: a scanner runs with the image in hand.
+  TRIVY_IMAGE: aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
 
 jobs:
   lint:
@@ -39,6 +46,25 @@ jobs:
 
       - name: Type check
         run: uv run mypy
+
+  # Known vulnerabilities in the locked dependencies (every extra and the dev group
+  # too, since they run in CI), from the PyPI/OSV advisory databases. --strict
+  # fails on any package that can't be audited instead of skipping it.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+
+      - name: Audit dependencies
+        run: |
+          uv export --frozen --all-extras --no-emit-project --quiet -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit==${{ env.PIP_AUDIT_VERSION }} --strict --disable-pip --require-hashes \
+            --progress-spinner off -r "$RUNNER_TEMP/requirements.txt"
 
   test:
     runs-on: ubuntu-latest
@@ -176,6 +202,16 @@ jobs:
             exit 1
           fi
           docker run --rm --user 0 --entrypoint ls -v "$vol:/data" "$IMAGE" -lan /data
+
+      # HIGH/CRITICAL vulnerabilities that have a fix, in OS packages or Python
+      # dependencies. Unfixed ones can't be acted on, so they don't fail the build
+      # (run `trivy image` locally to see them). The image goes in on stdin: the
+      # job can't bind-mount runner paths, and Trivy needs no Docker socket.
+      - name: Scan image for vulnerabilities
+        run: |
+          set -euo pipefail
+          docker save "$IMAGE" | docker run --rm -i --entrypoint sh "$TRIVY_IMAGE" -c \
+            'cat > /tmp/image.tar && trivy image --input /tmp/image.tar --quiet --ignore-unfixed --severity HIGH,CRITICAL --exit-code 1'
 
       - name: Compose files validate
         run: |

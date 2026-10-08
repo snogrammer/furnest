@@ -30,7 +30,7 @@ from furnest.config import Settings, SmtpSettings
 from furnest.db.email_store import EMAIL_SEND, SmtpNotConfiguredError, SqlEmailStore
 from furnest.db.models import EmailStatus
 from furnest.email.smtp import SmtpSender, build_message, is_permanent
-from furnest.logging import get_logger
+from furnest.logging import error_text, get_logger
 
 if TYPE_CHECKING:
     from furnest.worker.execution import JobContext
@@ -74,7 +74,7 @@ class EmailSend:
         final = ctx.attempt >= ctx.max_attempts
         if not self._smtp.configured:
             error = SmtpNotConfiguredError()
-            self._store.record_failure(email_id, str(error), final=final)
+            self._store.record_failure(email_id, error_text(error), final=final)
             raise error
         if ctx.cancelled.is_set():
             return
@@ -92,9 +92,7 @@ class EmailSend:
         except (OSError, ValueError) as exc:
             # smtplib.SMTPException is an OSError subclass, as are socket errors/timeouts.
             permanent = is_permanent(exc)
-            self._store.record_failure(
-                email_id, f"{type(exc).__name__}: {exc}", final=permanent or final
-            )
+            self._store.record_failure(email_id, error_text(exc), final=permanent or final)
             log.warning(
                 "email_send_failed",
                 email_id=email_id,

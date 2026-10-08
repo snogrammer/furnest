@@ -4,8 +4,7 @@ import re
 from collections.abc import Callable, Iterator
 
 import pytest
-from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import Engine
@@ -13,7 +12,12 @@ from sqlalchemy import Engine
 from furnest.config import LoggingSettings, Settings
 from furnest.logging import configure_logging
 from furnest.web.app import create_app
-from furnest.web.auth import SESSION_COOKIE, AuthConfigError, require_auth
+from furnest.web.auth import (
+    SESSION_COOKIE,
+    AuthConfigError,
+    require_auth,
+    require_bearer,
+)
 from furnest.web.csrf import CSRF_COOKIE, require_csrf
 from furnest.web.headers import SECURITY_HEADERS
 
@@ -23,8 +27,24 @@ LoginFn = Callable[..., Response]
 
 HTML = {"Accept": "text/html,application/xhtml+xml"}
 
-# Routes reachable without auth. Anything else must depend on require_auth.
-PUBLIC_PATHS = {"/healthz", "/readyz", "/login", "/logout", "/favicon.ico"}
+# How each route that is not a session + CSRF dashboard route authenticates. Every
+# other route must depend on both require_auth and require_csrf.
+PUBLIC = frozenset[object]()  # reachable without auth
+CSRF_ONLY = frozenset({require_csrf})  # login/logout: no session yet, CSRF still checked
+BEARER_ONLY = frozenset({require_bearer})  # JSON API and metrics: never cookies
+AUTH_ONLY = frozenset({require_auth})  # GET-only API docs
+ROUTE_POLICY: dict[str, frozenset[object]] = {
+    "/favicon.ico": PUBLIC,
+    "/healthz": PUBLIC,
+    "/readyz": PUBLIC,
+    # Ed25519 request signature, checked in the handler before the body is parsed.
+    "/discord/interactions": PUBLIC,
+    "/login": CSRF_ONLY,
+    "/logout": CSRF_ONLY,
+    "/metrics": BEARER_ONLY,
+    "/api/openapi.json": AUTH_ONLY,
+    "/api/docs": AUTH_ONLY,
+}
 
 
 def _set_cookie_headers(response: object) -> list[str]:
@@ -46,15 +66,33 @@ def test_app_refuses_to_start_without_token(monkeypatch: pytest.MonkeyPatch) -> 
         create_app(Settings())
 
 
-def test_every_route_requires_auth_unless_allowlisted(client: TestClient) -> None:
-    app = client.app
-    assert isinstance(app, FastAPI)
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or route.path in PUBLIC_PATHS:
-            continue
-        calls = {d.call for d in route.dependant.dependencies}
-        assert require_auth in calls, f"{route.path} is not protected"
-        assert require_csrf in calls, f"{route.path} has no CSRF check"
+def _route_guards(route: APIRoute) -> frozenset[object]:
+    guards = {require_auth, require_bearer, require_csrf}
+    return frozenset(d.call for d in route.dependant.dependencies if d.call in guards)
+
+
+def test_every_route_is_guarded_as_declared(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Metrics on, so its router is part of the walk.
+    monkeypatch.setenv("METRICS_ENABLED", "true")
+    app = create_app(Settings())
+    # iter_route_contexts descends into included routers; app.routes only holds
+    # one wrapper per include_router call.
+    routes = [
+        ctx.original_route
+        for ctx in iter_route_contexts(app.routes)
+        if isinstance(ctx.original_route, APIRoute)
+    ]
+    # Guard against the walk going blind again (it once saw only /favicon.ico).
+    assert len(routes) > 40
+
+    for route in routes:
+        guards = _route_guards(route)
+        expected: frozenset[object]
+        if route.path.startswith("/api/v1/"):
+            expected = BEARER_ONLY
+        else:
+            expected = ROUTE_POLICY.get(route.path, frozenset({require_auth, require_csrf}))
+        assert guards == expected, f"{route.path} {route.methods} has guards {guards}"
 
 
 # --- Login ---------------------------------------------------------------------
@@ -237,6 +275,33 @@ def test_wrong_bearer_is_not_rescued_by_session(authed_client: TestClient) -> No
     assert response.status_code == 401
 
 
+def test_wrong_bearer_tokens_are_rate_limited(
+    client: TestClient, auth_token: str, login: LoginFn
+) -> None:
+    for _ in range(5):
+        assert (
+            client.get("/api/v1/properties", headers={"Authorization": "Bearer x"}).status_code
+            == 401
+        )
+
+    blocked = client.get("/api/v1/properties", headers={"Authorization": f"Bearer {auth_token}"})
+
+    # Locked out: even the right token waits, so the lockout can't be guessed past.
+    assert blocked.status_code == 429
+    assert int(blocked.headers["Retry-After"]) >= 1
+    assert client.get("/", headers={"Authorization": f"Bearer {auth_token}"}).status_code == 429
+    # One budget per client: the login form is locked out too.
+    assert login(client).status_code == 429
+
+
+def test_valid_bearer_does_not_count_against_the_limit(client: TestClient, auth_token: str) -> None:
+    for _ in range(10):
+        response = client.get(
+            "/api/v1/properties", headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+
+
 # --- CSRF ----------------------------------------------------------------------
 
 
@@ -315,6 +380,19 @@ def test_login_without_csrf_is_rejected(client: TestClient, auth_token: str) -> 
 def test_logout_without_csrf_is_rejected(authed_client: TestClient) -> None:
     assert authed_client.post("/logout").status_code == 403
     assert authed_client.get("/").status_code == 200
+
+
+def test_wrong_bearer_does_not_skip_csrf(client: TestClient, auth_token: str) -> None:
+    client.get("/login")
+    response = client.post(
+        "/login",
+        data={"token": auth_token},
+        headers={"Authorization": "Bearer wrong"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert SESSION_COOKIE not in client.cookies
 
 
 # --- Rate limiting -------------------------------------------------------------

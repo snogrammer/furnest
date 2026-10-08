@@ -52,7 +52,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from furnest.config import SourcesSettings
 from furnest.db.base import utcnow
 from furnest.db.source_store import SqlSourceStore
-from furnest.logging import get_logger
+from furnest.logging import error_text, get_logger
 from furnest.sources.base import SourceAdapter
 from furnest.sources.config import resolve_config
 from furnest.worker import locks
@@ -141,7 +141,7 @@ class SourceRun:
     def on_failure(self, exc: BaseException) -> None:
         self._store.record_failure(
             self.name,
-            error=f"{type(exc).__name__}: {exc}",
+            error=error_text(exc),
             at=self._clock(),
             alert_after=self._alert_after,
         )

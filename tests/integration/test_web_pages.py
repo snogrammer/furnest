@@ -94,6 +94,26 @@ def test_health_json_also_gets_security_headers(client: TestClient) -> None:
     _assert_security_headers(client.get("/healthz").headers)
 
 
+def test_pages_are_not_cached_but_static_files_may_be(
+    authed_client: TestClient, client: TestClient
+) -> None:
+    assert authed_client.get("/", headers=HTML).headers["cache-control"] == "no-store"
+    assert client.get("/healthz").headers["cache-control"] == "no-store"
+    assert "cache-control" not in client.get("/static/css/app.css").headers
+    assert "cache-control" not in client.get("/favicon.ico").headers
+
+
+def test_validation_errors_do_not_echo_the_input(authed_client: TestClient) -> None:
+    value = "do-not-echo-this-value"
+    response = authed_client.get("/", params={"sort": value})
+
+    assert response.status_code == 422
+    assert value not in response.text
+    [error] = response.json()["detail"]
+    assert set(error) == {"loc", "msg", "type"}
+    assert error["loc"] == ["query", "sort"]
+
+
 def test_unknown_page_renders_html_404(client: TestClient) -> None:
     response = client.get("/no-such-page", headers=HTML)
 

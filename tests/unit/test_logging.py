@@ -14,6 +14,7 @@ from furnest.logging import (
     bind_context,
     bound_context,
     configure_logging,
+    error_text,
     get_logger,
     secret_values,
 )
@@ -158,6 +159,29 @@ def test_secret_values_collects_set_secrets_only() -> None:
     assert sorted(secret_values(settings)) == ["dashboard-token", "smtp-password"]
 
 
+def test_secret_values_include_proxy_url_credentials() -> None:
+    settings = Settings.model_validate(
+        {
+            "sources": {
+                "proxy_url": "http://proxyuser:proxy%40pass@proxy.example.com:8080",
+                "adapters": {
+                    "token_user": {"proxy_url": "https://proxy-token@proxy.example.com"},
+                    "no_creds": {"proxy_url": "https://proxy.example.com"},
+                },
+            }
+        }
+    )
+
+    assert secret_values(settings) == ["proxy@pass", "proxy-token"]
+
+
+def test_bare_key_query_parameter_is_redacted() -> None:
+    text = Redactor([]).redact_text("GET https://maps.example.com/geocode?q=x&key=abc123")
+
+    assert "abc123" not in text
+    assert "q=x" in text
+
+
 def test_secret_values_include_per_adapter_api_keys() -> None:
     settings = Settings.model_validate(
         {
@@ -172,3 +196,15 @@ def test_secret_values_include_per_adapter_api_keys() -> None:
     )
 
     assert secret_values(settings) == ["adapter-key"]
+
+
+def test_error_text_removes_configured_secrets_and_credentials() -> None:
+    configure_logging(json_settings(), secrets=[SECRET])
+
+    text = error_text(
+        RuntimeError(f"proxy http://u:{SECRET}@proxy.example.com failed; token {SECRET}")
+    )
+
+    assert text.startswith("RuntimeError: proxy http://")
+    assert SECRET not in text
+    assert REDACTED in text

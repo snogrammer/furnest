@@ -101,7 +101,7 @@ Each process reads what it needs:
 
 | Process | Needs | Without it |
 | --- | --- | --- |
-| `web` | `DISCORD_PUBLIC_KEY` | `POST /discord/interactions` answers 404, as if it didn't exist. |
+| `web` | `DISCORD_PUBLIC_KEY`, plus `DISCORD_CHANNEL_ID` to refuse clicks from other channels | `POST /discord/interactions` answers 404, as if it didn't exist. |
 | `worker` | `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` | Match posts, message updates, the digest and alerts are skipped (logged with `reason="not configured"`). |
 
 The optional settings are documented in [`.env.example`](../.env.example):
@@ -113,6 +113,7 @@ The optional settings are documented in [`.env.example`](../.env.example):
 | `DISCORD_INTERACTION_MAX_AGE_SECONDS` | 300 | How far an interaction's signed timestamp may be from the server clock before it is rejected. |
 | `DISCORD_DIGEST_TIME` | unset | Daily digest at this local time (`TIMEZONE`), as `HH:MM`. Unset means no digest. |
 | `DISCORD_DIGEST_TOP` | 5 | How many new suggestions the digest lists. |
+| `DISCORD_ALLOWED_USER_IDS` | empty | Comma-separated Discord user ids allowed to press Approve, Deny, Inquire and Snooze. Empty means anyone who can see the channel. Anyone else gets an ephemeral "not allowed" reply, and nothing changes. Copy a user id the same way as the channel id. |
 | `DISCORD_ALERT_AFTER_FAILURES` | 3 | Alert when a source fails this many runs in a row, and again when it recovers. 0 turns alerts off. |
 
 Redeploy `web` and `worker` before the next step.
