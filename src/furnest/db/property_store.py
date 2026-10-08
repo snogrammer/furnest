@@ -133,6 +133,8 @@ from furnest.worker import queue
 NOTIFY = "notify"
 # The job that redraws a property's Discord message from the database: furnest.notify.sync.
 MESSAGE_SYNC_JOB = "discord.message_sync"
+# The job that looks for the same unit on other sources: furnest.enrichment.alternatives.
+ENRICH_ALTERNATIVES = "enrich.alternatives"
 # Jobs that haven't started yet. A running one may already have read the old state,
 # so it doesn't count when deciding whether another notify or sync is needed.
 _NOT_STARTED = (JobStatus.QUEUED, JobStatus.FAILED)
@@ -583,6 +585,13 @@ def _enqueue_notify(session: Session, property_id: int) -> None:
         queue.enqueue(session, NOTIFY, {"property_id": property_id})
 
 
+def _enqueue_enrichment(session: Session, property_id: int) -> None:
+    """Queue the alternatives finder for the property, unless one is already waiting."""
+    if queue.pending(session, ENRICH_ALTERNATIVES, statuses=_NOT_STARTED, property_id=property_id):
+        return
+    queue.enqueue(session, ENRICH_ALTERNATIVES, {"property_id": property_id})
+
+
 def _apply_transition(
     session: Session,
     row: Property,
@@ -614,6 +623,8 @@ def _apply_transition(
         )
     )
     _sync_message(session, row)
+    if to is PropertyStatus.APPROVED:
+        _enqueue_enrichment(session, row.id)
 
 
 def _audit_in_place(

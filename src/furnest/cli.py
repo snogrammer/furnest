@@ -99,7 +99,10 @@ def worker() -> None:
     from furnest.db.engine import create_engine_from_settings
     from furnest.db.migrate import migration_status
     from furnest.db.session import make_session_factory
+    from furnest.dedup.phash import ImageFetcher
     from furnest.email.imap import schedule_imap_poll
+    from furnest.enrichment.alternatives import register_alternatives
+    from furnest.enrichment.geocoding import build_geocoder
     from furnest.matching.amenities.llm import build_amenity_extractor
     from furnest.notify.digest import schedule_digest
     from furnest.pipeline.images import schedule_image_hashing
@@ -131,6 +134,17 @@ def worker() -> None:
             raise typer.Exit(code=1) from exc
         jobs = default_registry(
             factory, pipeline, settings=settings, source_name=sources.display_name
+        )
+        fetcher = ImageFetcher(settings.images, settings.sources)
+        register_alternatives(
+            jobs,
+            sources,
+            factory,
+            sources=settings.sources,
+            grouping=settings.grouping,
+            settings=settings.enrichment,
+            geocoder=build_geocoder(settings.geocoding, factory),
+            fetcher=fetcher,
         )
         worker = Worker(settings, engine, jobs)
         ingestor = ListingIngestor(

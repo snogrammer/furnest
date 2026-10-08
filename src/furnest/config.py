@@ -428,6 +428,26 @@ class GroupingSettings(_Group):
     weight_description: NonNegativeFloat = 1.0
 
 
+class EnrichmentSettings(_Group):
+    """Enrichment run when a property is approved (``furnest.enrichment``).
+
+    The alternatives finder searches the other enabled sources around the property
+    and keeps the listings that look like the same unit (scored with ``GROUPING_*``).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="ENRICHMENT_")
+
+    enabled: bool = True
+    # Radius of the search around the property, in kilometers.
+    search_radius_km: PositiveFloat = 1.0
+    # Most results taken from one source's search, nearest to the property first.
+    max_candidates_per_source: PositiveInt = 50
+    # Photos fetched and hashed per candidate to compare with the property's photos.
+    photos_per_candidate: Annotated[int, Field(ge=0)] = 5
+    # Seconds one finder run may take across all sources.
+    timeout_seconds: PositiveInt = 600
+
+
 # Adapter names: lower-case identifiers, also used as keys in SOURCES_ADAPTERS.
 ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
@@ -517,6 +537,7 @@ class Settings(BaseModel):
     reverse_image: ReverseImageSettings = Field(default_factory=ReverseImageSettings)
     images: ImageSettings = Field(default_factory=ImageSettings)
     grouping: GroupingSettings = Field(default_factory=GroupingSettings)
+    enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
 
