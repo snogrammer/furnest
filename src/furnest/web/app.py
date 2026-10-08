@@ -12,6 +12,8 @@ login/logout and ``POST /discord/interactions``, which Discord calls and which
 checks Discord's signature instead (``routes.discord``). ``create_app`` refuses to
 build an app without usable ``AUTH_TOKEN``/``AUTH_SESSION_SECRET``.
 
+``GET /metrics`` exists only when ``METRICS_ENABLED`` is set, and then needs the Bearer token.
+
 Middleware, outermost first: trusted-proxy header rewriting (only when
 ``WEB_TRUSTED_PROXIES`` is set, so the client IP and scheme are right for everything
 below), security headers, CSRF cookie handling.
@@ -52,6 +54,7 @@ from furnest.web.routes import (
     email_templates,
     health,
     inquiries,
+    metrics,
     pages,
     sources,
 )
@@ -121,6 +124,8 @@ def create_app(
     ):
         app.include_router(html_router, include_in_schema=False)
     app.include_router(discord.router, include_in_schema=False)
+    if settings.metrics.enabled:
+        app.include_router(metrics.router, include_in_schema=False)
     app.include_router(api.router)
     app.include_router(api.docs_router)
     return app

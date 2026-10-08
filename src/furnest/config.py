@@ -227,6 +227,13 @@ class SentrySettings(_Group):
     traces_sample_rate: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
 
 
+class MetricsSettings(_Group):
+    model_config = SettingsConfigDict(env_prefix="METRICS_")
+
+    # Off by default. When on, GET /metrics needs the same Bearer AUTH_TOKEN as the API.
+    enabled: bool = False
+
+
 class LoggingSettings(_Group):
     model_config = SettingsConfigDict(env_prefix="LOG_")
 
@@ -553,6 +560,7 @@ class Settings(BaseModel):
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     sentry: SentrySettings = Field(default_factory=SentrySettings)
+    metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     discord: DiscordSettings = Field(default_factory=DiscordSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
