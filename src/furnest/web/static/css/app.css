@@ -504,6 +504,7 @@ button.secondary {
 }
 
 .health-ok,
+.health-on,
 .health-run-success {
   color: var(--ok);
 }
@@ -514,10 +515,15 @@ button.secondary {
 }
 
 .health-disabled,
+.health-off,
 .health-unavailable,
 .health-never-run,
 .health-run-running {
   color: var(--muted);
+}
+
+.health-incomplete {
+  color: #8a5300;
 }
 
 .runs {
@@ -533,6 +539,10 @@ button.secondary {
   .health-failing,
   .health-run-failed {
     color: #f2b8b5;
+  }
+
+  .health-incomplete {
+    color: #f5c97a;
   }
 }
 

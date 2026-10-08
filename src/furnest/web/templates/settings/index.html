@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% macro shown(value) %}{% if value is none %}<span class="muted">not set</span>{% elif "\n" in value %}<pre><code>{{ value }}</code></pre>{% else %}<code>{{ value }}</code>{% endif %}{% endmacro %}
+{% block title %}Settings · furnest{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+{% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
+
+<h2>Integrations</h2>
+<div class="table-scroll">
+<table class="sources">
+  <thead>
+    <tr>
+      <th scope="col">Integration</th>
+      <th scope="col">Status</th>
+      <th scope="col">Details</th>
+      <th scope="col">Env vars</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in integrations %}
+    <tr>
+      <th scope="row">{{ item.name }}</th>
+      <td><span class="health health-{{ item.status.value }}">{{ item.status.value }}</span></td>
+      <td>{{ item.detail }}</td>
+      <td>{% for env_var in item.env_vars %}<code>{{ env_var }}</code>{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted">Each listing source's status, API key and toggle are on <a href="/sources">Sources</a>.</p>
+
+<h2>Editable settings</h2>
+<p class="muted">Changes apply right away. A setting whose env var is set can't be changed here.</p>
+<div class="table-scroll">
+<table class="sources">
+  <thead>
+    <tr>
+      <th scope="col">Setting</th>
+      <th scope="col">Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in runtime_rows %}
+    <tr id="setting-{{ row.key }}">
+      <th scope="row"><label for="value-{{ row.key }}">{{ row.key }}</label><br><code class="muted">{{ row.env_var }}</code></th>
+      <td>
+        {% if row.pinned %}
+        <code>{{ row.value }}</code><br><small class="muted">set by {{ row.env_var }}</small>
+        {% else %}
+        <div class="source-actions">
+          <form method="post" action="/settings/runtime/{{ row.key }}" class="source-actions">
+            {{ csrf_field(request) }}
+            {% if row.choices %}
+            <select id="value-{{ row.key }}" name="value">
+              {% for choice in row.choices %}<option value="{{ choice }}" {% if choice == row.value %}selected{% endif %}>{{ choice }}</option>{% endfor %}
+            </select>
+            {% else %}
+            <input id="value-{{ row.key }}" name="value" value="{{ row.value }}" maxlength="200">
+            {% endif %}
+            <button type="submit">Save</button>
+          </form>
+          <form method="post" action="/settings/runtime/{{ row.key }}/reset">
+            {{ csrf_field(request) }}
+            <button type="submit" class="secondary">Reset to default</button>
+          </form>
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Environment</h2>
+<p class="muted">Read from env vars (or <code>.env</code>) when each process starts. Changing one needs a restart of both <code>web</code> and <code>worker</code>. Secrets show only whether they are set.</p>
+{% for group in groups %}
+<details class="runs" id="group-{{ group.key }}">
+  <summary>{{ group.title }} <span class="muted">({{ group.rows | selectattr("origin.value", "equalto", "env") | list | length }} of {{ group.rows | length }} set)</span></summary>
+  {% if group.summary %}<p class="muted">{{ group.summary }}</p>{% endif %}
+  <div class="table-scroll">
+  <table class="sources">
+    <thead>
+      <tr>
+        <th scope="col">Env var</th>
+        <th scope="col">Value</th>
+        <th scope="col">Source</th>
+        <th scope="col">Default</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in group.rows %}
+      <tr>
+        <th scope="row"><code>{{ row.env_var }}</code></th>
+        <td>{{ shown(row.value) }}</td>
+        <td>{% if row.origin.value == "env" %}env{% else %}<span class="muted">default</span>{% endif %}</td>
+        <td>{% if row.secret %}<span class="muted">-</span>{% else %}{{ shown(row.default) }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endfor %}
+{% endblock %}

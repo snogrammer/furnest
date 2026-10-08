@@ -589,17 +589,28 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def env_var_names() -> list[str]:
-    """Every env var furnest reads, in declaration order (used to check ``.env.example``)."""
-    names: list[str] = []
-    for group_field in Settings.model_fields.values():
+def env_groups() -> dict[str, type[BaseSettings]]:
+    """Each env group class by its ``Settings`` attribute name, in declaration order."""
+    groups: dict[str, type[BaseSettings]] = {}
+    for key, group_field in Settings.model_fields.items():
         group = group_field.annotation
         if not (isinstance(group, type) and issubclass(group, _Group)):
             msg = f"Settings field {group_field!r} is not an env group"
             raise TypeError(msg)
-        prefix = group.model_config.get("env_prefix", "")
-        names.extend(f"{prefix}{name}".upper() for name in group.model_fields)
-    return names
+        groups[key] = group
+    return groups
+
+
+def env_var_name(group: type[BaseSettings], field: str) -> str:
+    """The env var that sets ``field`` of ``group``, e.g. ``DISCORD_BOT_TOKEN``."""
+    return f"{group.model_config.get('env_prefix', '')}{field}".upper()
+
+
+def env_var_names() -> list[str]:
+    """Every env var furnest reads, in declaration order (used to check ``.env.example``)."""
+    return [
+        env_var_name(group, name) for group in env_groups().values() for name in group.model_fields
+    ]
 
 
 # --- Runtime overrides -------------------------------------------------------

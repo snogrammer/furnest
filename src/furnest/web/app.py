@@ -58,6 +58,9 @@ from furnest.web.routes import (
     pages,
     sources,
 )
+from furnest.web.routes import (
+    settings as settings_routes,
+)
 from furnest.web.templating import STATIC_DIR
 
 log = get_logger(__name__)
@@ -121,6 +124,7 @@ def create_app(
         email_templates.router,
         inquiries.router,
         sources.router,
+        settings_routes.router,
     ):
         app.include_router(html_router, include_in_schema=False)
     app.include_router(discord.router, include_in_schema=False)
