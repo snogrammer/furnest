@@ -20,6 +20,13 @@ name: Publish
 # Without REGISTRY nothing is built, and the `config` job warns about it. Without
 # PORTAINER_URL/PORTAINER_STACK_ID the image is pushed but no redeploy happens.
 #
+# Optional signing (skipped with a warning when COSIGN_PRIVATE_KEY is unset):
+#   secrets: COSIGN_PRIVATE_KEY, COSIGN_PASSWORD   from `cosign generate-key-pair`
+# Each new :<sha> image is signed, and gets a CycloneDX SBOM (Trivy) and a SLSA
+# provenance statement attached as cosign attestations. Verify with
+#   cosign verify --key cosign.pub $REGISTRY/$IMAGE:<sha>
+#   cosign verify-attestation --key cosign.pub --type cyclonedx $REGISTRY/$IMAGE:<sha>
+#
 # Tags pushed: :<sha> (a multi-arch index) and :<sha>-<arch> per platform, plus
 # :latest from main, or :<tag> (e.g. :v1.2.3) from a version tag.
 on:
@@ -68,6 +75,10 @@ jobs:
       PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID || '1' }}
       # Containers polled after redeploy (container_name in docker-compose.portainer.yml).
       PORTAINER_CONTAINERS: "furnest-web furnest-worker"
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      # Pinned by digest as well as tag, like TRIVY_IMAGE in ci.yml.
+      TRIVY_IMAGE: aquasec/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
     steps:
       - name: CI finished green?
         id: gate
@@ -106,7 +117,7 @@ jobs:
 
       - name: Checkout
         if: steps.gate.outputs.ok == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ env.GIT_SHA }}
 
@@ -141,14 +152,14 @@ jobs:
 
       - name: Set up QEMU
         if: steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true' && env.IMAGE_PLATFORMS != 'linux/amd64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       # Plain `docker` driver: the docker-container driver's BuildKit can't run on
       # cgroup-v1 runner hosts. It builds one platform at a time, so each platform
       # is built, loaded and pushed on its own, and joined into one index below.
       - name: Set up Buildx
         if: steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
           driver: docker
 
@@ -189,6 +200,54 @@ jobs:
       - name: Tag ${{ env.ALIAS_TAG }}
         if: steps.gate.outputs.ok == 'true'
         run: regctl image copy "$REGISTRY/$IMAGE:$GIT_SHA" "$REGISTRY/$IMAGE:$ALIAS_TAG"
+
+      # Sign the multi-arch index digest (not the mutable tag) and attach an SBOM
+      # and build provenance as attestations. Runs only for a freshly built image;
+      # a retag-only run finds them already attached.
+      - name: Install cosign
+        if: >-
+          steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true' &&
+          env.COSIGN_PRIVATE_KEY != ''
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign image, attach SBOM and provenance
+        if: >-
+          steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true' &&
+          env.COSIGN_PRIVATE_KEY != ''
+        run: |
+          set -euo pipefail
+          digest=$(regctl manifest digest "$REGISTRY/$IMAGE:$GIT_SHA")
+          ref="$REGISTRY/$IMAGE@$digest"
+          echo "$REGISTRY_PASSWORD" | cosign login "$REGISTRY" -u "$REGISTRY_USERNAME" --password-stdin
+          # CycloneDX SBOM of the pushed image, read from the registry.
+          docker run --rm -e TRIVY_USERNAME="$REGISTRY_USERNAME" -e TRIVY_PASSWORD="$REGISTRY_PASSWORD" \
+            --entrypoint sh "$TRIVY_IMAGE" -c \
+            "trivy image --quiet --image-src remote --format cyclonedx '$ref' > /tmp/sbom.json && cat /tmp/sbom.json" \
+            > "$RUNNER_TEMP/sbom.cdx.json"
+          test -s "$RUNNER_TEMP/sbom.cdx.json"
+          # SLSA v0.2 provenance predicate: what was built, from which commit, by which run.
+          jq -n --arg repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --arg sha "$GIT_SHA" \
+            --arg run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg platforms "$IMAGE_PLATFORMS" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+              builder: {id: $run},
+              buildType: "https://docs.docker.com/build/",
+              invocation: {configSource: {uri: ("git+" + $repo), digest: {sha1: $sha}, entryPoint: "Dockerfile"},
+                           parameters: {platforms: $platforms}},
+              metadata: {buildFinishedOn: $now, completeness: {parameters: true, environment: false, materials: false}},
+              materials: [{uri: ("git+" + $repo), digest: {sha1: $sha}}]
+            }' > "$RUNNER_TEMP/provenance.json"
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$ref"
+          cosign attest --yes --key env://COSIGN_PRIVATE_KEY --type cyclonedx \
+            --predicate "$RUNNER_TEMP/sbom.cdx.json" "$ref"
+          cosign attest --yes --key env://COSIGN_PRIVATE_KEY --type slsaprovenance \
+            --predicate "$RUNNER_TEMP/provenance.json" "$ref"
+          echo "signed $ref"
+
+      - name: Image signing is not configured
+        if: >-
+          steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true' &&
+          env.COSIGN_PRIVATE_KEY == ''
+        run: echo "::warning::secrets.COSIGN_PRIVATE_KEY is unset, so the image is not signed and has no SBOM or provenance."
 
       - name: Redeploy stack in Portainer
         if: >-

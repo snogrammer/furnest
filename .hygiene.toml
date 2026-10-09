@@ -7,6 +7,9 @@
 allowed_domains = [
   # Listing sources, their CDNs, and the sites the scam/alternative checks name.
   "craigslist.org",
+  # Build tooling docs referenced from the workflows and renovate.json.
+  "docs.docker.com",
+  "docs.renovatebot.com",
   "zillow.com",
   "zillowstatic.com",
   "hotpads.com",
