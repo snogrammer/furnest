@@ -8,7 +8,30 @@
 
 A self-hosted monitor for furnished rental listings. furnest watches several listing sources, filters and scores what it finds against your criteria, posts matches to Discord with action buttons, drafts inquiry emails, and tracks every property through a review pipeline in a small web dashboard.
 
-> **Status:** early development. Nothing runs end-to-end yet. Full docs, a configuration reference and a scraping/ToS disclaimer will be added before the first release.
+## Features
+
+- Watches several furnished-rental sources on a schedule through per-source adapters ([docs/adapters.md](docs/adapters.md)).
+- Filters and scores listings against your criteria, and groups duplicates of the same property across sources.
+- Posts matches to Discord with approve/deny/snooze buttons ([docs/discord-setup.md](docs/discord-setup.md)).
+- Drafts or sends inquiry emails and reads replies by IMAP.
+- Tracks every property through a review pipeline in a small web dashboard, with a JSON API.
+- Self-hosted: one Docker image, SQLite, no external services required ([docs/deployment.md](docs/deployment.md)).
+
+<!-- Screenshots: add images of the dashboard, a property page and a Discord post under docs/screenshots/ and link them here. -->
+*Screenshots coming soon.*
+
+## Quickstart
+
+```sh
+cp .env.example .env     # set AUTH_TOKEN and AUTH_SESSION_SECRET (random, 16+ characters)
+docker compose up -d --build
+```
+
+Open <http://127.0.0.1:8000> and sign in with `AUTH_TOKEN`. Then add a source and your search criteria in the dashboard. See [docs/deployment.md](docs/deployment.md) for Portainer and Caddy.
+
+## Scraping and terms of service
+
+furnest fetches pages and APIs on your behalf, for your own personal search. Many listing sites forbid automated access in their terms of service, and some actively block it. You are responsible for checking and following the terms, robots.txt and laws that apply to each source you enable. furnest keeps request rates low by default and honours robots.txt (`SOURCES_RESPECT_ROBOTS`), and sources that need a data provider or API key are off until you configure them. Don't use it to resell, republish or bulk-collect listings or personal data. The software is provided as is, with no warranty (see [LICENSE](LICENSE)), and the authors are not affiliated with any listing site.
 
 ## Development
 
@@ -36,6 +59,139 @@ uv run alembic check                                      # models and migration
 ## Configuration
 
 furnest is configured through environment variables, or a `.env` file in the working directory. [`.env.example`](.env.example) documents every setting. Copy it to `.env` and fill in what you use. Optional integrations (Sentry, LLM, geocoding, reverse image search, IMAP) stay off until configured.
+
+Every setting, with its type and default (the table is generated from the code and checked in CI; refresh it with `uv run python scripts/gen_config_docs.py`):
+
+<!-- config-table:begin -->
+
+| Variable | Type | Default |
+| --- | --- | --- |
+| `ENVIRONMENT` | development \| production \| test | `production` |
+| `BASE_URL` | httpurl | `http://localhost:8000/` |
+| `DATA_DIR` | path | `/data` |
+| `INQUIRY_MODE` | auto \| review | `review` |
+| `TIMEZONE` | string | `UTC` |
+| `DB_URL` | string | unset |
+| `DB_BUSY_TIMEOUT_MS` | integer | `5000` |
+| `DB_AUTO_MIGRATE` | boolean | `false` |
+| `WEB_HOST` | string | `127.0.0.1` |
+| `WEB_PORT` | integer | `8000` |
+| `WEB_TRUSTED_PROXIES` | list | unset |
+| `WORKER_HEARTBEAT_MAX_AGE_SECONDS` | integer | `120` |
+| `WORKER_HEARTBEAT_INTERVAL_SECONDS` | integer | `30` |
+| `WORKER_POLL_INTERVAL_SECONDS` | number | `2.0` |
+| `WORKER_CONCURRENCY` | integer | `2` |
+| `WORKER_JOB_TIMEOUT_SECONDS` | integer | `300` |
+| `WORKER_RETRY_BASE_SECONDS` | integer | `30` |
+| `WORKER_RETRY_MAX_SECONDS` | integer | `3600` |
+| `WORKER_SHUTDOWN_TIMEOUT_SECONDS` | integer | `25` |
+| `AUTH_TOKEN` | secret | unset |
+| `AUTH_SESSION_SECRET` | secret | unset |
+| `AUTH_COOKIE_SECURE` | boolean | `true` |
+| `AUTH_SESSION_MAX_AGE_SECONDS` | integer | `604800` |
+| `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` | integer | `0` |
+| `AUTH_LOGIN_MAX_ATTEMPTS` | integer | `5` |
+| `AUTH_LOGIN_WINDOW_SECONDS` | integer | `300` |
+| `SENTRY_DSN` | secret | unset |
+| `SENTRY_ENVIRONMENT` | string | unset |
+| `SENTRY_TRACES_SAMPLE_RATE` | number | `0.0` |
+| `METRICS_ENABLED` | boolean | `false` |
+| `LOG_LEVEL` | DEBUG \| INFO \| WARNING \| ERROR \| CRITICAL | `INFO` |
+| `LOG_FORMAT` | json \| console | `json` |
+| `DISCORD_APPLICATION_ID` | string | unset |
+| `DISCORD_PUBLIC_KEY` | string | unset |
+| `DISCORD_BOT_TOKEN` | secret | unset |
+| `DISCORD_CHANNEL_ID` | string | unset |
+| `DISCORD_ALLOWED_USER_IDS` | list | unset |
+| `DISCORD_REQUEST_TIMEOUT_SECONDS` | number | `10.0` |
+| `DISCORD_MAX_RETRIES` | integer | `3` |
+| `DISCORD_INTERACTION_MAX_AGE_SECONDS` | integer | `300` |
+| `DISCORD_DIGEST_TIME` | time | unset |
+| `DISCORD_DIGEST_TOP` | integer | `5` |
+| `DISCORD_ALERT_AFTER_FAILURES` | integer | `3` |
+| `SMTP_HOST` | string | unset |
+| `SMTP_PORT` | integer | `587` |
+| `SMTP_USERNAME` | string | unset |
+| `SMTP_PASSWORD` | secret | unset |
+| `SMTP_SECURITY` | starttls \| ssl \| none | `starttls` |
+| `SMTP_FROM_ADDRESS` | emailstr | unset |
+| `SMTP_FROM_NAME` | string | unset |
+| `SMTP_TIMEOUT_SECONDS` | number | `30.0` |
+| `IMAP_ENABLED` | boolean | `false` |
+| `IMAP_HOST` | string | unset |
+| `IMAP_PORT` | integer | `993` |
+| `IMAP_USERNAME` | string | unset |
+| `IMAP_PASSWORD` | secret | unset |
+| `IMAP_SECURITY` | starttls \| ssl \| none | `ssl` |
+| `IMAP_FOLDER` | string | `INBOX` |
+| `IMAP_POLL_INTERVAL_SECONDS` | integer | `300` |
+| `IMAP_TIMEOUT_SECONDS` | number | `30.0` |
+| `IMAP_LOOKBACK_DAYS` | integer | `14` |
+| `LLM_PROVIDER` | none \| anthropic \| openai_compatible | `none` |
+| `LLM_API_KEY` | secret | unset |
+| `LLM_MODEL` | string | unset |
+| `LLM_BASE_URL` | httpurl | unset |
+| `LLM_TIMEOUT_SECONDS` | number | `30.0` |
+| `GEOCODING_PROVIDER` | none \| nominatim | `none` |
+| `GEOCODING_BASE_URL` | httpurl | unset |
+| `GEOCODING_API_KEY` | secret | unset |
+| `GEOCODING_USER_AGENT` | string | unset |
+| `GEOCODING_REQUESTS_PER_MINUTE` | number | `60.0` |
+| `GEOCODING_TIMEOUT_SECONDS` | number | `10.0` |
+| `GEOCODING_MISS_TTL_DAYS` | integer | `30` |
+| `REVERSE_IMAGE_PROVIDER` | none \| serpapi \| tineye \| bing | `none` |
+| `REVERSE_IMAGE_API_KEY` | secret | unset |
+| `REVERSE_IMAGE_TIMEOUT_SECONDS` | number | `30.0` |
+| `REVERSE_IMAGE_MAX_RESULTS` | integer | `10` |
+| `REVERSE_IMAGE_MAX_PHOTOS` | integer | `3` |
+| `IMAGES_ENABLED` | boolean | `true` |
+| `IMAGES_INTERVAL_MINUTES` | integer | `10` |
+| `IMAGES_BATCH_SIZE` | integer | `50` |
+| `IMAGES_PER_LISTING` | integer | `10` |
+| `IMAGES_MAX_BYTES` | integer | `10000000` |
+| `IMAGES_MAX_PIXELS` | integer | `40000000` |
+| `IMAGES_TIMEOUT_SECONDS` | integer | `15` |
+| `IMAGES_REQUESTS_PER_MINUTE` | number | `30.0` |
+| `GROUPING_ENABLED` | boolean | `true` |
+| `GROUPING_MAX_DISTANCE_M` | number | `75.0` |
+| `GROUPING_MATCH_THRESHOLD` | number | `0.75` |
+| `GROUPING_MIN_SIGNALS` | integer | `2` |
+| `GROUPING_PHASH_DISTANCE` | integer | `8` |
+| `GROUPING_MAX_CANDIDATES` | integer | `25` |
+| `GROUPING_WEIGHT_ADDRESS` | number | `3.0` |
+| `GROUPING_WEIGHT_DISTANCE` | number | `1.0` |
+| `GROUPING_WEIGHT_PHOTOS` | number | `3.0` |
+| `GROUPING_WEIGHT_TITLE` | number | `1.0` |
+| `GROUPING_WEIGHT_DESCRIPTION` | number | `1.0` |
+| `ENRICHMENT_ENABLED` | boolean | `true` |
+| `ENRICHMENT_SEARCH_RADIUS_KM` | number | `1.0` |
+| `ENRICHMENT_MAX_CANDIDATES_PER_SOURCE` | integer | `50` |
+| `ENRICHMENT_PHOTOS_PER_CANDIDATE` | integer | `5` |
+| `ENRICHMENT_TIMEOUT_SECONDS` | integer | `600` |
+| `RISK_ENABLED` | boolean | `true` |
+| `RISK_PRICE_BELOW_MEDIAN_PCT` | number | `40.0` |
+| `RISK_COMPARABLE_RADIUS_KM` | number | `2.0` |
+| `RISK_MIN_COMPARABLES` | integer | `3` |
+| `RISK_PHASH_DISTANCE` | integer | `4` |
+| `SOURCES_USER_AGENT` | string | `furnest/0 (+https://example.com/furnest)` |
+| `SOURCES_DEFAULT_INTERVAL_MINUTES` | integer | `60` |
+| `SOURCES_JITTER_SECONDS` | integer | `300` |
+| `SOURCES_REQUEST_TIMEOUT_SECONDS` | integer | `30` |
+| `SOURCES_RUN_TIMEOUT_SECONDS` | integer | `900` |
+| `SOURCES_REQUESTS_PER_MINUTE` | number | `6.0` |
+| `SOURCES_PROXY_URL` | anyurl | unset |
+| `SOURCES_RESPECT_ROBOTS` | boolean | `true` |
+| `SOURCES_ALLOW_PRIVATE_ADDRESSES` | boolean | `false` |
+| `SOURCES_MAX_RETRIES` | integer | `3` |
+| `SOURCES_MAX_RESULTS` | integer | `100` |
+| `SOURCES_BROWSER_ENABLED` | boolean | `false` |
+| `SOURCES_REMOVE_AFTER_MISSED_RUNS` | integer | `3` |
+| `SOURCES_REMOVE_AFTER_HOURS` | integer | `24` |
+| `SOURCES_ADAPTERS` | JSON object | unset |
+| `PIPELINE_SNOOZE_HOURS` | integer | `72` |
+| `PIPELINE_UNSNOOZE_INTERVAL_MINUTES` | integer | `15` |
+
+<!-- config-table:end -->
 
 A few preferences, such as `INQUIRY_MODE`, can also be changed from the dashboard. An env var that is explicitly set always wins over the dashboard value.
 

@@ -11,6 +11,8 @@ uv run mypy
 uv run pytest
 ```
 
+The README configuration table is generated from `Settings`. After adding or changing a setting (and `.env.example`), run `uv run python scripts/gen_config_docs.py`; CI fails if it is stale.
+
 CI also audits the locked dependencies and scans the built image. To run them locally:
 
 ```sh

@@ -48,6 +48,9 @@ jobs:
       - name: Type check
         run: uv run mypy
 
+      - name: README configuration table is current
+        run: uv run python scripts/gen_config_docs.py --check
+
   # Known vulnerabilities in the locked dependencies (every extra and the dev group
   # too, since they run in CI), from the PyPI/OSV advisory databases. --strict
   # fails on any package that can't be audited instead of skipping it.

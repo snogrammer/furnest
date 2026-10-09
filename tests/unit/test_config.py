@@ -1,6 +1,8 @@
 """Environment settings, ``.env.example`` coverage and runtime override precedence."""
 
 import re
+import subprocess
+import sys
 from datetime import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -428,3 +430,13 @@ def test_imap_enabled_requires_a_server(monkeypatch: pytest.MonkeyPatch) -> None
     assert imap.enabled is True
     assert imap.configured is True
     assert imap.security is SmtpSecurity.STARTTLS
+
+
+def test_readme_config_table_is_current() -> None:
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(REPO_ROOT / "scripts" / "gen_config_docs.py"), "--check"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
