@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import Engine, func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
@@ -707,3 +708,23 @@ def test_schedule_daily_fires_at_the_local_time(migrated_engine: Engine) -> None
     after = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)  # 07:00 in Chicago
     fire = job.trigger.get_next_fire_time(None, after)
     assert fire == datetime(2026, 10, 6, 8, 30, tzinfo=chicago)
+
+
+def test_reschedule_replaces_the_interval(migrated_engine: Engine) -> None:
+    worker = Worker(Settings(), migrated_engine, JobRegistry())
+    worker.schedule("source:x", lambda _ctx: None, interval=timedelta(hours=6))
+
+    worker.reschedule("source:x", interval=timedelta(minutes=30), jitter=timedelta(seconds=5))
+
+    job = worker._scheduler.get_job("source:x")
+    assert isinstance(job.trigger, IntervalTrigger)
+    assert job.trigger.interval == timedelta(minutes=30)
+    assert job.trigger.jitter == 5
+
+
+def test_reschedule_of_an_unknown_job_is_ignored(migrated_engine: Engine) -> None:
+    worker = Worker(Settings(), migrated_engine, JobRegistry())
+
+    worker.reschedule("source:missing", interval=timedelta(minutes=1))
+
+    assert worker._scheduler.get_job("source:missing") is None

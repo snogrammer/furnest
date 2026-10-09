@@ -8,8 +8,9 @@ rate limit, retries and block detection all apply, and maps them with :mod:`.par
 Blueground's terms forbid automated access, so it is off by default.
 ``docs/adapters.md`` has the research and the trade-offs.
 
-Configure it in ``SOURCES_ADAPTERS`` with Blueground *city slugs*, the middle of the
-city page's address (``chicago`` for ``/furnished-apartments-chicago-usa``)::
+Configure it on the dashboard's Sources page, or in ``SOURCES_ADAPTERS``, with
+Blueground *city slugs*, the middle of the city page's address (``chicago`` for
+``/furnished-apartments-chicago-usa``)::
 
     {"blueground": {"search_locations": ["chicago", "new-york"],
                     "interval_minutes": 360, "max_results": 50}}
@@ -62,6 +63,10 @@ class Blueground(SourceAdapter):
     name: ClassVar[str] = "blueground"
     display_name: ClassVar[str] = "Blueground"
     capabilities: ClassVar[Capabilities] = Capabilities()
+    search_locations_hint: ClassVar[str] = (
+        "Blueground city slugs as in /furnished-apartments-<city>-usa, one per line, "
+        "e.g. chicago or new-york."
+    )
 
     def __init__(
         self,
@@ -111,8 +116,8 @@ class Blueground(SourceAdapter):
         slugs = self.config.search_locations
         if not slugs:
             msg = (
-                'set "search_locations" to Blueground city slugs (e.g. ["chicago"]) for '
-                f"{self.name} in SOURCES_ADAPTERS"
+                f"no search locations for {self.name}: set Blueground city slugs "
+                '(e.g. "chicago") on the Sources page, or "search_locations" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=SITE)
         bad = [slug for slug in slugs if not SLUG.fullmatch(slug)]

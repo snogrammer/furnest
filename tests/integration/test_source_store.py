@@ -3,9 +3,15 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from furnest import logging as furnest_logging
+from furnest.config import SourceOverrides
+from furnest.db.models import Setting, Source
+from furnest.db.session import session_scope
 from furnest.db.source_store import (
+    CREDENTIAL_KEY_PREFIX,
     MAX_ERROR_LENGTH,
     SourceNotFoundError,
     SourceState,
@@ -50,10 +56,16 @@ def test_get_missing_returns_none(store: SqlSourceStore) -> None:
 def test_set_enabled_sets_and_clears(store: SqlSourceStore) -> None:
     store.set_enabled("alpha", True)
     store.set_enabled("beta", False)
-    assert store.stored_enabled() == {"alpha": True, "beta": False}
+    assert {n: s.enabled for n, s in store.stored().sources.items()} == {
+        "alpha": True,
+        "beta": False,
+    }
 
     store.set_enabled("alpha", None)
-    assert store.stored_enabled() == {"alpha": None, "beta": False}
+    assert {n: s.enabled for n, s in store.stored().sources.items()} == {
+        "alpha": None,
+        "beta": False,
+    }
 
 
 def test_unknown_source_raises(store: SqlSourceStore) -> None:
@@ -111,3 +123,80 @@ def test_set_disabled_reasons_sets_and_clears(store: SqlSourceStore) -> None:
 def test_set_disabled_reasons_unknown_source_raises(store: SqlSourceStore) -> None:
     with pytest.raises(SourceNotFoundError):
         store.set_disabled_reasons({"missing": "reason"})
+
+
+# --- dashboard settings and credentials ----------------------------------------
+
+
+def test_set_overrides_round_trips_and_clears(
+    store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    overrides = SourceOverrides(search_locations=("Springfield, IL",), interval_minutes=30)
+
+    store.set_overrides("alpha", overrides)
+
+    state = store.get("alpha")
+    assert state is not None
+    assert state.overrides == overrides
+    assert store.stored().sources["alpha"].overrides == overrides
+    with session_scope(session_factory) as session:
+        row = session.get(Source, "alpha")
+        assert row is not None
+        # Only what was set is stored, so a new default applies to unset fields.
+        assert row.overrides == {"search_locations": ["Springfield, IL"], "interval_minutes": 30}
+
+    store.set_overrides("alpha", SourceOverrides())
+    assert store.get("alpha") == SourceState("alpha", None, None, None, 0, None, 0)
+
+    store.set_overrides("alpha", overrides)
+    store.set_overrides("alpha", None)
+    assert store.stored().sources["alpha"].overrides == SourceOverrides()
+
+
+def test_set_overrides_unknown_source_raises(store: SqlSourceStore) -> None:
+    with pytest.raises(SourceNotFoundError):
+        store.set_overrides("missing", SourceOverrides(max_results=1))
+
+
+def test_invalid_stored_overrides_are_ignored(
+    store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    with session_scope(session_factory) as session:
+        row = session.get(Source, "alpha")
+        assert row is not None
+        row.overrides = {"interval_minutes": "soon", "nope": 1}
+
+    state = store.get("alpha")
+    assert state is not None
+    assert state.overrides == SourceOverrides()
+
+
+def test_credentials_are_stored_per_key_and_registered_as_secrets(
+    store: SqlSourceStore, session_factory: sessionmaker[Session]
+) -> None:
+    assert store.credential("apify") is None
+    assert store.stored(["apify"]).credentials == {}
+
+    store.set_credential("apify", "apify-token-123456")
+    store.set_credential("other", "other-token-123456")
+
+    assert store.credential("apify") == "apify-token-123456"
+    assert store.stored(["apify", "other", "none"]).credentials == {
+        "apify": "apify-token-123456",
+        "other": "other-token-123456",
+    }
+    assert store.stored().credentials == {}  # only the keys asked for
+    assert furnest_logging.error_text(RuntimeError("x apify-token-123456 y")) == (
+        f"RuntimeError: x {furnest_logging.REDACTED} y"
+    )
+    with session_scope(session_factory) as session:
+        keys = list(session.scalars(select(Setting.key).order_by(Setting.key)))
+        assert keys == [CREDENTIAL_KEY_PREFIX + "apify", CREDENTIAL_KEY_PREFIX + "other"]
+
+    store.set_credential("apify", "apify-token-654321")
+    assert store.credential("apify") == "apify-token-654321"
+
+    store.delete_credential("apify")
+    store.delete_credential("never")
+    assert store.credential("apify") is None
+    assert store.credential("other") == "other-token-123456"

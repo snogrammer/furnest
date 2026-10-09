@@ -8,8 +8,8 @@ and block detection apply). ``llms.txt`` asks callers to rate-limit bulk request
 default limit does. :mod:`.parse` maps the JSON. ``docs/adapters.md`` has the research
 and the trade-offs.
 
-Configure it in ``SOURCES_ADAPTERS`` with Landing *market* or *display-city* slugs, as
-``GET /api/public/markets`` lists them::
+Configure it on the dashboard's Sources page, or in ``SOURCES_ADAPTERS``, with Landing
+*market* or *display-city* slugs, as ``GET /api/public/markets`` lists them::
 
     {"landing": {"search_locations": ["austin", "round-rock-tx"],
                  "interval_minutes": 360, "max_results": 50}}
@@ -132,6 +132,9 @@ class Landing(SourceAdapter):
     name: ClassVar[str] = "landing"
     display_name: ClassVar[str] = "Landing"
     capabilities: ClassVar[Capabilities] = Capabilities(has_api=True)
+    search_locations_hint: ClassVar[str] = (
+        "Landing market or city slugs, one per line, e.g. austin or round-rock-tx."
+    )
 
     def __init__(
         self,
@@ -191,8 +194,8 @@ class Landing(SourceAdapter):
         slugs = self.config.search_locations
         if not slugs:
             msg = (
-                'set "search_locations" to Landing market or city slugs (e.g. ["austin"]) '
-                f"for {self.name} in SOURCES_ADAPTERS"
+                f"no search locations for {self.name}: set Landing market or city slugs "
+                '(e.g. "austin") on the Sources page, or "search_locations" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=API)
         bad = [slug for slug in slugs if not SLUG.fullmatch(slug)]

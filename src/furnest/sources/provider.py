@@ -73,17 +73,14 @@ def _today() -> date:
     return datetime.now(UTC).date()
 
 
-def _article(word: str) -> str:
-    return "an" if word[:1].lower() in "aeiou" else "a"
-
-
 class ProviderAdapter(SourceAdapter):
     """A source read through a data provider job that searches by place name.
 
     Subclasses set :attr:`provider`, :attr:`job` and :attr:`site` (the source's
     origin, used in error messages) and implement :meth:`build_input` and
-    :meth:`parse_items`. The token comes from the adapter's ``api_key``, the places
-    from its ``search_locations``.
+    :meth:`parse_items`. The token comes from the adapter's ``api_key`` (the shared
+    credential entered on the dashboard, or ``SOURCES_ADAPTERS``), the places from its
+    ``search_locations``.
     """
 
     provider: ClassVar[DataProvider]
@@ -125,14 +122,14 @@ class ProviderAdapter(SourceAdapter):
         provider = self.provider.name
         if config.api_key is None:
             msg = (
-                f'set "api_key" ({_article(provider)} {provider} API token) for {self.name} '
-                "in SOURCES_ADAPTERS"
+                f"no {provider} API token for {self.name}: add it under Credentials on the "
+                'Sources page, or set "api_key" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=self.site)
         if not config.search_locations:
             msg = (
-                f'set "search_locations" (e.g. ["Springfield, IL"]) for {self.name} '
-                "in SOURCES_ADAPTERS"
+                f"no search locations for {self.name}: set them on the Sources page "
+                '(e.g. "Springfield, IL"), or "search_locations" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=self.site)
 

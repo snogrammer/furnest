@@ -4,7 +4,15 @@ import pytest
 
 from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.domain import Criteria
-from furnest.sources import Capabilities, SourceError, StubAdapter, discover, resolve_config
+from furnest.sources import (
+    Capabilities,
+    SourceError,
+    StoredSource,
+    StoredSources,
+    StubAdapter,
+    discover,
+    resolve_config,
+)
 from furnest.sources.adapters.stubs import ApartmentsCom, HotPads, Zumper
 from furnest.sources.config import NOT_BUILT_REASON
 
@@ -44,7 +52,7 @@ def test_stub_stays_off_when_pinned_on_with_a_key(stub: type[StubAdapter]) -> No
         adapters={stub.name: AdapterOverrides(enabled=True, api_key="test-token")}  # type: ignore[arg-type]
     )
 
-    config = resolve_config(stub, settings, stored_enabled=True)
+    config = resolve_config(stub, settings, StoredSource(enabled=True))
 
     assert config.enabled is False
     assert config.disabled_reason == NOT_BUILT_REASON
@@ -60,7 +68,7 @@ def test_not_built_beats_browser_and_api_key_reasons() -> None:
 def test_registry_never_enables_a_stub() -> None:
     registry = discover()
     pinned = SourcesSettings(adapters={stub.name: AdapterOverrides(enabled=True) for stub in STUBS})
-    stored = {stub.name: True for stub in STUBS}
+    stored = StoredSources(sources={stub.name: StoredSource(enabled=True) for stub in STUBS})
 
     enabled = {adapter.name for adapter in registry.enabled(pinned, stored)}
 

@@ -38,6 +38,11 @@ class FakeScheduler:
     def schedule(self, name: str, handler: Handler, **options: object) -> None:
         self.jobs[name] = {"handler": handler, **options}
 
+    def reschedule(
+        self, name: str, *, interval: timedelta, jitter: timedelta = timedelta(0)
+    ) -> None:
+        pass
+
 
 def ctx(kind: str, payload: dict[str, object] | None = None) -> JobContext:
     return JobContext(job_id=1, kind=kind, payload=payload or {}, attempt=1, deadline=utcnow())

@@ -70,7 +70,6 @@ def make_config(**overrides: Any) -> AdapterConfig:  # noqa: ANN401 - test helpe
     config = AdapterConfig(
         name="example_source",
         enabled=True,
-        enabled_pinned=False,
         interval_minutes=60,
         jitter_seconds=0,
         requests_per_minute=600.0,
@@ -120,8 +119,8 @@ def test_the_provider_timeout_has_a_floor(provider: FakeProvider) -> None:
 @pytest.mark.parametrize(
     ("name", "message"),
     [
-        ("Maxun", 'set "api_key" \\(a Maxun API token\\) for example_source'),
-        ("Apify", 'set "api_key" \\(an Apify API token\\) for example_source'),
+        ("Maxun", "no Maxun API token for example_source"),
+        ("Apify", "no Apify API token for example_source"),
     ],
 )
 def test_a_missing_token_names_the_provider(name: str, message: str) -> None:
@@ -134,7 +133,7 @@ def test_a_missing_token_names_the_provider(name: str, message: str) -> None:
 
 
 def test_missing_search_locations_is_an_error(provider: FakeProvider) -> None:
-    with pytest.raises(SourceError, match='set "search_locations"'):
+    with pytest.raises(SourceError, match="no search locations"):
         Example(make_config(search_locations=())).search(Criteria())
     assert provider.calls == []
 

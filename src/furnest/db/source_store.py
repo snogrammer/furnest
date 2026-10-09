@@ -1,11 +1,21 @@
-"""SqlSourceStore: the ``sources`` table, i.e. per-adapter toggles and health.
+"""SqlSourceStore: the ``sources`` table (per-adapter toggles, settings and health)
+and the shared credentials the dashboard stores.
 
 Rows are created for every registered adapter with :meth:`SqlSourceStore.ensure`,
 so the dashboard can list a source before it has ever run. The scheduler
 (:mod:`furnest.pipeline.schedule`) records each run's outcome and, from the
 resolved adapter configs, why a source can't run
 (:meth:`SqlSourceStore.set_disabled_reasons`); the source health page
-(:mod:`furnest.web.routes.sources`) reads it back and sets the toggle.
+(:mod:`furnest.web.routes.sources`) reads it back and sets the toggle and the
+settings (:meth:`SqlSourceStore.set_overrides`, validated as
+:class:`furnest.config.SourceOverrides`).
+
+Credentials (the Apify token, say) are one ``settings`` row each, keyed
+``sources.credential.<key>`` (see :class:`furnest.sources.base.Credential`). Every
+read registers the token with the log redactor, so a token that only ever lived in
+the database is scrubbed like one from the environment. :meth:`SqlSourceStore.stored`
+bundles toggles, settings and credentials into the
+:class:`~furnest.sources.config.StoredSources` config resolution takes.
 
 Recording an outcome can also queue a :data:`SOURCE_ALERT_JOB` in the same
 transaction (``alert_after``, from ``DISCORD_ALERT_AFTER_FAILURES``): ``failing`` on
@@ -15,19 +25,28 @@ alert however long it lasts. :mod:`furnest.notify.alerts` posts them.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import select, update
+from pydantic import ValidationError
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.db.models import Source
+from furnest.config import SourceOverrides
+from furnest.db.base import utcnow
+from furnest.db.models import Setting, Source
 from furnest.db.session import session_scope
+from furnest.logging import get_logger, register_secrets
+from furnest.sources.config import StoredSource, StoredSources
 from furnest.worker import queue
+
+log = get_logger(__name__)
 
 # Long enough for a useful traceback summary, short enough for a table cell.
 MAX_ERROR_LENGTH = 2000
+# The ``settings`` row holding a credential's token: this prefix plus its key.
+CREDENTIAL_KEY_PREFIX = "sources.credential."
 
 # Queue job kind for a source alert; see :mod:`furnest.notify.alerts` for the payload.
 SOURCE_ALERT_JOB = "discord.source_alert"
@@ -51,6 +70,12 @@ class SourceState:
     last_error: str | None
     listings_found: int
     disabled_reason: str | None = None
+    overrides: SourceOverrides = field(default_factory=SourceOverrides)
+
+    @property
+    def stored(self) -> StoredSource:
+        """The part config resolution reads."""
+        return StoredSource(enabled=self.enabled, overrides=self.overrides)
 
 
 def _state(row: Source) -> SourceState:
@@ -63,7 +88,18 @@ def _state(row: Source) -> SourceState:
         last_error=row.last_error,
         listings_found=row.listings_found,
         disabled_reason=row.disabled_reason,
+        overrides=_overrides(row),
     )
+
+
+def _overrides(row: Source) -> SourceOverrides:
+    if row.overrides is None:
+        return SourceOverrides()
+    try:
+        return SourceOverrides.model_validate(row.overrides)
+    except ValidationError:
+        log.warning("source_overrides_invalid", source=row.name)
+        return SourceOverrides()
 
 
 class SqlSourceStore:
@@ -88,15 +124,42 @@ class SqlSourceStore:
         with session_scope(self._session_factory) as session:
             return [_state(row) for row in session.scalars(select(Source).order_by(Source.name))]
 
-    def stored_enabled(self) -> dict[str, bool | None]:
-        """The dashboard toggle per source, as ``SourceRegistry.configured`` takes it."""
+    def stored(self, credential_keys: Iterable[str] = ()) -> StoredSources:
+        """Every source's toggle and settings, plus the tokens stored for
+        ``credential_keys``, as ``SourceRegistry.configured`` takes them."""
         with session_scope(self._session_factory) as session:
-            rows = session.execute(select(Source.name, Source.enabled))
-            return {name: enabled for name, enabled in rows}
+            sources = {row.name: _state(row).stored for row in session.scalars(select(Source))}
+            credentials = _credentials(session, credential_keys)
+        return StoredSources(sources=sources, credentials=credentials)
 
     def set_enabled(self, name: str, enabled: bool | None) -> None:
         """Set the dashboard toggle; ``None`` clears it so config defaults apply again."""
         self._update(name, enabled=enabled)
+
+    def set_overrides(self, name: str, overrides: SourceOverrides | None) -> None:
+        """Store the dashboard's settings for a source; ``None`` or all-unset clears them."""
+        value = (
+            None
+            if overrides is None or overrides.is_empty()
+            else overrides.model_dump(mode="json", exclude_none=True)
+        )
+        self._update(name, overrides=value)
+
+    def credential(self, key: str) -> str | None:
+        """The token stored for a credential, or ``None``."""
+        with session_scope(self._session_factory) as session:
+            return _credentials(session, [key]).get(key)
+
+    def set_credential(self, key: str, token: str) -> None:
+        register_secrets([token])
+        with session_scope(self._session_factory) as session:
+            session.merge(
+                Setting(key=CREDENTIAL_KEY_PREFIX + key, value=token, updated_at=utcnow())
+            )
+
+    def delete_credential(self, key: str) -> None:
+        with session_scope(self._session_factory) as session:
+            session.execute(delete(Setting).where(Setting.key == CREDENTIAL_KEY_PREFIX + key))
 
     def set_disabled_reasons(self, reasons: Mapping[str, str | None]) -> None:
         """Store why each named source can't run; ``None`` clears a stale reason."""
@@ -153,6 +216,17 @@ class SqlSourceStore:
             result = session.execute(statement)
             if result.rowcount == 0:  # type: ignore[attr-defined]
                 raise SourceNotFoundError(name)
+
+
+def _credentials(session: Session, keys: Iterable[str]) -> dict[str, str]:
+    """The stored tokens by credential key, registered with the log redactor."""
+    wanted = {CREDENTIAL_KEY_PREFIX + key: key for key in keys}
+    if not wanted:
+        return {}
+    rows = session.execute(select(Setting.key, Setting.value).where(Setting.key.in_(wanted)))
+    tokens = {wanted[row_key]: value for row_key, value in rows if isinstance(value, str) and value}
+    register_secrets(tokens.values())
+    return tokens
 
 
 def _enqueue_alert(session: Session, name: str, event: str, **details: str | int) -> None:

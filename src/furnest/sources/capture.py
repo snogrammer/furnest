@@ -89,7 +89,10 @@ def capture_fixture(
             msg = f'remove "token" from the URL; set "api_key" for {adapter} in SOURCES_ADAPTERS'
             raise CaptureError(msg)
         if config.api_key is None:
-            msg = f'set "api_key" (an Apify API token) for {adapter} in SOURCES_ADAPTERS'
+            msg = (
+                f'set "api_key" (an Apify API token) for {adapter} in SOURCES_ADAPTERS; '
+                "this script reads the token from the environment only"
+            )
             raise CaptureError(msg)
         headers["Authorization"] = f"Bearer {config.api_key.get_secret_value()}"
         # An authenticated API call, not crawling: see furnest.sources.apify.

@@ -10,9 +10,12 @@ from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.domain import Criteria, NormalizedListing
 from furnest.sources import (
     Capabilities,
+    Credential,
     SourceAdapter,
     SourceConfigError,
     SourceRegistry,
+    StoredSource,
+    StoredSources,
     discover,
 )
 
@@ -162,14 +165,18 @@ def test_unknown_adapter_in_overrides_is_an_error(registry: SourceRegistry) -> N
 
 
 def test_enabled_instantiates_only_enabled_adapters(registry: SourceRegistry) -> None:
-    adapters = registry.enabled(SourcesSettings(), {"fake": None, "browser_only": False})
+    stored = StoredSources(sources={"browser_only": StoredSource(enabled=False)})
+    adapters = registry.enabled(SourcesSettings(), stored)
 
     assert [type(a) for a in adapters] == [FakeAdapter]
     assert adapters[0].config.name == "fake"
 
 
 def test_dashboard_toggle_flows_through_enabled(registry: SourceRegistry) -> None:
-    adapters = registry.enabled(SourcesSettings(), {"fake": False, "browser_only": True})
+    stored = StoredSources(
+        sources={"fake": StoredSource(enabled=False), "browser_only": StoredSource(enabled=True)}
+    )
+    adapters = registry.enabled(SourcesSettings(), stored)
 
     assert [type(a) for a in adapters] == [BrowserAdapter]
 
@@ -186,7 +193,8 @@ def test_needs_browser_adapter_is_disabled_with_reason_when_browser_unavailable(
     registry.register(BrowserAdapter)
     settings = SourcesSettings(adapters={"browser_only": AdapterOverrides(enabled=True)})
 
-    browser, fake = registry.configured(settings, {"browser_only": True})
+    stored = StoredSources(sources={"browser_only": StoredSource(enabled=True)})
+    browser, fake = registry.configured(settings, stored)
 
     assert checked == [settings]
     assert browser.config.enabled is False
@@ -297,3 +305,61 @@ def test_discover_finds_adapters_in_a_package(
     registry = discover("fake_sources")
 
     assert registry.names() == ["alpha", "beta"]
+
+
+# --- credentials ---------------------------------------------------------------
+
+
+SHARED = Credential("shared_provider", "Shared token")
+
+
+class KeyedOne(FakeAdapter):
+    name = "keyed_one"
+    display_name = "Keyed One"
+    capabilities = Capabilities(has_api=True, requires_api_key=True)
+    credential = SHARED
+
+
+class KeyedTwo(KeyedOne):
+    name = "keyed_two"
+    display_name = "Keyed Two"
+
+
+class KeyedOther(KeyedOne):
+    name = "keyed_other"
+    display_name = "Keyed Other"
+    credential = Credential("other_provider", "Other token")
+
+
+class KeyedNoCredential(FakeAdapter):
+    name = "keyed_none"
+    display_name = "Keyed None"
+    capabilities = Capabilities(requires_api_key=True)
+
+
+def test_credentials_are_listed_once_with_their_users() -> None:
+    registry = SourceRegistry(browser_check=_browser_available)
+    for adapter in (KeyedTwo, KeyedOther, KeyedOne, FakeAdapter):
+        registry.register(adapter)
+
+    assert registry.credentials() == [KeyedOther.credential, SHARED]
+    assert registry.credential_keys() == ["other_provider", "shared_provider"]
+    assert registry.credential_users("shared_provider") == [KeyedOne, KeyedTwo]
+    assert registry.credential_users("missing") == []
+
+
+def test_an_implemented_keyed_adapter_must_declare_a_credential() -> None:
+    with pytest.raises(SourceConfigError, match="declares no credential"):
+        SourceRegistry().register(KeyedNoCredential)
+
+
+def test_stored_credentials_reach_the_resolved_config() -> None:
+    registry = SourceRegistry(browser_check=_browser_available)
+    registry.register(KeyedOne)
+    stored = StoredSources(credentials={"shared_provider": "token-abcdef"})
+
+    (source,) = registry.configured(SourcesSettings(), stored)
+
+    assert source.config.enabled is True
+    assert source.config.api_key is not None
+    assert source.config.api_key.get_secret_value() == "token-abcdef"

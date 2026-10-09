@@ -4,7 +4,7 @@
 registered adapter has a ``sources`` row, stores why any of them can't run, and
 registers one scheduled job, ``source:<name>``, per source that may run. Each job
 gets its source's interval, jitter and run timeout (``SOURCES_*``, overridable per
-adapter in ``SOURCES_ADAPTERS``).
+adapter in ``SOURCES_ADAPTERS``, and the interval on the dashboard too).
 
 :meth:`furnest.worker.runtime.Worker.schedule` provides the rest. Runs of a source
 never overlap, in this worker or any other, because each run holds the DB lease
@@ -13,15 +13,22 @@ source has its own job, so a slow or broken source never holds up the others.
 
 One run (:class:`SourceRun`):
 
-1. resolves the source's config again with the *current* dashboard toggle and
-   skips the run if the source is now disabled. Sources toggled off are still
-   scheduled for this reason, so turning one back on needs no worker restart.
-   Sources pinned off in ``SOURCES_ADAPTERS`` or unable to run (``disabled_reason``)
-   are never scheduled; changing those means changing the environment, which
-   restarts the worker anyway;
+1. resolves the source's config again with what the dashboard has *now* (toggle,
+   settings, credentials) and skips the run if the source is disabled. Sources
+   toggled off, and sources still missing their API token, are scheduled all the
+   same for this reason: turning one on or adding the token needs no worker
+   restart. Sources pinned off in ``SOURCES_ADAPTERS``, stubs, and sources that
+   need a browser the worker doesn't have are never scheduled; changing those
+   means changing the environment or the image, which restarts the worker anyway;
 2. hands a fresh adapter to :class:`~furnest.pipeline.ingest.ListingIngestor`,
    passing the job's ``cancelled`` event so a timed-out run stores nothing late;
 3. records success on the ``sources`` row, which resets ``consecutive_failures``.
+
+A job's interval is fixed when it is scheduled, so a separate job,
+``sources:refresh`` (:class:`RefreshSchedules`), checks every
+:data:`SCHEDULE_REFRESH_INTERVAL` whether a source's resolved interval has changed
+(the dashboard's setting) and reschedules it through
+:meth:`~furnest.worker.runtime.Worker.reschedule`.
 
 ``alert_after`` (``DISCORD_ALERT_AFTER_FAILURES``) goes to the store with every
 outcome, which queues the Discord alert when a source starts or stops failing
@@ -43,7 +50,7 @@ keep retrying. A run that times out stores nothing, because the ingestor checks
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
 
@@ -53,7 +60,7 @@ from furnest.config import SourcesSettings
 from furnest.db.base import utcnow
 from furnest.db.source_store import SqlSourceStore
 from furnest.logging import error_text, get_logger
-from furnest.sources.base import SourceAdapter
+from furnest.sources.base import AdapterConfig, Blocker, SourceAdapter
 from furnest.sources.config import resolve_config
 from furnest.worker import locks
 from furnest.worker.runtime import LEASE_GRACE
@@ -81,9 +88,14 @@ class Scheduler(Protocol):
         on_failure: Callable[[BaseException], None] | None = ...,
     ) -> None: ...
 
+    def reschedule(self, name: str, *, interval: timedelta, jitter: timedelta = ...) -> None: ...
+
 
 # Queue job kind for "run now"; its payload is ``{"source": <name>}``.
 RUN_SOURCE = "run_source"
+# The scheduled job that applies interval changes made on the dashboard.
+REFRESH_JOB = "sources:refresh"
+SCHEDULE_REFRESH_INTERVAL = timedelta(minutes=5)
 
 
 def job_name(source: str) -> str:
@@ -120,12 +132,10 @@ class SourceRun:
         return self._adapter.name
 
     def __call__(self, ctx: JobContext) -> None:
-        state = self._store.get(self.name)
-        config = resolve_config(
-            self._adapter, self._settings, state.enabled if state is not None else None
-        )
+        config = self.resolve()
         if not config.enabled:
-            log.info("source_run_skipped", source=self.name, reason="disabled")
+            reason = config.disabled_reason or "turned off"
+            log.info("source_run_skipped", source=self.name, reason=reason)
             return
         summary = self._ingestor.run(self._adapter(config), cancelled=ctx.cancelled)
         if summary is None or ctx.cancelled.is_set():
@@ -146,6 +156,44 @@ class SourceRun:
             alert_after=self._alert_after,
         )
 
+    def resolve(self) -> AdapterConfig:
+        """The source's config with what the dashboard has stored right now."""
+        credential = self._adapter.credential
+        stored = self._store.stored([credential.key] if credential is not None else ())
+        return resolve_config(
+            self._adapter,
+            self._settings,
+            stored.sources.get(self.name),
+            credentials=stored.credentials,
+        )
+
+
+class RefreshSchedules:
+    """The ``sources:refresh`` job: reschedule sources whose interval changed."""
+
+    def __init__(self, worker: Scheduler, runs: Iterable[SourceRun]) -> None:
+        self._worker = worker
+        self._runs = {run.name: run for run in runs}
+        self._intervals = {name: run.resolve().interval_minutes for name, run in self._runs.items()}
+
+    @property
+    def intervals(self) -> Mapping[str, int]:
+        """Each scheduled source's interval in minutes, as last applied."""
+        return dict(self._intervals)
+
+    def __call__(self, ctx: JobContext) -> None:
+        for name, run in self._runs.items():
+            config = run.resolve()
+            if config.interval_minutes == self._intervals[name]:
+                continue
+            self._worker.reschedule(
+                job_name(name),
+                interval=timedelta(minutes=config.interval_minutes),
+                jitter=timedelta(seconds=config.jitter_seconds),
+            )
+            self._intervals[name] = config.interval_minutes
+            log.info("source_rescheduled", source=name, interval_minutes=config.interval_minutes)
+
 
 def schedule_sources(
     worker: Scheduler,
@@ -159,18 +207,32 @@ def schedule_sources(
 ) -> list[str]:
     """Schedule every source that may run; returns their names.
 
+    Only the browser reason is stored on the ``sources`` rows: the web process can't
+    probe for a browser, but works out the other reasons itself, so a token added on
+    the dashboard clears "needs the token" at once.
+
     Raises :class:`furnest.sources.config.SourceConfigError` when ``SOURCES_ADAPTERS``
     names an unknown adapter.
     """
     store = SqlSourceStore(session_factory)
     store.ensure(registry.names())
-    configured = registry.configured(settings, store.stored_enabled())
-    store.set_disabled_reasons({s.config.name: s.config.disabled_reason for s in configured})
+    configured = registry.configured(settings, store.stored(registry.credential_keys()))
+    store.set_disabled_reasons(
+        {
+            s.config.name: s.config.disabled_reason
+            if s.config.blocker is Blocker.NO_BROWSER
+            else None
+            for s in configured
+        }
+    )
 
     scheduled: list[str] = []
+    runs: list[SourceRun] = []
     for source in configured:
         config = source.config
-        if config.disabled_reason is not None or (config.enabled_pinned and not config.enabled):
+        if config.blocker in (Blocker.NOT_BUILT, Blocker.NO_BROWSER) or (
+            config.enabled_pinned and not config.enabled
+        ):
             continue
         run = SourceRun(
             source.adapter,
@@ -190,6 +252,14 @@ def schedule_sources(
             on_failure=run.on_failure,
         )
         scheduled.append(config.name)
+        runs.append(run)
+    if runs:
+        worker.schedule(
+            REFRESH_JOB,
+            RefreshSchedules(worker, runs),
+            interval=SCHEDULE_REFRESH_INTERVAL,
+            timeout=timedelta(minutes=1),
+        )
     log.info("sources_scheduled", sources=scheduled)
     return scheduled
 

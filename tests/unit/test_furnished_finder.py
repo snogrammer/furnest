@@ -352,7 +352,7 @@ def test_the_providers_nothing_scanned_row_fails_the_run() -> None:
 def test_no_search_locations_fails_with_a_hint() -> None:
     apify = Apify([])
 
-    with pytest.raises(SourceError, match='set "search_locations"'):
+    with pytest.raises(SourceError, match="no search locations"):
         adapter(apify, settings(search_locations=None)).search(Criteria())
 
     assert apify.requests == []
@@ -362,7 +362,7 @@ def test_no_api_key_fails_with_a_hint() -> None:
     config = resolve_config(FurnishedFinder, settings(api_key=None))
     apify = Apify([])
 
-    with pytest.raises(SourceError, match='set "api_key"'):
+    with pytest.raises(SourceError, match="no Apify API token"):
         FurnishedFinder(config, transport=httpx2.MockTransport(apify)).search(Criteria())
 
 
@@ -373,8 +373,9 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
     by_name = {source.config.name: source for source in registry.configured(SourcesSettings())}
     source = by_name["furnished_finder"]
     assert source.config.enabled is False
-    assert source.config.disabled_reason == (
-        'needs an API key: set "api_key" for furnished_finder in SOURCES_ADAPTERS'
+    assert (
+        source.config.disabled_reason
+        == "needs the Apify API token: add it under Credentials on the Sources page"
     )
 
     keyed = {s.config.name: s for s in registry.configured(settings(enabled=True))}

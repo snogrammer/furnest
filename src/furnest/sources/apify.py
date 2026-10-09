@@ -38,6 +38,7 @@ from urllib.parse import quote
 import httpx2
 
 from furnest.logging import get_logger
+from furnest.sources.base import Credential
 from furnest.sources.errors import SourceError
 from furnest.sources.http import SourceHttpClient
 from furnest.sources.provider import DataProvider, JsonObject, ProviderAdapter
@@ -160,11 +161,17 @@ class ApifyProvider:
 
 
 APIFY = ApifyProvider()
+# One token for every Apify-backed source; entered once on the dashboard.
+APIFY_CREDENTIAL = Credential(
+    "apify", "Apify API token", "https://console.apify.com/account/integrations"
+)
 
 
 class ApifyAdapter(ProviderAdapter):
     """A source read through an Apify actor. Subclasses set :attr:`job` to the actor
     (``"user/name"``) and :attr:`site`, and implement ``build_input`` and
-    ``parse_items`` (see :class:`~furnest.sources.provider.ProviderAdapter`)."""
+    ``parse_items`` (see :class:`~furnest.sources.provider.ProviderAdapter`). They all
+    share :data:`APIFY_CREDENTIAL`."""
 
     provider: ClassVar[DataProvider] = APIFY
+    credential: ClassVar[Credential | None] = APIFY_CREDENTIAL

@@ -16,6 +16,7 @@ from furnest.logging import (
     configure_logging,
     error_text,
     get_logger,
+    register_secrets,
     secret_values,
 )
 
@@ -208,3 +209,25 @@ def test_error_text_removes_configured_secrets_and_credentials() -> None:
     assert text.startswith("RuntimeError: proxy http://")
     assert SECRET not in text
     assert REDACTED in text
+
+
+def test_secrets_registered_later_are_redacted_too(capsys: pytest.CaptureFixture[str]) -> None:
+    configure_logging(json_settings(), secrets=[SECRET])
+    later = "db-token-98765"
+
+    register_secrets([later, "abc"])  # too short to redact by value, kept out
+    get_logger("furnest.test").info("stored", note=f"using {later} and {SECRET}")
+
+    line = json_lines(capsys.readouterr().err)[0]
+    assert later not in json.dumps(line)
+    assert SECRET not in json.dumps(line)
+    assert error_text(RuntimeError(f"bad token {later}")) == f"RuntimeError: bad token {REDACTED}"
+
+
+def test_add_secrets_keeps_earlier_ones_and_prefers_the_longest() -> None:
+    redactor = Redactor(["short-secret"])
+
+    redactor.add_secrets(["short-secret-and-more"])
+
+    assert redactor.redact_text("x short-secret-and-more y") == f"x {REDACTED} y"
+    assert redactor.redact_text("x short-secret y") == f"x {REDACTED} y"

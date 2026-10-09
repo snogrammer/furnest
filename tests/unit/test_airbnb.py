@@ -448,7 +448,7 @@ def test_a_failed_run_fails_the_search() -> None:
 def test_no_search_locations_fails_with_a_hint() -> None:
     apify = Apify([])
 
-    with pytest.raises(SourceError, match='set "search_locations"'):
+    with pytest.raises(SourceError, match="no search locations"):
         adapter(apify, settings(search_locations=None)).search(Criteria())
 
     assert apify.requests == []
@@ -457,7 +457,7 @@ def test_no_search_locations_fails_with_a_hint() -> None:
 def test_no_api_key_fails_with_a_hint() -> None:
     config = resolve_config(Airbnb, settings(api_key=None))
 
-    with pytest.raises(SourceError, match='set "api_key"'):
+    with pytest.raises(SourceError, match="no Apify API token"):
         Airbnb(config, transport=httpx2.MockTransport(Apify([]))).search(Criteria())
 
 
@@ -467,8 +467,9 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
 
     by_name = {source.config.name: source for source in registry.configured(SourcesSettings())}
     assert by_name["airbnb"].config.enabled is False
-    assert by_name["airbnb"].config.disabled_reason == (
-        'needs an API key: set "api_key" for airbnb in SOURCES_ADAPTERS'
+    assert (
+        by_name["airbnb"].config.disabled_reason
+        == "needs the Apify API token: add it under Credentials on the Sources page"
     )
 
     keyed = {source.config.name: source for source in registry.configured(settings(enabled=True))}

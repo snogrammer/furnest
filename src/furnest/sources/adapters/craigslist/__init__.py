@@ -8,8 +8,8 @@ pages through :class:`~furnest.sources.http.SourceHttpClient`, so robots.txt, th
 rate limit, retries and block detection all apply, and maps them with
 :mod:`.parse`. ``docs/adapters.md`` has the research and the trade-offs.
 
-Configure it in ``SOURCES_ADAPTERS`` with Craigslist *site names*, the subdomain
-of each region's site::
+Configure it on the dashboard's Sources page, or in ``SOURCES_ADAPTERS``, with
+Craigslist *site names*, the subdomain of each region's site::
 
     {"craigslist": {"search_locations": ["sfbay"],
                     "interval_minutes": 120, "max_results": 50}}
@@ -123,6 +123,9 @@ class Craigslist(SourceAdapter):
     name: ClassVar[str] = "craigslist"
     display_name: ClassVar[str] = "Craigslist"
     capabilities: ClassVar[Capabilities] = Capabilities(provides_contact=True)
+    search_locations_hint: ClassVar[str] = (
+        "Craigslist site names, the subdomain of a region's site, one per line, e.g. sfbay."
+    )
 
     def __init__(
         self,
@@ -177,8 +180,8 @@ class Craigslist(SourceAdapter):
         sites = self.config.search_locations
         if not sites:
             msg = (
-                'set "search_locations" to Craigslist site names (e.g. ["sfbay"]) for '
-                f"{self.name} in SOURCES_ADAPTERS"
+                f"no search locations for {self.name}: set Craigslist site names "
+                '(e.g. "sfbay") on the Sources page, or "search_locations" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=SITE)
         bad = [site for site in sites if not SITE_NAME.fullmatch(site)]

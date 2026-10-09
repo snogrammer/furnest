@@ -47,7 +47,6 @@ class FakeAdapter(SourceAdapter):
             AdapterConfig(
                 name="fake",
                 enabled=True,
-                enabled_pinned=False,
                 interval_minutes=60,
                 jitter_seconds=0,
                 requests_per_minute=6,

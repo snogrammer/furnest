@@ -166,7 +166,6 @@ def config(**changes: Any) -> AdapterConfig:  # noqa: ANN401
     values: dict[str, Any] = {
         "name": "example_source",
         "enabled": True,
-        "enabled_pinned": False,
         "interval_minutes": 60,
         "jitter_seconds": 0,
         "requests_per_minute": 6000.0,

@@ -78,7 +78,7 @@ uv run python scripts/capture_fixture.py furnished_finder \
   --name dataset_items.json --force
 ```
 
-The script takes the token from the adapter's `api_key` in `SOURCES_ADAPTERS` and sends it as a header. A `token=` in the URL is refused, so the token can't end up in shell history or logs.
+The script takes the token from the adapter's `api_key` in `SOURCES_ADAPTERS` (not from the dashboard: it reads no database) and sends it as a header. A `token=` in the URL is refused, so the token can't end up in shell history or logs.
 
 **Before committing**, read the whole diff of the fixture. Pattern matching misses things:
 

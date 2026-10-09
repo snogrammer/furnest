@@ -495,17 +495,42 @@ class RiskSettings(_Group):
 ADAPTER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
 
 
-class AdapterOverrides(BaseModel):
-    """One adapter's entry in ``SOURCES_ADAPTERS``. Unset fields use the ``SOURCES_*`` default.
+class SourceOverrides(BaseModel):
+    """The per-source settings the dashboard can set (stored in ``sources.overrides``).
 
-    ``enabled`` is special: when present it pins the adapter on or off, overriding
-    the dashboard toggle (see ``furnest.sources.config``).
+    Unset fields use the ``SOURCES_*`` default. A field set in the adapter's
+    ``SOURCES_ADAPTERS`` entry pins it, and the stored value is ignored (see
+    ``furnest.sources.config``).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    enabled: bool | None = None
+    # Where to search, in the source's own terms (e.g. "Springfield, IL"). Only for
+    # sources that search by place name rather than by the criteria's areas.
+    search_locations: (
+        tuple[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)], ...] | None
+    ) = None
     interval_minutes: PositiveInt | None = None
+    max_results: PositiveInt | None = None
+
+    def is_empty(self) -> bool:
+        return all(getattr(self, name) is None for name in SourceOverrides.model_fields)
+
+
+# The ``SOURCES_ADAPTERS`` keys the dashboard can also set, per source.
+DASHBOARD_FIELDS: frozenset[str] = frozenset(SourceOverrides.model_fields)
+
+
+class AdapterOverrides(SourceOverrides):
+    """One adapter's entry in ``SOURCES_ADAPTERS``. Unset fields use the ``SOURCES_*`` default.
+
+    ``enabled`` is special: when present it pins the adapter on or off, overriding
+    the dashboard toggle (see ``furnest.sources.config``). So are the
+    :class:`SourceOverrides` fields and ``api_key``: set here, each pins what the
+    dashboard would otherwise supply.
+    """
+
+    enabled: bool | None = None
     jitter_seconds: Annotated[int, Field(ge=0)] | None = None
     requests_per_minute: PositiveFloat | None = None
     user_agent: Annotated[str, Field(min_length=1)] | None = None
@@ -515,12 +540,6 @@ class AdapterOverrides(BaseModel):
     run_timeout_seconds: PositiveInt | None = None
     respect_robots: bool | None = None
     max_retries: Annotated[int, Field(ge=0)] | None = None
-    # Where to search, in the source's own terms (e.g. "Springfield, IL"). Only for
-    # sources that search by place name rather than by the criteria's areas.
-    search_locations: (
-        tuple[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)], ...] | None
-    ) = None
-    max_results: PositiveInt | None = None
 
 
 class SourcesSettings(_Group):

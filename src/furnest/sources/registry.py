@@ -9,6 +9,10 @@ Adapters whose capabilities say ``needs_browser`` are disabled, with a
 ``disabled_reason``, when the browser layer is unavailable. The worker stores
 those reasons with :meth:`furnest.db.source_store.SqlSourceStore.set_disabled_reasons`
 so the dashboard can say why a source isn't running.
+
+An implemented adapter that ``requires_api_key`` must declare the
+:class:`~furnest.sources.base.Credential` it takes, so the dashboard can ask for the
+right token and share it between the adapters that use the same one.
 """
 
 from __future__ import annotations
@@ -17,14 +21,14 @@ import importlib
 import inspect
 import pkgutil
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from furnest.config import ADAPTER_NAME_PATTERN, SourcesSettings
 from furnest.logging import get_logger
-from furnest.sources.base import AdapterConfig, SourceAdapter
+from furnest.sources.base import AdapterConfig, Credential, SourceAdapter
 from furnest.sources.browser import browser_unavailable_reason
-from furnest.sources.config import SourceConfigError, resolve_config
+from furnest.sources.config import SourceConfigError, StoredSources, resolve_config
 
 log = get_logger(__name__)
 
@@ -61,6 +65,13 @@ class SourceRegistry:
         if inspect.isabstract(adapter):
             msg = f"{adapter.__qualname__} is abstract and can't be registered"
             raise SourceConfigError(msg)
+        if (
+            adapter.implemented
+            and adapter.capabilities.requires_api_key
+            and adapter.credential is None
+        ):
+            msg = f"{adapter.__qualname__} requires an API key but declares no credential"
+            raise SourceConfigError(msg)
         existing = self._adapters.get(name)
         if existing is not None and existing is not adapter:
             msg = (
@@ -82,13 +93,36 @@ class SourceRegistry:
     def names(self) -> list[str]:
         return sorted(self._adapters)
 
+    def credentials(self) -> list[Credential]:
+        """Each distinct credential an implemented adapter declares, sorted by key."""
+        by_key = {
+            adapter.credential.key: adapter.credential
+            for adapter in self._adapters.values()
+            if adapter.implemented and adapter.credential is not None
+        }
+        return [by_key[key] for key in sorted(by_key)]
+
+    def credential_keys(self) -> list[str]:
+        return [credential.key for credential in self.credentials()]
+
+    def credential_users(self, key: str) -> list[type[SourceAdapter]]:
+        """The implemented adapters that take the credential ``key``, sorted by name."""
+        return [
+            adapter
+            for name, adapter in sorted(self._adapters.items())
+            if adapter.implemented
+            and adapter.credential is not None
+            and adapter.credential.key == key
+        ]
+
     def configured(
         self,
         settings: SourcesSettings,
-        stored_enabled: Mapping[str, bool | None] | None = None,
+        stored: StoredSources | None = None,
     ) -> list[ConfiguredSource]:
         """Every registered adapter with its resolved config, sorted by name.
 
+        ``stored`` is what the dashboard saved (toggles, settings, credentials).
         Raises :class:`SourceConfigError` when ``SOURCES_ADAPTERS`` names an adapter
         that doesn't exist, so a typo can't silently leave a source unconfigured.
         """
@@ -99,14 +133,18 @@ class SourceRegistry:
                 f"known: {', '.join(self.names()) or 'none'}"
             )
             raise SourceConfigError(msg)
-        stored = stored_enabled or {}
+        stored = stored or StoredSources()
         needs_browser = any(a.capabilities.needs_browser for a in self._adapters.values())
         browser_unavailable = self._browser_check(settings) if needs_browser else None
         sources = [
             ConfiguredSource(
                 adapter,
                 resolve_config(
-                    adapter, settings, stored.get(name), browser_unavailable=browser_unavailable
+                    adapter,
+                    settings,
+                    stored.sources.get(name),
+                    credentials=stored.credentials,
+                    browser_unavailable=browser_unavailable,
                 ),
             )
             for name, adapter in sorted(self._adapters.items())
@@ -123,13 +161,11 @@ class SourceRegistry:
     def enabled(
         self,
         settings: SourcesSettings,
-        stored_enabled: Mapping[str, bool | None] | None = None,
+        stored: StoredSources | None = None,
     ) -> list[SourceAdapter]:
         """Instances of the adapters that are enabled after config resolution."""
         return [
-            source.create()
-            for source in self.configured(settings, stored_enabled)
-            if source.config.enabled
+            source.create() for source in self.configured(settings, stored) if source.config.enabled
         ]
 
 

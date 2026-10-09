@@ -4,17 +4,24 @@ How furnest gets listings from each source, what was considered, and how to conf
 it. The adapter contract, config resolution and the HTTP layer are covered in
 [ARCHITECTURE.md](ARCHITECTURE.md#key-mechanics).
 
-Every adapter is configured through its entry in `SOURCES_ADAPTERS` (JSON keyed by
-adapter name), which falls back to the `SOURCES_*` defaults:
+The dashboard's Sources page is where a source is normally set up: an on/off switch,
+its search locations, interval and max results, and, under Credentials, the API
+token a provider needs (one Apify token serves every Apify-backed source). Changes
+apply on the source's next run, a new interval within a few minutes, with no restart.
 
-| Key | Meaning |
-| --- | --- |
-| `enabled` | Pins the source on or off, overriding the dashboard toggle. |
-| `interval_minutes`, `jitter_seconds`, `run_timeout_seconds` | Scheduling (see [ARCHITECTURE.md](ARCHITECTURE.md)). |
-| `requests_per_minute`, `max_retries`, `request_timeout_seconds`, `user_agent`, `proxy_url`, `respect_robots` | The HTTP layer. |
-| `max_results` | The most listings one run asks for, for sources that page or bill per result. |
-| `search_locations` | Per source only. Place names, for sources that search by city instead of by the criteria's areas. For Craigslist, site names (`sfbay`). |
-| `api_key` | Per source only. Adapters whose capabilities say `requires_api_key` stay disabled without one, and the dashboard says why. |
+Every adapter can also be configured through its entry in `SOURCES_ADAPTERS` (JSON
+keyed by adapter name), which falls back to the `SOURCES_*` defaults. A key set
+there pins the field: the dashboard shows it read-only.
+
+| Key | Dashboard | Meaning |
+| --- | --- | --- |
+| `enabled` | switch | Pins the source on or off, overriding the switch. |
+| `interval_minutes` | settings | How often the source runs. |
+| `jitter_seconds`, `run_timeout_seconds` | env only | Scheduling (see [ARCHITECTURE.md](ARCHITECTURE.md)). |
+| `requests_per_minute`, `max_retries`, `request_timeout_seconds`, `user_agent`, `proxy_url`, `respect_robots` | env only | The HTTP layer. |
+| `max_results` | settings | The most listings one run asks for, for sources that page or bill per result. |
+| `search_locations` | settings | Per source only. Place names, for sources that search by city instead of by the criteria's areas. For Craigslist, site names (`sfbay`). |
+| `api_key` | credentials | Per source only in env; on the dashboard, one token per provider. Adapters whose capabilities say `requires_api_key` stay disabled without one, and the dashboard says which token to add. |
 
 ## Furnished Finder (`furnished_finder`)
 

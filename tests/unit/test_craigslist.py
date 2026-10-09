@@ -680,7 +680,7 @@ def test_robots_txt_is_obeyed() -> None:
 def test_no_search_locations_fails_with_a_hint() -> None:
     site = Site()
 
-    with pytest.raises(SourceError, match='set "search_locations" to Craigslist site names'):
+    with pytest.raises(SourceError, match="no search locations for craigslist"):
         adapter(site, settings(search_locations=None)).search(Criteria())
 
     assert site.requests == []

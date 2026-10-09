@@ -76,8 +76,15 @@ class Redactor:
     """
 
     def __init__(self, secrets: Iterable[str] = ()) -> None:
-        values = {s for s in secrets if len(s) >= _MIN_SECRET_LENGTH}
-        # Longest first so a secret that contains another is replaced whole.
+        self._secrets: list[str] = []
+        self.add_secrets(secrets)
+
+    def add_secrets(self, secrets: Iterable[str]) -> None:
+        """Also scrub ``secrets`` from now on (tokens read from the database, say)."""
+        values = set(self._secrets)
+        values.update(s for s in secrets if len(s) >= _MIN_SECRET_LENGTH)
+        # Longest first so a secret that contains another is replaced whole. A new list
+        # is built and then assigned, so a concurrent redact_text sees old or new, whole.
         self._secrets = sorted(values, key=len, reverse=True)
 
     def __call__(self, _logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
@@ -157,6 +164,15 @@ class _StderrHandler(logging.StreamHandler[TextIO]):
 
 # The redactor configure_logging set up; patterns only until it runs.
 _active = Redactor()
+
+
+def register_secrets(secrets: Iterable[str]) -> None:
+    """Scrub ``secrets`` from logs, :func:`error_text` and Sentry from now on.
+
+    For secrets that aren't settings, such as the API tokens the dashboard stores in
+    the database, which ``secret_values`` can't know at start-up.
+    """
+    _active.add_secrets(secrets)
 
 
 def error_text(exc: BaseException) -> str:

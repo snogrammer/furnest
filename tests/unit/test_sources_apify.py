@@ -64,7 +64,6 @@ def make_config() -> AdapterConfig:
     return AdapterConfig(
         name="example_source",
         enabled=True,
-        enabled_pinned=False,
         interval_minutes=60,
         jitter_seconds=0,
         requests_per_minute=600.0,

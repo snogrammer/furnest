@@ -235,7 +235,7 @@ class FindAlternatives:
         return replace(subject, facts=facts, located=True)
 
     def _adapters(self, subject: Subject) -> list[SourceAdapter]:
-        stored = SqlSourceStore(self._factory).stored_enabled()
+        stored = SqlSourceStore(self._factory).stored(self._registry.credential_keys())
         return [
             source.create()
             for source in self._registry.configured(self._sources, stored)

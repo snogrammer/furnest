@@ -3,13 +3,18 @@ HTTP layer adapters make requests through, the optional browser layer, and the b
 for stubs of sources not built yet.
 """
 
-from furnest.sources.base import AdapterConfig, Capabilities, SourceAdapter
+from furnest.sources.base import AdapterConfig, Blocker, Capabilities, Credential, SourceAdapter
 from furnest.sources.browser import (
     BrowserUnavailableError,
     SourceBrowser,
     browser_unavailable_reason,
 )
-from furnest.sources.config import SourceConfigError, resolve_config
+from furnest.sources.config import (
+    SourceConfigError,
+    StoredSource,
+    StoredSources,
+    resolve_config,
+)
 from furnest.sources.errors import SourceBlockedError, SourceError
 from furnest.sources.http import SourceHttpClient
 from furnest.sources.ratelimit import TokenBucket
@@ -19,9 +24,11 @@ from furnest.sources.stub import StubAdapter
 
 __all__ = [
     "AdapterConfig",
+    "Blocker",
     "BrowserUnavailableError",
     "Capabilities",
     "ConfiguredSource",
+    "Credential",
     "RobotsCache",
     "SourceAdapter",
     "SourceBlockedError",
@@ -30,6 +37,8 @@ __all__ = [
     "SourceError",
     "SourceHttpClient",
     "SourceRegistry",
+    "StoredSource",
+    "StoredSources",
     "StubAdapter",
     "TokenBucket",
     "browser_unavailable_reason",

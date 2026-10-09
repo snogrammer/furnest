@@ -30,6 +30,7 @@ from datetime import UTC, timedelta
 from types import FrameType
 from uuid import uuid4
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.base import BaseTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -151,6 +152,24 @@ class Worker:
                 seconds=interval.total_seconds(), jitter=jitter.total_seconds() or None
             ),
         )
+
+    def reschedule(
+        self, name: str, *, interval: timedelta, jitter: timedelta = timedelta(0)
+    ) -> None:
+        """Give the job :meth:`schedule` registered as ``name`` a new interval.
+
+        The next run is ``interval`` from now. A run in progress is not affected: the
+        lease is per run, not per trigger. An unknown ``name`` is logged and ignored.
+        """
+        trigger = IntervalTrigger(
+            seconds=interval.total_seconds(), jitter=jitter.total_seconds() or None
+        )
+        try:
+            self._scheduler.reschedule_job(name, trigger=trigger)
+        except JobLookupError:
+            log.warning("reschedule_unknown_job", job=name)
+            return
+        log.info("job_rescheduled", job=name, interval_seconds=interval.total_seconds())
 
     def schedule_daily(
         self,

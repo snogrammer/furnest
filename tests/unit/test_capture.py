@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.domain import Criteria, NormalizedListing
 from furnest.sources import SourceBlockedError, SourceRegistry
-from furnest.sources.base import Capabilities, SourceAdapter
+from furnest.sources.base import Capabilities, Credential, SourceAdapter
 from furnest.sources.capture import CaptureError, CaptureResult, capture_fixture, default_name
 from furnest.sources.sanitize import EMAIL_PLACEHOLDER, NAME_PLACEHOLDER
 
@@ -43,6 +43,7 @@ class ApiSource(SourceAdapter):
     name: ClassVar[str] = "api_source"
     display_name: ClassVar[str] = "API source"
     capabilities: ClassVar[Capabilities] = Capabilities(has_api=True, requires_api_key=True)
+    credential: ClassVar[Credential | None] = Credential("api_source", "Api token")
 
     def search(self, criteria: Criteria) -> list[NormalizedListing]:
         return []

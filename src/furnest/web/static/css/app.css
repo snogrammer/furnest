@@ -526,6 +526,92 @@ button.secondary {
   color: #8a5300;
 }
 
+/* The enable switch: a checkbox drawn as a pill with a knob. */
+.switch-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.switch input {
+  appearance: none;
+  position: relative;
+  width: 2.2rem;
+  height: 1.2rem;
+  margin: 0;
+  border: 1px solid var(--muted);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch input::before {
+  content: "";
+  position: absolute;
+  top: 0.1rem;
+  left: 0.1rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.switch input:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.switch input:checked::before {
+  background: var(--bg);
+  transform: translateX(1rem);
+}
+
+.switch input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.js .switch-apply {
+  display: none;
+}
+
+/* Credentials and per-source settings. */
+.credentials input[type="password"] {
+  width: 100%;
+  max-width: 20rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.source-settings {
+  max-width: 32rem;
+}
+
+.source-settings .field {
+  margin-bottom: 0.75rem;
+}
+
+.source-settings .hint {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .runs {
   margin-bottom: var(--space);
 }

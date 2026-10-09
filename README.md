@@ -27,7 +27,7 @@ cp .env.example .env     # set AUTH_TOKEN and AUTH_SESSION_SECRET (random, 16+ c
 docker compose up -d --build
 ```
 
-Open <http://127.0.0.1:8000> and sign in with `AUTH_TOKEN`. Then add a source and your search criteria in the dashboard. See [docs/deployment.md](docs/deployment.md) for Portainer and Caddy.
+Open <http://127.0.0.1:8000> and sign in with `AUTH_TOKEN`. Then set your search criteria and, on the Sources page, switch on the sources you want, give each its search locations, and paste the Apify token for the sources that need one. See [docs/deployment.md](docs/deployment.md) for Portainer and Caddy.
 
 ## Scraping and terms of service
 
@@ -193,7 +193,7 @@ Every setting, with its type and default (the table is generated from the code a
 
 <!-- config-table:end -->
 
-A few preferences, such as `INQUIRY_MODE`, can also be changed from the dashboard. An env var that is explicitly set always wins over the dashboard value.
+A few preferences, such as `INQUIRY_MODE`, and each source's switch, search locations, interval, max results and API token, can also be changed from the dashboard. An env var that is explicitly set always wins over the dashboard value, and `SOURCES_ADAPTERS` pins each key it sets.
 
 ### Logging and Sentry
 

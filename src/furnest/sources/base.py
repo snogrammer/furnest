@@ -19,12 +19,15 @@ proxy from it.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import ClassVar
 
 from pydantic import SecretStr
 
+from furnest.config import ADAPTER_NAME_PATTERN
 from furnest.domain import Criteria, NormalizedListing
 
 
@@ -40,20 +43,48 @@ class Capabilities:
 
 
 @dataclass(frozen=True)
-class AdapterConfig:
-    """One adapter's settings after ``SOURCES_ADAPTERS`` overrides and the
-    dashboard toggle are applied (see :func:`furnest.sources.config.resolve_config`).
+class Credential:
+    """A token a source needs, entered once on the dashboard and shared by every
+    adapter that declares the same ``key`` (the Apify token, say).
 
-    ``enabled_pinned`` is true when ``SOURCES_ADAPTERS`` sets ``enabled``, so the
-    dashboard toggle has no effect. ``disabled_reason`` is set when the adapter
-    can't run whatever the toggles say, e.g. it needs a browser and none is
-    available; ``enabled`` is then false. ``api_key`` stays a ``SecretStr`` so it never
-    shows up in a repr or a log line.
+    ``key`` names it in storage and URLs, ``label`` is what the dashboard calls it,
+    and ``help_url`` is where to get one.
+    """
+
+    key: str
+    label: str
+    help_url: str | None = None
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(ADAPTER_NAME_PATTERN, self.key):
+            msg = f"Credential.key must match {ADAPTER_NAME_PATTERN}, got {self.key!r}"
+            raise ValueError(msg)
+
+
+class Blocker(StrEnum):
+    """Why an adapter can't run whatever the toggles say."""
+
+    NOT_BUILT = "not_built"
+    NO_BROWSER = "no_browser"
+    NO_CREDENTIAL = "no_credential"
+
+
+@dataclass(frozen=True)
+class AdapterConfig:
+    """One adapter's settings after ``SOURCES_ADAPTERS`` overrides, the dashboard's
+    stored settings and the dashboard toggle are applied (see
+    :func:`furnest.sources.config.resolve_config`).
+
+    ``pinned`` holds the names of the fields ``SOURCES_ADAPTERS`` sets, which the
+    dashboard can't change (``enabled``, ``api_key``, ``search_locations``,
+    ``interval_minutes``, ``max_results``). ``blocker`` and ``disabled_reason`` are set
+    when the adapter can't run whatever the toggles say, e.g. it needs a browser and
+    none is available; ``enabled`` is then false. ``api_key`` stays a ``SecretStr`` so it
+    never shows up in a repr or a log line.
     """
 
     name: str
     enabled: bool
-    enabled_pinned: bool
     interval_minutes: int
     jitter_seconds: int
     requests_per_minute: float
@@ -67,7 +98,14 @@ class AdapterConfig:
     max_results: int = 100
     proxy_url: str | None = None
     api_key: SecretStr | None = None
+    pinned: frozenset[str] = frozenset()
+    blocker: Blocker | None = None
     disabled_reason: str | None = None
+
+    @property
+    def enabled_pinned(self) -> bool:
+        """``SOURCES_ADAPTERS`` sets ``enabled``, so the dashboard toggle has no effect."""
+        return "enabled" in self.pinned
 
 
 class SourceAdapter(ABC):
@@ -78,6 +116,11 @@ class SourceAdapter(ABC):
     default_enabled: ClassVar[bool] = False
     # False for a registered placeholder (see furnest.sources.stub): it can't be enabled.
     implemented: ClassVar[bool] = True
+    # The shared token this adapter's ``api_key`` comes from when ``SOURCES_ADAPTERS``
+    # doesn't set one. Required when ``capabilities.requires_api_key`` and ``implemented``.
+    credential: ClassVar[Credential | None] = None
+    # What ``search_locations`` means for this source, shown next to the dashboard field.
+    search_locations_hint: ClassVar[str] = 'Place names, one per line, e.g. "Springfield, IL".'
 
     def __init__(self, config: AdapterConfig) -> None:
         self.config = config

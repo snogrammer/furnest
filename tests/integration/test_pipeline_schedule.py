@@ -11,7 +11,13 @@ import pytest
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.config import AdapterOverrides, Settings, SourcesSettings, WorkerSettings
+from furnest.config import (
+    AdapterOverrides,
+    Settings,
+    SourceOverrides,
+    SourcesSettings,
+    WorkerSettings,
+)
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Job, JobLock, JobStatus, SourceRunStatus
@@ -21,14 +27,17 @@ from furnest.domain import Criteria, NormalizedListing
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.pipeline.ingest import ListingIngestor
 from furnest.pipeline.schedule import (
+    REFRESH_JOB,
     RUN_SOURCE,
+    SCHEDULE_REFRESH_INTERVAL,
+    RefreshSchedules,
     RunSourceNow,
     SourceRun,
     job_name,
     register_run_now,
     schedule_sources,
 )
-from furnest.sources import Capabilities, SourceAdapter
+from furnest.sources import Capabilities, Credential, SourceAdapter
 from furnest.sources.registry import SourceRegistry
 from furnest.worker import locks, queue, runtime
 from furnest.worker.execution import Handler, JobContext, JobRegistry, JobTimeoutError
@@ -106,6 +115,19 @@ class NeedsBrowser(Good):
     capabilities: ClassVar[Capabilities] = Capabilities(needs_browser=True)
 
 
+class Keyed(Good):
+    name: ClassVar[str] = "keyed"
+    display_name: ClassVar[str] = "Keyed"
+    capabilities: ClassVar[Capabilities] = Capabilities(has_api=True, requires_api_key=True)
+    credential: ClassVar[Credential | None] = Credential("keyed_provider", "Keyed token")
+    tokens: ClassVar[list[str]] = []
+
+    def search(self, criteria: Criteria) -> list[NormalizedListing]:
+        assert self.config.api_key is not None
+        type(self).tokens.append(self.config.api_key.get_secret_value())
+        return [listing(self.name, "1")]
+
+
 class Slow(Good):
     """Tracks how many runs are inside ``search`` at once."""
 
@@ -142,6 +164,7 @@ class Stuck(Good):
 @pytest.fixture(autouse=True)
 def reset_adapters() -> None:
     Good.searches = Broken.searches = Slow.searches = OffByDefault.searches = 0
+    Keyed.tokens = []
     Slow.running = Slow.peak = 0
     Stuck.release = threading.Event()
 
@@ -238,16 +261,22 @@ def context() -> JobContext:
 class StubWorker:
     def __init__(self) -> None:
         self.jobs: dict[str, dict[str, Any]] = {}
+        self.rescheduled: list[tuple[str, timedelta, timedelta]] = []
 
     def schedule(self, name: str, handler: Handler, **options: object) -> None:
         self.jobs[name] = {"handler": handler, **options}
+
+    def reschedule(
+        self, name: str, *, interval: timedelta, jitter: timedelta = timedelta(0)
+    ) -> None:
+        self.rescheduled.append((name, interval, jitter))
 
 
 def test_schedule_sources_registers_one_job_per_runnable_source(
     session_factory: sessionmaker[Session], store: SqlSourceStore, ingestor: ListingIngestor
 ) -> None:
     registry = SourceRegistry(browser_check=lambda _settings: "playwright is not installed")
-    for adapter in (Good, OffByDefault, PinnedOff, NeedsBrowser):
+    for adapter in (Good, OffByDefault, PinnedOff, NeedsBrowser, Keyed):
         registry.register(adapter)
     settings = SourcesSettings(
         default_interval_minutes=60,
@@ -264,10 +293,22 @@ def test_schedule_sources_registers_one_job_per_runnable_source(
 
     scheduled = schedule_sources(worker, registry, settings, session_factory, ingestor)
 
-    # Toggled off by default but not pinned: still scheduled, so the dashboard can turn
-    # it on without a restart. Pinned off and unable to run: not scheduled.
-    assert scheduled == ["good", "off_by_default"]
-    assert sorted(worker.jobs) == ["source:good", "source:off_by_default"]
+    # Toggled off by default, or missing its token, but not pinned: still scheduled, so
+    # the dashboard can turn it on or add the token without a restart. Pinned off, or
+    # unable to run until the image or the environment changes: not scheduled.
+    assert scheduled == ["good", "keyed", "off_by_default"]
+    assert sorted(worker.jobs) == [
+        "source:good",
+        "source:keyed",
+        "source:off_by_default",
+        REFRESH_JOB,
+    ]
+    refresh = worker.jobs[REFRESH_JOB]
+    assert isinstance(refresh["handler"], RefreshSchedules)
+    assert (refresh["interval"], refresh["timeout"]) == (
+        SCHEDULE_REFRESH_INTERVAL,
+        timedelta(minutes=1),
+    )
     good = worker.jobs["source:good"]
     assert (good["interval"], good["jitter"], good["timeout"], good["source"]) == (
         timedelta(minutes=15),
@@ -284,6 +325,7 @@ def test_schedule_sources_registers_one_job_per_runnable_source(
     )
     assert [s.name for s in store.all()] == [
         "good",
+        "keyed",
         "needs_browser",
         "off_by_default",
         "pinned_off",
@@ -291,6 +333,10 @@ def test_schedule_sources_registers_one_job_per_runnable_source(
     browser = store.get("needs_browser")
     assert browser is not None
     assert browser.disabled_reason == "needs a browser: playwright is not installed"
+    # Only the browser reason is stored: the web works the others out itself.
+    keyed = store.get("keyed")
+    assert keyed is not None
+    assert keyed.disabled_reason is None
 
 
 def test_schedule_sources_rejects_unknown_adapters(
@@ -620,3 +666,77 @@ def test_a_queued_run_now_job_runs_in_the_worker(
     state = store.get("good")
     assert state is not None
     assert state.listings_found == 2
+
+
+# --- dashboard settings and credentials ----------------------------------------
+
+
+@pytest.mark.usefixtures("criteria")
+def test_a_source_runs_once_its_credential_is_stored(
+    make_run: Callable[..., SourceRun], store: SqlSourceStore
+) -> None:
+    run = make_run(Keyed)
+
+    run(context())
+    assert Keyed.tokens == []
+
+    store.set_credential("keyed_provider", "token-from-dashboard")
+    run(context())
+
+    assert Keyed.tokens == ["token-from-dashboard"]
+    state = store.get("keyed")
+    assert state is not None
+    assert state.listings_found == 1
+
+
+@pytest.mark.usefixtures("criteria")
+def test_stored_settings_reach_the_adapter(
+    make_run: Callable[..., SourceRun], store: SqlSourceStore
+) -> None:
+    run = make_run(Good)
+    store.set_overrides(
+        "good", SourceOverrides(search_locations=("Springfield, IL",), max_results=3)
+    )
+
+    assert run.resolve().search_locations == ("Springfield, IL",)
+    assert run.resolve().max_results == 3
+
+
+def test_refresh_reschedules_a_source_whose_interval_changed(
+    session_factory: sessionmaker[Session], store: SqlSourceStore, ingestor: ListingIngestor
+) -> None:
+    registry = SourceRegistry()
+    registry.register(Good)
+    registry.register(OffByDefault)
+    settings = SourcesSettings(
+        default_interval_minutes=60,
+        jitter_seconds=30,
+        adapters={"off_by_default": AdapterOverrides(interval_minutes=10)},
+    )
+    worker = StubWorker()
+    schedule_sources(worker, registry, settings, session_factory, ingestor)
+    refresh = worker.jobs[REFRESH_JOB]["handler"]
+    assert isinstance(refresh, RefreshSchedules)
+    assert refresh.intervals == {"good": 60, "off_by_default": 10}
+
+    refresh(context())
+    assert worker.rescheduled == []
+
+    store.set_overrides("good", SourceOverrides(interval_minutes=15))
+    # Pinned in SOURCES_ADAPTERS, so the stored value changes nothing.
+    store.set_overrides("off_by_default", SourceOverrides(interval_minutes=99))
+    refresh(context())
+
+    assert worker.rescheduled == [(job_name("good"), timedelta(minutes=15), timedelta(seconds=30))]
+    assert refresh.intervals == {"good": 15, "off_by_default": 10}
+
+    refresh(context())
+    assert len(worker.rescheduled) == 1
+
+    store.set_overrides("good", None)
+    refresh(context())
+    assert worker.rescheduled[-1] == (
+        job_name("good"),
+        timedelta(minutes=60),
+        timedelta(seconds=30),
+    )

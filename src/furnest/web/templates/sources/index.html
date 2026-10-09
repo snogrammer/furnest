@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% macro when(at) %}{% if at %}<time datetime="{{ at.isoformat() }}">{{ at.strftime("%Y-%m-%d %H:%M UTC") }}</time>{% else %}<span class="muted">never</span>{% endif %}{% endmacro %}
 {% block title %}Sources · furnest{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/sources.js').path }}" defer></script>{% endblock %}
 {% block content %}
 <h1>Sources</h1>
 {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
@@ -8,6 +9,49 @@
 {% if not rows %}
 <p class="muted">No source adapters are installed.</p>
 {% else %}
+{% if credentials %}
+<h2>Credentials</h2>
+<p class="muted">A token entered here is shared by every source that uses it. It is stored in the database, shown only as set or not set, and kept out of the logs.</p>
+<div class="table-scroll">
+<table class="sources credentials">
+  <thead>
+    <tr>
+      <th scope="col">Credential</th>
+      <th scope="col">Status</th>
+      <th scope="col">Used by</th>
+      <th scope="col">Token</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in credentials %}
+    <tr id="credential-{{ item.key }}">
+      <th scope="row">{{ item.credential.label }}{% if item.credential.help_url %}<br><a href="{{ item.credential.help_url }}" rel="noopener noreferrer" target="_blank">where to get one</a>{% endif %}</th>
+      <td><span class="health health-{{ 'on' if item.stored else 'off' }}">{{ 'set' if item.stored else 'not set' }}</span></td>
+      <td>{% for user in item.users %}{{ user.display_name }}{% if user.env_pinned %} <small class="muted">(own key in SOURCES_ADAPTERS)</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td>
+        <div class="source-actions">
+          <form method="post" action="/sources/credentials/{{ item.key }}" class="source-actions">
+            {{ csrf_field(request) }}
+            <label class="visually-hidden" for="credential-{{ item.key }}-value">{{ item.credential.label }}</label>
+            <input type="password" id="credential-{{ item.key }}-value" name="value" autocomplete="off" maxlength="500" placeholder="{{ 'Replace the stored token' if item.stored else 'Paste the token' }}">
+            <button type="submit">Save</button>
+          </form>
+          {% if item.stored %}
+          <form method="post" action="/sources/credentials/{{ item.key }}/clear">
+            {{ csrf_field(request) }}
+            <button type="submit" class="secondary">Clear</button>
+          </form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2>Status</h2>
 <div class="table-scroll">
 <table class="sources">
   <thead>
@@ -29,7 +73,7 @@
       <th scope="row">{{ row.display_name }}<br><code class="muted">{{ row.name }}</code></th>
       <td>
         <span class="health health-{{ row.health.value | replace(' ', '-') }}">{{ row.health.value }}</span>
-        {% if row.disabled_reason %}<br><small class="muted">{{ row.disabled_reason }}</small>{% endif %}
+        {% if row.disabled_reason %}<br><small class="muted">{{ row.disabled_reason }}{% if row.missing_credential %} (<a href="#credential-{{ row.credential.key }}">add it</a>){% endif %}</small>{% endif %}
         {% if row.pinned %}<br><small class="muted">set in SOURCES_ADAPTERS</small>{% endif %}
       </td>
       <td>{{ when(s.last_run_at) }}</td>
@@ -46,10 +90,10 @@
       </td>
       <td class="source-actions">
         {% if row.can_toggle %}
-        <form method="post" action="/sources/{{ row.name }}/enabled">
+        <form method="post" action="/sources/{{ row.name }}/enabled" class="switch-form" data-autosubmit>
           {{ csrf_field(request) }}
-          <input type="hidden" name="enabled" value="{{ 'false' if row.enabled else 'true' }}">
-          <button type="submit" class="secondary">{{ 'Disable' if row.enabled else 'Enable' }}</button>
+          <label class="switch"><input type="checkbox" name="enabled" value="true"{% if row.enabled %} checked{% endif %}> {{ 'On' if row.enabled else 'Off' }}</label>
+          <button type="submit" class="secondary switch-apply">Apply</button>
         </form>
         {% endif %}
         {% if row.runnable %}
@@ -62,12 +106,66 @@
         </form>
         {% endif %}
         {% endif %}
+        {% if row.can_edit %}<a href="#settings-{{ row.name }}">Settings</a>{% endif %}
       </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 </div>
+
+<h2>Settings</h2>
+<p class="muted">Changes apply on the source's next run; a new interval within a few minutes. An empty field uses the default. A field set in <code>SOURCES_ADAPTERS</code> can't be changed here.</p>
+{% for row in rows if row.can_edit %}{% set c = row.config %}{% set d = row.defaults %}{% set o = row.overrides %}{% set editing = form_source == row.name %}
+<details class="runs" id="settings-{{ row.name }}"{% if editing %} open{% endif %}>
+  <summary>{{ row.display_name }}</summary>
+  <div class="source-settings">
+    <form method="post" action="/sources/{{ row.name }}/settings">
+      {{ csrf_field(request) }}
+      <div class="field">
+        <label for="locations-{{ row.name }}">Search locations</label>
+        {% if "search_locations" in c.pinned %}
+        <textarea id="locations-{{ row.name }}" rows="3" disabled>{{ c.search_locations | join("\n") }}</textarea>
+        <p class="hint">set in SOURCES_ADAPTERS</p>
+        {% else %}
+        <textarea id="locations-{{ row.name }}" name="search_locations" rows="3"{% if errors.get("search_locations") and editing %} aria-invalid="true"{% endif %}>{% if editing %}{{ form.get("search_locations", "") }}{% else %}{{ (o.search_locations or ()) | join("\n") }}{% endif %}</textarea>
+        {% if editing and errors.get("search_locations") %}<p class="field-error">{{ errors["search_locations"] }}</p>{% endif %}
+        <p class="hint">{{ row.search_locations_hint }}</p>
+        {% endif %}
+      </div>
+      <div class="field">
+        <label for="interval-{{ row.name }}">Interval (minutes)</label>
+        {% if "interval_minutes" in c.pinned %}
+        <input id="interval-{{ row.name }}" type="number" value="{{ c.interval_minutes }}" disabled>
+        <p class="hint">set in SOURCES_ADAPTERS</p>
+        {% else %}
+        <input id="interval-{{ row.name }}" type="number" name="interval_minutes" min="1" step="1" placeholder="{{ d.interval_minutes }}" value="{% if editing %}{{ form.get("interval_minutes", "") }}{% elif o.interval_minutes is not none %}{{ o.interval_minutes }}{% endif %}"{% if errors.get("interval_minutes") and editing %} aria-invalid="true"{% endif %}>
+        {% if editing and errors.get("interval_minutes") %}<p class="field-error">{{ errors["interval_minutes"] }}</p>{% endif %}
+        <p class="hint">How often the source is searched. Empty means {{ d.interval_minutes }} (<code>SOURCES_DEFAULT_INTERVAL_MINUTES</code>).</p>
+        {% endif %}
+      </div>
+      <div class="field">
+        <label for="max-results-{{ row.name }}">Max results per run</label>
+        {% if "max_results" in c.pinned %}
+        <input id="max-results-{{ row.name }}" type="number" value="{{ c.max_results }}" disabled>
+        <p class="hint">set in SOURCES_ADAPTERS</p>
+        {% else %}
+        <input id="max-results-{{ row.name }}" type="number" name="max_results" min="1" step="1" placeholder="{{ d.max_results }}" value="{% if editing %}{{ form.get("max_results", "") }}{% elif o.max_results is not none %}{{ o.max_results }}{% endif %}"{% if errors.get("max_results") and editing %} aria-invalid="true"{% endif %}>
+        {% if editing and errors.get("max_results") %}<p class="field-error">{{ errors["max_results"] }}</p>{% endif %}
+        <p class="hint">The most listings one run asks for; keep it low for sources that bill per listing. Empty means {{ d.max_results }} (<code>SOURCES_MAX_RESULTS</code>).</p>
+        {% endif %}
+      </div>
+      <div class="source-actions">
+        <button type="submit">Save</button>
+      </div>
+    </form>
+    <form method="post" action="/sources/{{ row.name }}/settings/reset" class="source-actions">
+      {{ csrf_field(request) }}
+      <button type="submit" class="secondary">Reset to defaults</button>
+    </form>
+  </div>
+</details>
+{% endfor %}
 
 <h2>Recent runs</h2>
 {% for row in rows %}
