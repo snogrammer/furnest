@@ -423,6 +423,79 @@ Every listing is `furnished`, since the search asks for it.
 - The fixtures (`tests/fixtures/craigslist/`) are sanitized live captures from
   2026-10-07. A layout change shows up as a failed run, not as an empty one.
 
+## Landing (`landing`)
+
+**Access:** Landing's official public API through `SourceHttpClient`, so robots.txt,
+the rate limit, retries and block detection apply. No API key, no cost. Off by
+default. `search_locations` holds Landing **market or display-city slugs** (`austin`,
+`round-rock-tx`), as `GET /api/public/markets` lists them; each is checked against
+that list at the start of a run.
+
+```env
+SOURCES_ADAPTERS={"landing": {"enabled": true, "search_locations": ["austin"], "interval_minutes": 360, "max_results": 50}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API | A read-only REST API with no auth under `/api/public` (OpenAPI 3.1 at `/api/public/openapi.json`) and an MCP server. robots.txt allows `/api/public` and `llms.txt` invites its use, asking callers to rate-limit bulk requests. **Chosen.** |
+| HTML pages | robots.txt disallows the search pages (`/apartments/search*`, `/cities/`, `*start_date*`) and the terms forbid spiders. Not fetched. |
+
+### How a run works
+
+1. `GET /api/public/markets` once; configured slugs not in it fail the run.
+2. `GET /api/public/search?market=<slug>&check_in=&check_out=&bedrooms=&max_price=`
+   per slug. The stay runs from the earliest move-in (today if none, at most a year
+   out) for the minimum lease, or a month, so every result is free for all of it.
+   `bedrooms` is the criteria's minimum; `max_price` its top price in USD (whole
+   dollars, rounded up), which Landing compares with the all-in price for the stay.
+3. Rows are taken from the searches in turn, repeats dropped, up to `max_results`.
+4. Each row is completed from `homes/{slug}` and `homes/{slug}/quote` for the stay.
+   They are cached in the worker process per home and stay (up to 5,000 for a day),
+   so a run fetches only what it hasn't seen.
+5. Homes completed per run are capped at what fits in 80% of `run_timeout_seconds` at
+   `requests_per_minute`, two requests a home. The rest come from the search row alone.
+
+### Degrading
+
+- No `search_locations`, a malformed slug, or one Landing doesn't list: the run fails
+  with a message saying so.
+- A response that isn't the expected shape: the run fails rather than reading as "no
+  listings", which would mark everything missing. A 403 or robots.txt block fails it as
+  blocked.
+- A home that answers 404 or 410, or whose quote says `available: false`: dropped.
+- A home page or quote that fails any other way: the row is kept from the search row
+  and retried next run (`landing.detail_failed`, `landing.detail_unreadable`).
+
+### Field mapping
+
+| API field | `NormalizedListing` |
+| --- | --- |
+| `slug` | `source_id` |
+| `home_url` (dates pre-filled) | `url` |
+| `name` | `title` |
+| quote `display_price_with_discount`, else the row's (monthly unless `is_price_nightly`; all fees but taxes) | `price`, USD |
+| `address` ("street, city, ST ZIP"), `city`, `state` | `address` |
+| `latitude`, `longitude` | `lat`, `lng` |
+| `bedrooms` (0 is a studio), `bathrooms`, `square_feet` | `beds`, `baths`, `sqft` |
+| `available_from`, no earlier than the check-in | `available_from` |
+| `minimum_nightly_stay` of 28 or more | `min_lease_months` (1) |
+| home `property.amenities`, `has_parking`, `laundry_type`, `pet_policy` | `amenities`, lower-cased |
+| home `photos`, else quote `media`, else the row's `media`, else `hero_image_url` (up to 20) | `images` |
+| the search row, home and quote | `raw` |
+
+Every listing is `furnished`, `owner_type` property manager and `contact.platform_only`:
+reservations are made on Landing.
+
+### Limitations
+
+- Search has no paging: only the first 25 homes of each slug come back. Name display
+  cities to go deeper.
+- The API has no description text, so keyword matching sees the amenities only.
+- The cache lives in the worker process; after a restart homes are fetched again.
+- The fixtures (`tests/fixtures/landing/`) are trimmed live captures from 2026-10-09.
+
 ## Data providers and self-hosted alternatives (#111)
 
 Furnished Finder, Zillow and Airbnb all go through Apify, which costs money, so #111
@@ -500,7 +573,7 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 | Zillow (furnished rentals) | Built (above) | Apify data provider | Partner only (MLS, valuations) | PerimeterX "press & hold" check | Done |
 | Airbnb (monthly stays) | Built (above) | Apify data provider | None | robots.txt disallows search; terms forbid scraping | Done |
 | Craigslist (housing, furnished) | Built (above) | Direct HTTP | None (RSS blocked) | robots.txt allows `/search` and `/view`; terms forbid automated access | Done |
-| Landing (`landing`) | Stub; follow-up #118 | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth (`/api/public/markets`, `search`, `homes/{slug}`, `homes/{slug}/quote`; OpenAPI at `/api/public/openapi.json`) and an MCP server | robots.txt allows `/api/public` and disallows the HTML search pages (`/apartments/search*`, `/cities/`, `*start_date*`). The terms forbid spiders on the site, but `llms.txt` invites API use and asks for a rate limit, so use the API only | Easy |
+| Landing (`landing`) | Built (above) | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth | robots.txt allows `/api/public` and disallows the HTML search pages; the terms forbid spiders on the site, so the API only | Done |
 | Blueground (`blueground`) | Stub; follow-up #119 | Direct HTTP | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Easy to medium: map the JSON-LD `Apartment` list (beds, baths, coordinates, photo) and `window.__INITIAL_STATE__` (price, availability) |
 | Zumper (`zumper`) | Stub | Data provider (Apify, e.g. `memo23/zumper-cheerio`, `benthepythondev/zumper-rental-scraper`) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge" | Medium: compare the actors' furnished filters and output |
 | Apartments.com (`apartments_com`) | Stub | Data provider (Apify, e.g. `epctex/apartments-scraper`, about 1,000 users) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers | Medium: check that the actor's furnished filter maps onto criteria |

@@ -1,0 +1,213 @@
+{
+ "markets": [
+  {
+   "slug": "akron",
+   "name": "Akron",
+   "state": "OH",
+   "timezone": "Eastern Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "akron-oh",
+     "name": "Akron",
+     "state": "OH"
+    }
+   ]
+  },
+  {
+   "slug": "albany",
+   "name": "Albany",
+   "state": "NY",
+   "timezone": "Eastern Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "albany-ny",
+     "name": "Albany",
+     "state": "NY"
+    }
+   ]
+  },
+  {
+   "slug": "asheville",
+   "name": "Asheville",
+   "state": "NC",
+   "timezone": "Eastern Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "arden-nc",
+     "name": "Arden",
+     "state": "NC"
+    },
+    {
+     "slug": "ashville-nc",
+     "name": "Asheville",
+     "state": "NC"
+    }
+   ]
+  },
+  {
+   "slug": "atlanta",
+   "name": "Atlanta",
+   "state": "GA",
+   "timezone": "Eastern Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "alpharetta-ga",
+     "name": "Alpharetta",
+     "state": "GA"
+    },
+    {
+     "slug": "atlanta-ga",
+     "name": "Atlanta",
+     "state": "GA"
+    },
+    {
+     "slug": "buford-ga",
+     "name": "Buford",
+     "state": "GA"
+    },
+    {
+     "slug": "decatur-ga",
+     "name": "Decatur",
+     "state": "GA"
+    },
+    {
+     "slug": "kennesaw-ga",
+     "name": "Kennesaw",
+     "state": "GA"
+    },
+    {
+     "slug": "lawrenceville-ga",
+     "name": "Lawrenceville",
+     "state": "GA"
+    },
+    {
+     "slug": "mableton-ga",
+     "name": "Mableton",
+     "state": "GA"
+    },
+    {
+     "slug": "marietta-ga",
+     "name": "Marietta",
+     "state": "GA"
+    },
+    {
+     "slug": "mcdonough-ga",
+     "name": "McDonough",
+     "state": "GA"
+    },
+    {
+     "slug": "oakwood-ga",
+     "name": "Oakwood",
+     "state": "GA"
+    },
+    {
+     "slug": "roswell-ga",
+     "name": "Roswell",
+     "state": "GA"
+    },
+    {
+     "slug": "stockbridge-ga",
+     "name": "Stockbridge",
+     "state": "GA"
+    }
+   ]
+  },
+  {
+   "slug": "austin",
+   "name": "Austin",
+   "state": "TX",
+   "timezone": "Central Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "austin-tx",
+     "name": "Austin",
+     "state": "TX"
+    },
+    {
+     "slug": "bee-cave-tx",
+     "name": "Bee Cave",
+     "state": "TX"
+    },
+    {
+     "slug": "buda-tx",
+     "name": "Buda",
+     "state": "TX"
+    },
+    {
+     "slug": "cedar-park-tx",
+     "name": "Cedar Park",
+     "state": "TX"
+    },
+    {
+     "slug": "georgetown-tx",
+     "name": "Georgetown",
+     "state": "TX"
+    },
+    {
+     "slug": "kyle-tx",
+     "name": "Kyle",
+     "state": "TX"
+    },
+    {
+     "slug": "leander-tx",
+     "name": "Leander",
+     "state": "TX"
+    },
+    {
+     "slug": "lockhart-tx",
+     "name": "Lockhart",
+     "state": "TX"
+    },
+    {
+     "slug": "manor-tx",
+     "name": "Manor",
+     "state": "TX"
+    },
+    {
+     "slug": "pflugerville-tx",
+     "name": "Pflugerville",
+     "state": "TX"
+    },
+    {
+     "slug": "round-rock-tx",
+     "name": "Round Rock",
+     "state": "TX"
+    },
+    {
+     "slug": "salado-tx",
+     "name": "Salado",
+     "state": "TX"
+    },
+    {
+     "slug": "san-marcos-tx",
+     "name": "San Marcos",
+     "state": "TX"
+    }
+   ]
+  },
+  {
+   "slug": "baltimore",
+   "name": "Baltimore",
+   "state": "MD",
+   "timezone": "Eastern Time (US & Canada)",
+   "cities": [
+    {
+     "slug": "baltimore-md",
+     "name": "Baltimore",
+     "state": "MD"
+    },
+    {
+     "slug": "columbia-md",
+     "name": "Columbia",
+     "state": "MD"
+    },
+    {
+     "slug": "ellicott-city-md",
+     "name": "Ellicott City",
+     "state": "MD"
+    }
+   ]
+  }
+ ],
+ "count": 113
+}

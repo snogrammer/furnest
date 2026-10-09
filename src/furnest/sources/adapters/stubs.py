@@ -19,23 +19,6 @@ from furnest.sources.stub import StubAdapter
 _PROVIDER = Capabilities(has_api=True, requires_api_key=True)
 
 
-class Landing(StubAdapter):
-    """Landing: furnished apartments on monthly and open-ended stays (#118).
-
-    TODO: use Landing's official read-only API, which needs no auth. Pick a market
-    slug from ``GET /api/public/markets``, then call ``GET /api/public/search`` (market,
-    ``check_in``/``check_out``, ``bedrooms``, ``max_price``) and ``homes/{slug}``
-    (+ ``quote``). The OpenAPI spec is at ``/api/public/openapi.json``. robots.txt allows
-    ``/api/public`` and disallows the HTML search pages, and the terms forbid
-    spiders, so don't touch the HTML.
-    """
-
-    name = "landing"
-    display_name = "Landing"
-    capabilities: ClassVar[Capabilities] = Capabilities(has_api=True)
-    site_url = "https://www.hellolanding.com/"
-
-
 class Blueground(StubAdapter):
     """Blueground: furnished apartments for a month or longer (#119).
 

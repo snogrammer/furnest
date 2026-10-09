@@ -1,0 +1,165 @@
+{
+ "slug": "apartment-in-birmingham-al-the-ellison-347",
+ "name": "The Ellison 347",
+ "home_url": "https://www.hellolanding.com/homes/apartment-in-birmingham-al-the-ellison-347?searchedCity=birmingham",
+ "hero_image_url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSEVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--42c79e9253c4a8dd07d549ccf4060bc4afe96b76/_GENERIC-C-2-livingroom.jpg",
+ "market": "Birmingham",
+ "market_slug": "birmingham",
+ "state": "AL",
+ "city": "Birmingham",
+ "address": "2000 2nd Ave S., Birmingham, AL 35233",
+ "bedrooms": 2,
+ "bathrooms": 2.0,
+ "square_feet": 877,
+ "minimum_nightly_stay": 5,
+ "available_from": "2026-10-14",
+ "display_price_without_discount": 2594,
+ "display_price_with_discount": 2594,
+ "display_price_label": " per month",
+ "duration_label": "/mo",
+ "is_price_monthly": true,
+ "is_price_nightly": false,
+ "price_note": "Price includes all fees except taxes.",
+ "currency": "USD",
+ "eligible_for_flex": true,
+ "latitude": 33.51,
+ "longitude": -86.80,
+ "published": true,
+ "property": {
+  "name": "The Ellison",
+  "address": "2000 2nd Ave S., Birmingham, AL 35233",
+  "amenities": [
+   "Grilling Stations",
+   "Fitness Center",
+   "Elevator",
+   "Rooftop Deck",
+   "Clubroom",
+   "Lounge room",
+   "Resort-Style Pool",
+   "Electric car charging stations"
+  ],
+  "walk_score": 82,
+  "walk_score_description": "Very Walkable",
+  "transit_score": 49,
+  "transit_score_description": "Some Transit",
+  "bike_score": 64,
+  "bike_score_description": "Bikeable"
+ },
+ "has_parking": true,
+ "pet_policy": {
+  "cats_allowed": true,
+  "dogs_allowed": true
+ },
+ "laundry_type": "In Unit",
+ "photos": [
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSEVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--42c79e9253c4a8dd07d549ccf4060bc4afe96b76/_GENERIC-C-2-livingroom.jpg",
+   "source": "unit",
+   "hero": true
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSE1wTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--59e5927e3efa8155dd8aa20be5f1879940799004/_GENERIC-C-1-livingroom.jpg",
+   "source": "unit",
+   "hero": false
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSFVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--0966daf3682b7eb010b7445a89946d62bbf47dfa/_GENERIC-C-3-livingroom.jpg",
+   "source": "unit",
+   "hero": false
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSGNwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--f64cbe2534a789b2a0852ee9a4f01e4923202d59/_GENERIC-C-4-kitchen.jpg",
+   "source": "unit",
+   "hero": false
+  }
+ ],
+ "media": [
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSEVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--42c79e9253c4a8dd07d549ccf4060bc4afe96b76/_GENERIC-C-2-livingroom.jpg",
+   "widget_url": "https://www.hellolanding.com/images/home/1424766/0/800/800/photo.jpg",
+   "type": "photo",
+   "source": "unit",
+   "position": 0
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSE1wTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--59e5927e3efa8155dd8aa20be5f1879940799004/_GENERIC-C-1-livingroom.jpg",
+   "widget_url": "https://www.hellolanding.com/images/home/1424766/1/800/800/photo.jpg",
+   "type": "photo",
+   "source": "unit",
+   "position": 1
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSFVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--0966daf3682b7eb010b7445a89946d62bbf47dfa/_GENERIC-C-3-livingroom.jpg",
+   "widget_url": "https://www.hellolanding.com/images/home/1424766/2/800/800/photo.jpg",
+   "type": "photo",
+   "source": "unit",
+   "position": 2
+  },
+  {
+   "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSGNwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--f64cbe2534a789b2a0852ee9a4f01e4923202d59/_GENERIC-C-4-kitchen.jpg",
+   "widget_url": "https://www.hellolanding.com/images/home/1424766/3/800/800/photo.jpg",
+   "type": "photo",
+   "source": "unit",
+   "position": 3
+  }
+ ],
+ "widget_hero_image_url": "https://www.hellolanding.com/images/home/1424766/0/800/800/photo.jpg",
+ "flex_options": [
+  {
+   "committed_nights": 180,
+   "label": "6-Month+ Stay",
+   "months": 6,
+   "special_offer": false,
+   "early_termination_fee_type": "one-month-rent"
+  },
+  {
+   "committed_nights": 365,
+   "label": "12-Month+ Stay",
+   "months": 12,
+   "special_offer": true,
+   "early_termination_fee_type": "two-months-rent"
+  }
+ ],
+ "reservation_link": "https://www.hellolanding.com/checkout/apartment-in-birmingham-al-the-ellison-347?searchedCity=birmingham",
+ "availability": {
+  "minimum_nightly_stay": 5,
+  "earliest_available_date": "2026-10-14",
+  "bookable_windows": [
+   {
+    "start_date": "2026-10-14",
+    "end_date": "2027-10-08",
+    "nights": 359,
+    "can_move_in_at_start": true,
+    "can_move_out_at_end": true,
+    "minimum_nightly_stay": 5,
+    "fits_minimum_stay": true
+   },
+   {
+    "start_date": "2027-10-09",
+    "end_date": null,
+    "nights": null,
+    "can_move_in_at_start": false,
+    "can_move_out_at_end": true,
+    "minimum_nightly_stay": 5,
+    "fits_minimum_stay": true
+   }
+  ],
+  "ranges": [
+   {
+    "start_date": "2026-10-09",
+    "end_date": "2026-10-13",
+    "move_in_allowed": false,
+    "move_out_allowed": false,
+    "open_for_occupancy": false,
+    "unbookable_reason": "reserved"
+   },
+   {
+    "start_date": "2026-10-14",
+    "end_date": "2027-10-08",
+    "move_in_allowed": true,
+    "move_out_allowed": true,
+    "open_for_occupancy": true
+   }
+  ]
+ }
+}

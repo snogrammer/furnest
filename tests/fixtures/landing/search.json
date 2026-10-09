@@ -1,0 +1,179 @@
+{
+ "market": {
+  "slug": "birmingham",
+  "name": "Birmingham",
+  "state": "AL"
+ },
+ "page": 1,
+ "per_page": 25,
+ "total_count": 61,
+ "total_pages": 3,
+ "flex_search_url": "https://www.hellolanding.com/flex",
+ "homes": [
+  {
+   "slug": "apartment-in-birmingham-al-the-ellison-347",
+   "name": "The Ellison 347",
+   "home_url": "https://www.hellolanding.com/homes/apartment-in-birmingham-al-the-ellison-347?endDate=2027-02-06&searchedCity=birmingham&searchedStartDate=2026-11-08&startDate=2026-11-08",
+   "hero_image_url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSEVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--42c79e9253c4a8dd07d549ccf4060bc4afe96b76/_GENERIC-C-2-livingroom.jpg",
+   "market": "Birmingham",
+   "market_slug": "birmingham",
+   "state": "AL",
+   "city": "Birmingham",
+   "address": "2000 2nd Ave S., Birmingham, AL 35233",
+   "bedrooms": 2,
+   "bathrooms": 2.0,
+   "square_feet": 877,
+   "minimum_nightly_stay": 5,
+   "available_from": "2026-10-14",
+   "display_price_without_discount": 2798,
+   "display_price_with_discount": 2798,
+   "display_price_label": " per month",
+   "duration_label": "/mo",
+   "is_price_monthly": true,
+   "is_price_nightly": false,
+   "price_note": "Price includes all fees except taxes.",
+   "currency": "USD",
+   "eligible_for_flex": true,
+   "latitude": 33.51,
+   "longitude": -86.80,
+   "flex_options": [
+    {
+     "committed_nights": 180,
+     "label": "6-Month+ Stay",
+     "months": 6,
+     "special_offer": false,
+     "early_termination_fee_type": "one-month-rent"
+    },
+    {
+     "committed_nights": 365,
+     "label": "12-Month+ Stay",
+     "months": 12,
+     "special_offer": true,
+     "early_termination_fee_type": "two-months-rent"
+    }
+   ],
+   "media": [
+    {
+     "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSEVwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--42c79e9253c4a8dd07d549ccf4060bc4afe96b76/_GENERIC-C-2-livingroom.jpg",
+     "widget_url": "https://www.hellolanding.com/images/home/1424766/0/800/800/photo.jpg",
+     "type": "photo",
+     "source": "unit",
+     "position": 0
+    }
+   ],
+   "widget_hero_image_url": "https://www.hellolanding.com/images/home/1424766/0/800/800/photo.jpg"
+  },
+  {
+   "slug": "apartment-in-birmingham-al-the-station-at-lakeshore-113",
+   "name": "The Station at Lakeshore 113",
+   "home_url": "https://www.hellolanding.com/homes/apartment-in-birmingham-al-the-station-at-lakeshore-113?endDate=2027-02-06&searchedCity=birmingham&searchedStartDate=2026-11-08&startDate=2026-11-08",
+   "hero_image_url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSWtvOXdFPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--9ea634d9d8ddaa45c728e6cce3bb6f0abf052381/tmp-u14nm09tp16jr9tstdfgtvdq4r.jpeg",
+   "market": "Birmingham",
+   "market_slug": "birmingham",
+   "state": "AL",
+   "city": "Birmingham",
+   "address": "2800 Milan Court, Birmingham, AL 35211",
+   "bedrooms": 2,
+   "bathrooms": 2.0,
+   "square_feet": 1308,
+   "minimum_nightly_stay": 2,
+   "available_from": "2026-10-12",
+   "display_price_without_discount": 3300,
+   "display_price_with_discount": 3300,
+   "display_price_label": " per month",
+   "duration_label": "/mo",
+   "is_price_monthly": true,
+   "is_price_nightly": false,
+   "price_note": "Price includes all fees except taxes.",
+   "currency": "USD",
+   "eligible_for_flex": true,
+   "latitude": 33.42,
+   "longitude": -86.88,
+   "property": {
+    "member_rating": {
+     "average": 4.84,
+     "count": 37
+    }
+   },
+   "flex_options": [
+    {
+     "committed_nights": 180,
+     "label": "6-Month+ Stay",
+     "months": 6,
+     "special_offer": false,
+     "early_termination_fee_type": "one-month-rent"
+    },
+    {
+     "committed_nights": 365,
+     "label": "12-Month+ Stay",
+     "months": 12,
+     "special_offer": false,
+     "early_termination_fee_type": "two-months-rent"
+    }
+   ],
+   "media": [
+    {
+     "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSWtvOXdFPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--9ea634d9d8ddaa45c728e6cce3bb6f0abf052381/tmp-u14nm09tp16jr9tstdfgtvdq4r.jpeg",
+     "widget_url": "https://www.hellolanding.com/images/home/1412701/0/800/800/photo.jpg",
+     "type": "photo",
+     "source": "unit",
+     "position": 0
+    }
+   ],
+   "widget_hero_image_url": "https://www.hellolanding.com/images/home/1412701/0/800/800/photo.jpg"
+  },
+  {
+   "slug": "apartment-in-birmingham-al-the-ellison-459",
+   "name": "The Ellison 459",
+   "home_url": "https://www.hellolanding.com/homes/apartment-in-birmingham-al-the-ellison-459?endDate=2027-02-06&searchedCity=birmingham&searchedStartDate=2026-11-08&startDate=2026-11-08",
+   "hero_image_url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCRlFwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--06ff8cacdd642294560d79a3a69c665af53f3447/_GENERIC-D-5-bedroom.jpg",
+   "market": "Birmingham",
+   "market_slug": "birmingham",
+   "state": "AL",
+   "city": "Birmingham",
+   "address": "2000 2nd Ave S., Birmingham, AL 35233",
+   "bedrooms": 1,
+   "bathrooms": 1.0,
+   "square_feet": 713,
+   "minimum_nightly_stay": 5,
+   "available_from": "2026-10-12",
+   "display_price_without_discount": 2447,
+   "display_price_with_discount": 2447,
+   "display_price_label": " per month",
+   "duration_label": "/mo",
+   "is_price_monthly": true,
+   "is_price_nightly": false,
+   "price_note": "Price includes all fees except taxes.",
+   "currency": "USD",
+   "eligible_for_flex": true,
+   "latitude": 33.51,
+   "longitude": -86.80,
+   "flex_options": [
+    {
+     "committed_nights": 180,
+     "label": "6-Month+ Stay",
+     "months": 6,
+     "special_offer": false,
+     "early_termination_fee_type": "one-month-rent"
+    },
+    {
+     "committed_nights": 365,
+     "label": "12-Month+ Stay",
+     "months": 12,
+     "special_offer": false,
+     "early_termination_fee_type": "two-months-rent"
+    }
+   ],
+   "media": [
+    {
+     "url": "https://www.hellolanding.com/rails/active_storage/blobs/proxy/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCRlFwTGdJPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--06ff8cacdd642294560d79a3a69c665af53f3447/_GENERIC-D-5-bedroom.jpg",
+     "widget_url": "https://www.hellolanding.com/images/home/1424761/0/800/800/photo.jpg",
+     "type": "photo",
+     "source": "unit",
+     "position": 0
+    }
+   ],
+   "widget_hero_image_url": "https://www.hellolanding.com/images/home/1424761/0/800/800/photo.jpg"
+  }
+ ]
+}
