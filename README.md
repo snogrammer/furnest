@@ -300,14 +300,14 @@ Both compose files run the containers with `no-new-privileges`, all capabilities
 
 Run the same gates locally with `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
-[`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after CI passes on `main`, and on `v*` tags. It builds the image for each platform in `vars.IMAGE_PLATFORMS` (default `linux/amd64`; other platforms build under QEMU) and pushes `:<sha>` as a multi-arch index, plus `:latest` from main or `:<tag>` from a tag. On main it then redeploys the Portainer stack and waits until `furnest-web` and `furnest-worker` are healthy on the new image. Everything environment-specific comes from repository or organisation settings:
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs after CI passes on `main`, and on `v*` tags. It builds the image for each platform in `vars.IMAGE_PLATFORMS` (default `linux/amd64`; other platforms build under QEMU) and pushes `:<sha>` as a multi-arch index, plus `:latest` from main or `:<tag>` from a tag. On main it then redeploys the Portainer stack and waits until `furnest-web` and `furnest-worker` are healthy on the new image. Re-running a Publish run redeploys again; it does nothing if both containers already run the pulled image. Everything environment-specific comes from repository or organisation settings:
 
 | Kind | Name | Purpose |
 |---|---|---|
 | var | `REGISTRY` | registry host. Unset means nothing is published. |
 | var | `IMAGE` | image path, e.g. `org/furnest` |
 | var | `IMAGE_PLATFORMS` | e.g. `linux/amd64 linux/arm64` |
-| var | `PORTAINER_URL`, `PORTAINER_STACK_ID`, `PORTAINER_ENDPOINT_ID` | redeploy target. Unset means no redeploy. |
+| var | `PORTAINER_URL`, `PORTAINER_STACK_ID`, `PORTAINER_ENDPOINT_ID` | redeploy target. With `PORTAINER_URL` unset the run warns and doesn't redeploy; with it set but `PORTAINER_STACK_ID` or `PORTAINER_API_KEY` empty the run fails. |
 | secret | `REGISTRY_USERNAME`, `REGISTRY_PASSWORD` | registry login |
 | secret | `PORTAINER_API_KEY` | Portainer API access |
 

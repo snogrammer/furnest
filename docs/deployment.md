@@ -19,10 +19,12 @@ docker compose up -d --build
 
 1. Create the shared proxy network once: `docker network create caddy_net`.
 2. In Portainer, add a stack from this repository with compose path `docker-compose.portainer.yml`.
-3. Copy [`stack.env.example`](../stack.env.example) into the stack's environment variables and set `FURNEST_IMAGE` (e.g. `registry.example.com/org/furnest:latest`), `FURNEST_DATA_PATH`, `AUTH_TOKEN`, `AUTH_SESSION_SECRET` and `BASE_URL`.
+3. Copy [`stack.env.example`](../stack.env.example) into the stack's environment variables and set `FURNEST_IMAGE` without a tag (e.g. `registry.example.com/org/furnest`; `FURNEST_TAG` picks the tag), `FURNEST_DATA_PATH`, `AUTH_TOKEN`, `AUTH_SESSION_SECRET` and `BASE_URL`.
 4. Deploy. Updating means pulling the new image and redeploying; the `migrate` service applies schema changes first.
 
 The repository's `publish` workflow can push images and trigger the Portainer redeploy; see the CI section of the README for the variables and secrets it uses.
+
+To check which commit is running, look at the image's `org.opencontainers.image.revision` label (Portainer: Images, then the image). If it is older than `main`, the redeploy didn't run: look in the latest Publish run for a `Redeploy is not configured` warning or a failed `Redeploy stack in Portainer` step. Re-running that Publish run redeploys, and so does **Pull and redeploy** on the stack in Portainer.
 
 ## Caddy
 

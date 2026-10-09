@@ -14,8 +14,10 @@
 # Steps:
 #   1. read the stack's current env (redeploy would otherwise wipe it)
 #   2. force-pull :latest on the host (Portainer's pullImage alone can race)
-#   3. PUT /stacks/{id}/git/redeploy (Portainer re-reads the compose from git)
-#   4. poll each container until it is running, healthy, and on a new image ID
+#   3. stop here if every container already runs the pulled image, so a re-run or
+#      a duplicate workflow_run event is a no-op rather than a timeout
+#   4. PUT /stacks/{id}/git/redeploy (Portainer re-reads the compose from git)
+#   5. poll each container until it is running, healthy, and on the pulled image
 set -euo pipefail
 
 : "${PORTAINER_URL:?}" "${PORTAINER_API_KEY:?}" "${PORTAINER_STACK_ID:?}"
@@ -51,11 +53,21 @@ REGISTRY_AUTH=$(jq -cn --arg u "$REGISTRY_USERNAME" --arg p "$REGISTRY_PASSWORD"
 call "Image pull" -X POST -H "X-Registry-Auth: $REGISTRY_AUTH" \
   "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/create?fromImage=$REGISTRY/$IMAGE&tag=latest" >/dev/null
 
-declare -A OLD_IMAGE
+NEW_IMAGE=$(call "Image inspect" \
+  "$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker/images/$REGISTRY/$IMAGE:latest/json" | jq -r '.Id // empty')
+[[ -n "$NEW_IMAGE" ]] || { echo "❌ No image ID for $REGISTRY/$IMAGE:latest after the pull" >&2; exit 1; }
+echo "📦 pulled image: $NEW_IMAGE"
+
+stale=0
 for c in $PORTAINER_CONTAINERS; do
-  OLD_IMAGE[$c]=$(api "$(container_url "$c")/json" | jq -r '.Image // "missing"')
-  echo "📌 $c pre-deploy image: ${OLD_IMAGE[$c]}"
+  current=$(api "$(container_url "$c")/json" | jq -r '.Image // "missing"')
+  echo "📌 $c pre-deploy image: $current"
+  [[ "$current" == "$NEW_IMAGE" ]] || stale=1
 done
+if (( ! stale )); then
+  echo "✅ Every container is already on $NEW_IMAGE; nothing to redeploy"
+  exit 0
+fi
 
 BODY=$(jq -cn \
   --argjson env "$STACK_ENV_JSON" \
@@ -73,8 +85,8 @@ for c in $PORTAINER_CONTAINERS; do
     STATUS=$(jq -r '.State.Status // "missing"' <<<"$INSPECT")
     HEALTH=$(jq -r '.State.Health.Status // "none"' <<<"$INSPECT")
     CURRENT=$(jq -r '.Image // "missing"' <<<"$INSPECT")
-    changed=no; [[ "$CURRENT" != "${OLD_IMAGE[$c]}" ]] && changed=yes
-    echo "  $c status=$STATUS health=$HEALTH image_changed=$changed"
+    changed=no; [[ "$CURRENT" == "$NEW_IMAGE" ]] && changed=yes
+    echo "  $c status=$STATUS health=$HEALTH on_new_image=$changed"
 
     if [[ "$STATUS" == "exited" || "$STATUS" == "dead" ]]; then
       echo "❌ $c is $STATUS"

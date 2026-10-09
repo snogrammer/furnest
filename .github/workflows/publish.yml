@@ -114,6 +114,16 @@ jobs:
             echo "::error::Secrets ${missing[*]} are empty for $GITHUB_REPOSITORY. Add them under the repository's (or its owner's) Settings > Actions > Secrets."
             exit 1
           fi
+          # A half-set redeploy target would otherwise skip the redeploy silently.
+          if [ -n "$PORTAINER_URL" ]; then
+            unset_redeploy=()
+            [ -n "$PORTAINER_STACK_ID" ] || unset_redeploy+=(vars.PORTAINER_STACK_ID)
+            [ -n "$PORTAINER_API_KEY" ] || unset_redeploy+=(secrets.PORTAINER_API_KEY)
+            if [ ${#unset_redeploy[@]} -gt 0 ]; then
+              echo "::error::vars.PORTAINER_URL is set but ${unset_redeploy[*]} is empty, so the stack can't be redeployed. Set it, or unset PORTAINER_URL to publish without redeploying."
+              exit 1
+            fi
+          fi
 
       - name: Checkout
         if: steps.gate.outputs.ok == 'true'
@@ -249,14 +259,22 @@ jobs:
           env.COSIGN_PRIVATE_KEY == ''
         run: echo "::warning::secrets.COSIGN_PRIVATE_KEY is unset, so the image is not signed and has no SBOM or provenance."
 
+      # Runs on retag-only runs too, so re-running Publish redeploys. The script
+      # exits early when the containers already run the pulled image.
       - name: Redeploy stack in Portainer
         if: >-
-          steps.gate.outputs.ok == 'true' && steps.check.outputs.built != 'true' &&
+          steps.gate.outputs.ok == 'true' &&
           github.event_name == 'workflow_run' &&
           env.PORTAINER_URL != '' && env.PORTAINER_STACK_ID != ''
         env:
           REGISTRY_REF_NAME: refs/heads/main # branch Portainer pulls the stack file from
         run: bash deploy/portainer-redeploy.sh
+
+      - name: Redeploy is not configured
+        if: >-
+          steps.gate.outputs.ok == 'true' &&
+          github.event_name == 'workflow_run' && env.PORTAINER_URL == ''
+        run: echo "::warning::vars.PORTAINER_URL is unset, so :latest was pushed but no stack was redeployed."
 
       - name: Cleanup containers and images
         if: always() && steps.gate.outputs.ok == 'true'
