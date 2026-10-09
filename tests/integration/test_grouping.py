@@ -25,7 +25,7 @@ from furnest.db.property_store import (
     SqlPropertyStore,
 )
 from furnest.db.session import session_scope
-from furnest.domain import Actor, Criteria, NormalizedListing, PropertyStatus
+from furnest.domain import Actor, Criteria, NormalizedListing, OwnerType, PropertyStatus
 from furnest.matching import MatchResult
 from furnest.pipeline.properties import PropertyPipeline
 
@@ -679,3 +679,87 @@ def test_splitting_without_criteria_queues_no_rescore(
     store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER)
 
     assert jobs(session_factory, "rerun_criteria") == []
+
+
+# --- Owner type across merges and splits --------------------------------------------
+
+
+def set_override(
+    session_factory: sessionmaker[Session], property_id: int, kind: OwnerType | None
+) -> None:
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == property_id).values(owner_type_override=kind)
+        )
+
+
+def test_grouping_keeps_the_owner_type_of_the_primary_listing(
+    store: SqlPropertyStore, add_listing: AddListing
+) -> None:
+    first = add_listing("zillow", owner_type="agent")
+    second = add_listing("craigslist", owner_type="individual")
+
+    prop = store.record_match(first, passing(70), at=T0)
+    joined = store.record_match(second, passing(90), at=T0)
+
+    # The first (lowest-id, active) listing stays primary, so its owner type stands.
+    assert joined.id == prop.id
+    assert joined.owner_type is OwnerType.AGENT
+
+
+def test_a_merge_carries_the_override_to_a_survivor_without_one(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    _, pa, _, pb = two_properties(store, add_listing, session_factory)
+    set_override(session_factory, pb, OwnerType.INDIVIDUAL)
+
+    state = store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+
+    assert state.owner_type_override is OwnerType.INDIVIDUAL
+    assert state.owner_type is OwnerType.INDIVIDUAL
+
+
+def test_a_merge_keeps_the_survivors_own_override(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    _, pa, _, pb = two_properties(store, add_listing, session_factory)
+    set_override(session_factory, pa, OwnerType.AGENT)
+    set_override(session_factory, pb, OwnerType.INDIVIDUAL)
+
+    state = store.merge_properties(pa, pb, actor=Actor.DASHBOARD, at=LATER)
+
+    assert state.owner_type_override is OwnerType.AGENT
+    assert state.owner_type is OwnerType.AGENT
+
+
+def test_a_split_listing_starts_from_its_own_owner_type(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    first = add_listing("zillow", owner_type="property_manager")
+    second = add_listing("craigslist", owner_type="individual")
+    prop = store.record_match(first, passing(70), at=T0).id
+    assert store.record_match(second, passing(90), at=T0).id == prop
+    set_override(session_factory, prop, OwnerType.AGENT)
+
+    new = store.split_listing(prop, second, actor=Actor.DASHBOARD, at=LATER)
+
+    # The override was about the unit the person was looking at; the split listing is
+    # a different unit, so it starts from what its own adapter said.
+    assert (new.owner_type, new.owner_type_override) == (OwnerType.INDIVIDUAL, None)
+    old = store.get(prop)
+    assert old is not None
+    assert (old.owner_type, old.owner_type_override) == (OwnerType.AGENT, OwnerType.AGENT)
+
+
+def test_splitting_the_primary_listing_re_derives_the_old_property(
+    store: SqlPropertyStore, add_listing: AddListing
+) -> None:
+    first = add_listing("zillow", owner_type="property_manager")
+    second = add_listing("craigslist", owner_type="individual")
+    prop = store.record_match(first, passing(70), at=T0).id
+    assert store.record_match(second, passing(90), at=T0).id == prop
+    assert store.get(prop).owner_type is OwnerType.PROPERTY_MANAGER  # type: ignore[union-attr]
+
+    store.split_listing(prop, first, actor=Actor.DASHBOARD, at=LATER)
+
+    assert store.get(prop).owner_type is OwnerType.INDIVIDUAL  # type: ignore[union-attr]

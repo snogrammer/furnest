@@ -316,3 +316,36 @@ def test_failure_counts_count_failed_runs_per_source(store: SqlListingStore) -> 
     store.start_run("d", at=T0)  # still running
 
     assert store.failure_counts() == {"a": 2, "c": 1}
+
+
+# --- The property's owner type override --------------------------------------------
+
+
+def test_stored_listings_carry_their_propertys_owner_type_override(
+    store: SqlListingStore, session_factory: sessionmaker[Session]
+) -> None:
+    from sqlalchemy import update
+
+    from furnest.db.models import Property
+    from furnest.db.property_store import SqlPropertyStore
+    from furnest.db.session import session_scope
+    from furnest.domain import OwnerType
+
+    a, b = store.upsert_batch("test", [listing("a"), listing("b")], seen_at=T0).new_ids
+    prop = SqlPropertyStore(session_factory).ensure_for_listing(a, at=T0)
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == prop.id).values(owner_type_override="agent")
+        )
+
+    stored_a, stored_b = store.many([a, b])
+    assert stored_a.owner_type_override is OwnerType.AGENT
+    assert stored_a.listing.owner_type is OwnerType.UNKNOWN
+    assert stored_a.for_matching.owner_type is OwnerType.AGENT
+    assert stored_a.for_matching.source_id == "a"
+    # No property yet: nothing to override, and for_matching is the listing itself.
+    assert stored_b.owner_type_override is None
+    assert stored_b.for_matching is stored_b.listing
+    assert store.get(a).owner_type_override is OwnerType.AGENT  # type: ignore[union-attr]
+    assert store.find("test", "a").owner_type_override is OwnerType.AGENT  # type: ignore[union-attr]
+    assert [item.owner_type_override for item in store.active()] == [OwnerType.AGENT, None]

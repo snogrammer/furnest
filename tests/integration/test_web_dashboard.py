@@ -14,7 +14,7 @@ from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Property
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import Money, NormalizedListing, PropertyStatus
+from furnest.domain import Money, NormalizedListing, OwnerType, PropertyStatus
 from furnest.domain.price import Price
 from furnest.web.property_views import PAGE_SIZE, Filters
 
@@ -43,6 +43,7 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
         age: timedelta = timedelta(0),
         snoozed: bool = False,
         source: str = "test",
+        owner: OwnerType = OwnerType.UNKNOWN,
     ) -> int:
         n = next(counter)
         at = now - age - timedelta(seconds=n)
@@ -67,6 +68,7 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
                     status=status,
                     score=score,
                     snoozed_until=now + timedelta(days=1) if snoozed else None,
+                    owner_type=owner,
                 )
             )
         return property_id
@@ -294,7 +296,8 @@ def test_scraped_text_is_escaped(authed_client: TestClient, seed: Seed) -> None:
 
 
 @pytest.mark.parametrize(
-    "query", ["status=bogus", "sort=cheapest", "view=grid", "page=0", "q=" + "x" * 201]
+    "query",
+    ["status=bogus", "sort=cheapest", "view=grid", "page=0", "q=" + "x" * 201, "owner=landlord"],
 )
 def test_bad_params_are_rejected(authed_client: TestClient, query: str) -> None:
     assert authed_client.get(f"/?{query}", headers=HTML).status_code == 422
@@ -302,5 +305,50 @@ def test_bad_params_are_rejected(authed_client: TestClient, query: str) -> None:
 
 def test_filters_url_leaves_defaults_out() -> None:
     assert Filters().url() == "/"
+    assert Filters(owner=OwnerType.AGENT).url() == "/?owner=agent"
     assert Filters(q="a b").url(page=2) == "/?q=a+b&page=2"
     assert Filters(snoozed=True).url(status="all") == "/?status=all&snoozed=true"
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+def test_owner_filter_narrows_cards_and_counts(authed_client: TestClient, seed: Seed) -> None:
+    agent = seed("Agent listed", owner=OwnerType.AGENT)
+    seed("Landlord listed", owner=OwnerType.INDIVIDUAL)
+    seed("Unknown lister")
+
+    html = get(authed_client, "/?owner=agent")
+
+    assert card_ids(html) == [agent]
+    assert 'value="agent" selected' in html
+    assert len(card_ids(get(authed_client, "/?owner=unknown"))) == 1
+    assert len(card_ids(get(authed_client))) == 3
+
+
+def test_cards_show_a_known_owner_type_only(authed_client: TestClient, seed: Seed) -> None:
+    seed("Agent listed", owner=OwnerType.AGENT)
+    seed("Unknown lister")
+
+    html = get(authed_client)
+
+    assert html.count('class="status owner-') == 1
+    assert '<span class="status owner-agent">Agent / broker</span>' in html
+
+
+def test_owner_filter_survives_a_bulk_action(
+    authed_client: TestClient, seed: Seed, csrf: Callable[[str], str]
+) -> None:
+    agent = seed("Agent listed", owner=OwnerType.AGENT)
+    html = get(authed_client, "/?owner=agent")
+    assert '<input type="hidden" name="owner" value="agent">' in html
+
+    response = authed_client.post(
+        "/properties/bulk",
+        data={"csrf_token": csrf(html), "action": "deny", "ids": [str(agent)], "owner": "agent"},
+        headers=HTML,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?owner=agent"

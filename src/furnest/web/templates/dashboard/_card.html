@@ -4,6 +4,7 @@
     {% if selectable %}<input type="checkbox" class="select" name="ids" value="{{ p.id }}" form="bulk" aria-label="Select {% if l %}{{ l.title }}{% else %}property #{{ p.id }}{% endif %}">{% endif %}
     <h3><a href="/properties/{{ p.id }}">{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</a></h3>
     <span class="status status-{{ p.status.value }}">{{ status_label(p.status) }}</span>
+    {% if p.owner_type.value != "unknown" %}<span class="status owner-{{ p.owner_type.value }}">{{ owner_label(p.owner_type) }}</span>{% endif %}
   </header>
   <dl class="facts">
     <div><dt>Score</dt><dd>{% if p.score is not none %}{{ p.score }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>

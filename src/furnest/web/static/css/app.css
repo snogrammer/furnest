@@ -724,6 +724,22 @@ button.secondary {
   color: var(--ok);
 }
 
+/* Owner type chips (dashboard cards and the detail page's facts). */
+.owner-individual {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.owner-property_manager {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.owner-agent {
+  border-color: var(--muted);
+  color: var(--muted);
+}
+
 /* A strip of columns that scrolls inside itself on narrow screens. */
 .board {
   display: grid;

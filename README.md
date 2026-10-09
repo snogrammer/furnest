@@ -81,11 +81,12 @@ Scripts can use the API under `/api/v1` with `Authorization: Bearer <AUTH_TOKEN>
 
 | Method | Path | |
 |---|---|---|
-| `GET` | `/api/v1/properties` | Page of properties with their primary listing. Query: `status` (repeatable), `q`, `sort` (`score`, `price`, `newest`), `limit` (≤100), `offset`, `include_snoozed` |
+| `GET` | `/api/v1/properties` | Page of properties with their primary listing. Query: `status` (repeatable), `q`, `sort` (`score`, `price`, `newest`), `limit` (≤100), `offset`, `include_snoozed`, `owner_type` (`individual`, `property_manager`, `agent`, `unknown`) |
 | `GET` | `/api/v1/properties/{id}` | One property: match result, listings, audit trail, notes |
 | `GET` | `/api/v1/properties/{id}/listings` | The property's listings with price history |
 | `POST` | `/api/v1/properties/{id}/transitions` | `{"to": "approved"}`; a deny may add `"reason"` (saved as a note). `409` if the move isn't allowed |
 | `POST` | `/api/v1/properties/{id}/notes` | `{"body": "markdown"}` → `201` |
+| `POST` | `/api/v1/properties/{id}/owner-type` | `{"owner_type": "individual"}` sets who is behind the unit by hand; `null` goes back to what the listing suggests |
 
 ```sh
 curl -H "Authorization: Bearer $AUTH_TOKEN" "https://furnest.example.com/api/v1/properties?status=suggested"

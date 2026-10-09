@@ -79,7 +79,7 @@ class RerunCriteria:
                 log.info("criteria_rerun_cancelled", criteria_version=version, scored=scored)
                 return
             result = match_listing(
-                stored.listing, criteria, criteria_version=version, amenities=stored.amenities
+                stored.for_matching, criteria, criteria_version=version, amenities=stored.amenities
             )
             self._record(stored, result)
             scored += 1

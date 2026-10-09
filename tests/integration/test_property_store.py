@@ -11,12 +11,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import AuditEvent, Listing, Property
 from furnest.db.property_store import (
+    OWNER_TYPE,
     ListingNotFoundError,
+    PropertyMergedError,
     PropertyNotFoundError,
     SqlPropertyStore,
 )
 from furnest.db.session import session_scope
-from furnest.domain import Actor, InvalidTransitionError, NormalizedListing, PropertyStatus
+from furnest.domain import (
+    Actor,
+    InvalidTransitionError,
+    NormalizedListing,
+    OwnerType,
+    PropertyStatus,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -259,3 +267,104 @@ def test_deleting_a_property_drops_its_audit_and_unlinks_listings(
         assert session.scalars(select(AuditEvent)).all() == []
     assert store.for_listing(listing_id) is None
     assert store.get(prop.id) is None
+
+
+# --- Owner type override ---------------------------------------------------------------
+
+
+def _jobs(session_factory: sessionmaker[Session], kind: str) -> list[dict[str, object]]:
+    from furnest.db.models import Job
+
+    with session_scope(session_factory) as session:
+        return [
+            dict(job.payload)
+            for job in session.scalars(select(Job).where(Job.kind == kind).order_by(Job.id))
+        ]
+
+
+def test_setting_the_owner_type_by_hand_wins_and_is_audited(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    from furnest.db.criteria_store import CriteriaStore
+    from furnest.domain import Criteria
+
+    CriteriaStore(session_factory).save(Criteria(), created_by="cli")
+    listing_id = add_listing(owner_type="agent")
+    prop = store.ensure_for_listing(listing_id, at=T0)
+    assert prop.owner_type is OwnerType.AGENT
+
+    state = store.set_owner_type_override(
+        prop.id, OwnerType.INDIVIDUAL, actor=Actor.DASHBOARD, at=T0 + MINUTE
+    )
+
+    assert (state.owner_type, state.owner_type_override) == (
+        OwnerType.INDIVIDUAL,
+        OwnerType.INDIVIDUAL,
+    )
+    assert state.status is S.NEW
+    event = store.audit_events(prop.id)[-1]
+    assert (event.from_status, event.to_status, event.actor) == (S.NEW, S.NEW, Actor.DASHBOARD)
+    assert event.actor_detail == OWNER_TYPE
+    assert event.payload == {"owner_type_override": "individual", "owner_type": "individual"}
+    assert _jobs(session_factory, "rerun_criteria") == [
+        {"criteria_version": 1, "listing_ids": [listing_id]}
+    ]
+
+
+def test_clearing_the_override_goes_back_to_the_listing(
+    store: SqlPropertyStore, add_listing: AddListing
+) -> None:
+    prop = store.ensure_for_listing(add_listing(owner_type="agent"), at=T0)
+    store.set_owner_type_override(prop.id, OwnerType.INDIVIDUAL, actor=Actor.API, at=T0)
+
+    state = store.set_owner_type_override(prop.id, None, actor=Actor.API, at=T0 + MINUTE)
+
+    assert (state.owner_type, state.owner_type_override) == (OwnerType.AGENT, None)
+    event = store.audit_events(prop.id)[-1]
+    assert event.actor is Actor.API
+    assert event.payload == {"owner_type_override": None, "owner_type": "agent"}
+
+
+def test_setting_the_same_override_again_records_nothing(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    prop = store.ensure_for_listing(add_listing(), at=T0)
+    store.set_owner_type_override(prop.id, OwnerType.AGENT, actor=Actor.DASHBOARD, at=T0)
+    before = len(store.audit_events(prop.id))
+
+    store.set_owner_type_override(prop.id, OwnerType.AGENT, actor=Actor.DASHBOARD, at=T0)
+    store.set_owner_type_override(prop.id, None, actor=Actor.DASHBOARD, at=T0)
+    store.set_owner_type_override(prop.id, None, actor=Actor.DASHBOARD, at=T0)
+
+    assert len(store.audit_events(prop.id)) == before + 1
+    assert _jobs(session_factory, "rerun_criteria") == []  # no criteria saved: nothing to rerun
+
+
+def test_the_override_redraws_the_discord_message(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    from furnest.db.property_store import MESSAGE_SYNC_JOB
+
+    prop = store.ensure_for_listing(add_listing(owner_type="agent"), at=T0)
+    store.attach_message(prop.id, channel_id="1", message_id="2", rendered=prop)
+    synced = len(_jobs(session_factory, MESSAGE_SYNC_JOB))
+
+    store.set_owner_type_override(prop.id, OwnerType.INDIVIDUAL, actor=Actor.DASHBOARD, at=T0)
+
+    # One redraw is queued; a second change while it waits doesn't queue another.
+    assert len(_jobs(session_factory, MESSAGE_SYNC_JOB)) == synced + 1
+    store.set_owner_type_override(prop.id, OwnerType.AGENT, actor=Actor.DASHBOARD, at=T0)
+    assert len(_jobs(session_factory, MESSAGE_SYNC_JOB)) == synced + 1
+
+
+def test_the_override_refuses_unknown_and_merged_properties(
+    store: SqlPropertyStore, add_listing: AddListing, session_factory: sessionmaker[Session]
+) -> None:
+    with pytest.raises(PropertyNotFoundError):
+        store.set_owner_type_override(999, OwnerType.AGENT, actor=Actor.DASHBOARD, at=T0)
+    absorbed = store.ensure_for_listing(add_listing("a"), at=T0).id
+    survivor = store.ensure_for_listing(add_listing("b"), at=T0).id
+    with session_scope(session_factory) as session:
+        session.get_one(Property, absorbed).merged_into_id = survivor
+    with pytest.raises(PropertyMergedError):
+        store.set_owner_type_override(absorbed, OwnerType.AGENT, actor=Actor.DASHBOARD, at=T0)

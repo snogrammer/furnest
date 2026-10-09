@@ -18,6 +18,15 @@
       {% endfor %}
     </select>
   </label>
+  <label>
+    <span class="visually-hidden">Owner</span>
+    <select name="owner">
+      <option value="">Any owner</option>
+      {% for kind in owner_types_all %}
+      <option value="{{ kind.value }}" {% if f.owner == kind %}selected{% endif %}>{{ owner_label(kind) }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <fieldset class="segmented">
     <legend class="visually-hidden">Layout</legend>
     <label><input type="radio" name="view" value="list" {% if f.view.value == "list" %}checked{% endif %}> List</label>

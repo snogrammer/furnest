@@ -7,8 +7,9 @@ function, so the same property always renders the same payload, and the payload 
 what the tests snapshot.
 
 The embed shows the first photo, the monthly price, beds and baths, the score with
-its top contributors, the source listing (the title links to it) and the
-dashboard's detail page. A listing with no email address
+its top contributors, who is behind the unit when that is known (``owner_type``),
+the source listing (the title links to it) and the dashboard's detail page. A listing
+with no email address
 (``manual_contact_required``) adds a Contact field that links to the source, where
 the lister has to be messaged. Under it, one row of buttons: Approve, Deny, Inquire and
 Snooze, each with a ``custom_id`` from :mod:`furnest.notify.custom_ids`.
@@ -30,7 +31,14 @@ from collections.abc import Callable, Collection
 from typing import Any
 
 from furnest.db.property_store import FINISHED, PropertyDetail, PropertyState
-from furnest.domain import Actor, PropertyStatus, allowed_targets, beds_baths
+from furnest.domain import (
+    Actor,
+    OwnerType,
+    PropertyStatus,
+    allowed_targets,
+    beds_baths,
+    owner_type_label,
+)
 from furnest.notify.custom_ids import DiscordAction, encode_custom_id
 
 JsonObject = dict[str, Any]
@@ -124,6 +132,8 @@ def match_embed(
         fields.append(_field("Beds / Baths", rooms, inline=True))
     if state.score is not None:
         fields.append(_field("Score", f"{state.score}/100", inline=True))
+    if state.owner_type is not OwnerType.UNKNOWN:
+        fields.append(_field("Owner", owner_type_label(state.owner_type), inline=True))
     reasons = _top_breakdown(detail)
     if reasons:
         fields.append(_field("Why it matched", reasons))

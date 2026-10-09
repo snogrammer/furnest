@@ -12,7 +12,14 @@ from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import EnrichmentResult, Listing, Property, RiskFlag
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import Actor, FilterRule, Money, NormalizedListing, PropertyStatus
+from furnest.domain import (
+    Actor,
+    FilterRule,
+    Money,
+    NormalizedListing,
+    OwnerType,
+    PropertyStatus,
+)
 from furnest.domain.price import Price
 from furnest.matching import BreakdownItem, MatchResult, RuleResult, RuleStatus
 
@@ -399,3 +406,28 @@ def test_alternative_with_unknown_currency_shows_unknown_price(
     assert "Odd currency" in html
     assert '<span class="muted">unknown</span>' in html
     assert "▼" not in html
+
+
+def test_owner_type_fact_and_form(
+    authed_client: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    property_id = seed(owner_type="agent")
+
+    html = get(authed_client, f"/properties/{property_id}")
+
+    assert "<dt>Owner</dt>" in html
+    assert '<span class="status owner-agent">Agent / broker</span>' in html
+    assert "set by hand" not in html
+    assert f'action="/properties/{property_id}/owner-type"' in html
+    assert '<option value="" selected>Use what the listing suggests</option>' in html
+    assert '<option value="unknown"' not in html
+
+    SqlPropertyStore(session_factory).set_owner_type_override(
+        property_id, OwnerType.INDIVIDUAL, actor=Actor.DASHBOARD, at=T0
+    )
+    html = get(authed_client, f"/properties/{property_id}")
+
+    assert '<span class="status owner-individual">Private landlord</span>' in html
+    assert "set by hand" in html
+    assert '<option value="individual" selected>Private landlord</option>' in html
+    assert "Owner type set to Private landlord" in html

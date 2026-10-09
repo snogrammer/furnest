@@ -46,6 +46,8 @@ ms, or a date string)
 ``media`` photos                          ``images``
 ========================================  ===========================================
 
+``_type``, ``rental.*``, broker/MLS attribution ``owner_type`` (see ``_owner_type``)
+
 Every listing is ``furnished`` (the search asked for it), and ``contact.platform_only``
 is set: Zillow routes renters through its own contact form. Agent and broker details
 are dropped from ``raw`` because they name people.
@@ -65,8 +67,10 @@ from furnest.domain import (
     Criteria,
     Money,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
+    infer_owner_type,
     normalize_property_type,
     parse_price,
 )
@@ -83,6 +87,11 @@ _RAW_EXCLUDED = frozenset({"propertyDisplayRules", "attributionInfo", "listingAg
 # Of ``_details``, only these go into ``raw``; the rest (price history, nearby homes,
 # schools) is large and not about the rental.
 _RAW_DETAILS = ("description", "resoFacts")
+# ``rental.marketingTreatments`` prefixes (lower-cased) that mark an operator of many
+# units, and ones that mark a listing syndicated from a feed, which is nearly always a
+# property manager's software.
+_MANAGER_TREATMENTS = ("multifamily", "paidmultifamily", "paidorunpaidmultifamily")
+_FEED_TREATMENTS = ("singlefamilypaid", "feedconnect")
 # ``resoFacts`` lists that hold amenity words.
 _FEATURE_LISTS = (
     "appliances",
@@ -229,6 +238,9 @@ def _listing(
         baths=half(item.get("bathrooms")),
         sqft=positive(item.get("livingArea")),
         property_type=_property_type(item, beds, room=room),
+        owner_type=infer_owner_type(
+            _title(item, address, beds), text(details.get("description")), hint=_owner_type(item)
+        ),
         furnished=True,
         amenities=_amenities(facts),
         available_from=_available_from(item, details, facts, today),
@@ -237,6 +249,44 @@ def _listing(
         contact=Contact(platform_only=True),
         raw=_raw(item, details),
     )
+
+
+def _owner_type(item: dict[str, Any]) -> OwnerType:
+    """Who lists the place, from the item's structure (#113).
+
+    A building listed by unit group, a build-to-rent item or a multifamily marketing
+    treatment is an operator of many units. Broker or MLS attribution is an agent, and
+    outranks a feed treatment: an agent's listing can be syndicated too. The
+    attribution blocks are only checked for presence; they stay out of ``raw``
+    because they name people. ``groupType`` is not used: every item in a rent search
+    carries ``apartmentComplex``, a condo included.
+    """
+    if item.get("_type") == GROUP:
+        return OwnerType.PROPERTY_MANAGER
+    rental = _object(item.get("rental"))
+    treatments = [t.lower() for t in rental.get("marketingTreatments") or () if isinstance(t, str)]
+    if rental.get("isBuildToRent") is True or any(
+        t.startswith(_MANAGER_TREATMENTS) for t in treatments
+    ):
+        return OwnerType.PROPERTY_MANAGER
+    if _has_attribution(item):
+        return OwnerType.AGENT
+    if any(t.startswith(_FEED_TREATMENTS) for t in treatments):
+        return OwnerType.PROPERTY_MANAGER
+    return OwnerType.UNKNOWN
+
+
+def _has_attribution(item: dict[str, Any]) -> bool:
+    rules = _object(item.get("propertyDisplayRules"))
+    attribution = _object(item.get("attributionInfo"))
+    named = (
+        _dig(rules, "mls", "brokerName"),
+        _dig(rules, "agent", "agentName"),
+        attribution.get("brokerName"),
+        attribution.get("mlsName"),
+        attribution.get("agentName"),
+    )
+    return any(text(value) for value in named) or bool(_object(item.get("listingAgent")))
 
 
 def _object(value: object) -> dict[str, Any]:

@@ -10,8 +10,10 @@ NULL: its creation.
 
 ``score``, ``match_result`` and ``criteria_version_id`` hold the best match among
 its listings (``match_listing_id`` names that listing), and ``snoozed_until``,
-``manual_contact_required`` and the Discord message reference are set by the
-pipeline and the Discord integration.
+``manual_contact_required``, ``owner_type`` and the Discord message reference are set
+by the pipeline and the Discord integration. ``owner_type`` is who is behind the unit
+(:class:`~furnest.domain.OwnerType`): what the primary listing suggests, unless a
+person set ``owner_type_override``, which wins and survives re-ingestion (#113).
 
 When grouping finds that two properties are the same unit, one is merged into the
 other: its listings, notes and emails move to the survivor and ``merged_into_id``
@@ -33,7 +35,7 @@ from sqlalchemy import JSON, CheckConstraint, Enum, Float, ForeignKey, Index, St
 from sqlalchemy.orm import Mapped, mapped_column
 
 from furnest.db.base import Base, UTCDateTime, utcnow
-from furnest.domain import Actor, PropertyStatus
+from furnest.domain import Actor, OwnerType, PropertyStatus
 
 
 def _actor_enum(name: str) -> Enum:
@@ -55,6 +57,17 @@ def _status_enum(name: str) -> Enum:
         create_constraint=True,
         length=32,
         values_callable=lambda statuses: [s.value for s in statuses],
+    )
+
+
+def _owner_type_enum(name: str) -> Enum:
+    return Enum(
+        OwnerType,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        length=32,
+        values_callable=lambda kinds: [k.value for k in kinds],
     )
 
 
@@ -80,6 +93,17 @@ class Property(Base):
     )
     snoozed_until: Mapped[datetime | None] = mapped_column(UTCDateTime)
     manual_contact_required: Mapped[bool] = mapped_column(default=False)
+    # The effective owner type: ``owner_type_override`` when set, else what the primary
+    # listing suggests. Kept current by ``property_store``, like manual_contact_required.
+    owner_type: Mapped[OwnerType] = mapped_column(
+        _owner_type_enum("property_owner_type"),
+        default=OwnerType.UNKNOWN,
+        server_default=OwnerType.UNKNOWN.value,
+    )
+    # Set by a person on the detail page; NULL means "use what the listing suggests".
+    owner_type_override: Mapped[OwnerType | None] = mapped_column(
+        _owner_type_enum("property_owner_type_override")
+    )
     discord_channel_id: Mapped[str | None] = mapped_column(String(32))
     discord_message_id: Mapped[str | None] = mapped_column(String(32))
     # Set once this property has been merged into another (grouping).

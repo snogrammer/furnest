@@ -14,7 +14,7 @@ from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Property
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import Actor, NormalizedListing, PropertyStatus
+from furnest.domain import Actor, NormalizedListing, OwnerType, PropertyStatus
 from furnest.web.routes.pages import MAX_BULK
 
 pytestmark = pytest.mark.integration
@@ -401,3 +401,83 @@ def test_bulk_skips_a_merged_property(
     assert response.status_code == 303
     html = authed_client.get("/", headers=HTML).text
     assert f"Listing {absorbed}" not in html
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+def test_set_and_clear_the_owner_type(
+    authed_client: TestClient, csrf: Csrf, make_property: MakeProperty, store: SqlPropertyStore
+) -> None:
+    property_id = make_property(S.SUGGESTED)
+
+    response = post(
+        authed_client, csrf, f"/properties/{property_id}/owner-type", {"owner_type": "agent"}
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/properties/{property_id}"
+    state = store.get(property_id)
+    assert state is not None
+    assert (state.owner_type, state.owner_type_override) == (OwnerType.AGENT, OwnerType.AGENT)
+    assert last_audit_actor(store, property_id) is Actor.DASHBOARD
+
+    response = post(
+        authed_client, csrf, f"/properties/{property_id}/owner-type", {"owner_type": ""}
+    )
+
+    assert response.status_code == 303
+    state = store.get(property_id)
+    assert state is not None
+    assert (state.owner_type, state.owner_type_override) == (OwnerType.UNKNOWN, None)
+
+
+@pytest.mark.parametrize("value", ["landlord", "unknown"])
+def test_an_owner_type_that_is_not_offered_is_422(
+    authed_client: TestClient, csrf: Csrf, make_property: MakeProperty, value: str
+) -> None:
+    property_id = make_property(S.SUGGESTED)
+    response = post(
+        authed_client, csrf, f"/properties/{property_id}/owner-type", {"owner_type": value}
+    )
+    assert response.status_code == 422
+
+
+def test_owner_type_on_unknown_property_is_404(authed_client: TestClient, csrf: Csrf) -> None:
+    response = post(authed_client, csrf, "/properties/999/owner-type", {"owner_type": "agent"})
+    assert response.status_code == 404
+
+
+def test_owner_type_on_a_merged_property_redirects_to_the_survivor(
+    authed_client: TestClient,
+    csrf: Csrf,
+    make_property: MakeProperty,
+    session_factory: sessionmaker[Session],
+) -> None:
+    absorbed, survivor = make_property(S.SUGGESTED), make_property(S.SUGGESTED)
+    merge(session_factory, absorbed, survivor)
+
+    response = post(
+        authed_client, csrf, f"/properties/{absorbed}/owner-type", {"owner_type": "agent"}
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/properties/{survivor}"
+
+
+def test_owner_type_needs_csrf(authed_client: TestClient, make_property: MakeProperty) -> None:
+    property_id = make_property(S.SUGGESTED)
+    response = authed_client.post(
+        f"/properties/{property_id}/owner-type", data={"owner_type": "agent"}, headers=HTML
+    )
+    assert response.status_code == 403
+
+
+def test_owner_type_needs_login(client: TestClient, make_property: MakeProperty) -> None:
+    property_id = make_property(S.SUGGESTED)
+    response = client.post(
+        f"/properties/{property_id}/owner-type",
+        data={"owner_type": "agent"},
+        follow_redirects=False,
+    )
+    assert response.status_code in (303, 401, 403)

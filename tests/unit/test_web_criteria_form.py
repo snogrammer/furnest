@@ -5,7 +5,15 @@ from datetime import date
 import pytest
 from starlette.datastructures import FormData, UploadFile
 
-from furnest.domain import Area, Criteria, DistanceUnit, FilterRule, Money, PropertyType
+from furnest.domain import (
+    Area,
+    Criteria,
+    DistanceUnit,
+    FilterRule,
+    Money,
+    OwnerType,
+    PropertyType,
+)
 from furnest.web.criteria_form import GENERAL, FormState, parse_form, state_from_criteria
 
 pytestmark = pytest.mark.unit
@@ -34,6 +42,7 @@ FULL = Criteria(
     price_max=Money(amount_minor=240050),
     property_types_allow=(PropertyType.APARTMENT, PropertyType.TOWNHOUSE),
     property_types_deny=(PropertyType.ROOM,),
+    owner_types_deny=(OwnerType.AGENT,),
     min_beds=0,
     min_baths=1.5,
     min_sqft=600,

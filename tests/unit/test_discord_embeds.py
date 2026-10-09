@@ -21,7 +21,7 @@ from furnest.db.property_store import (
     PropertyDetail,
     PropertyState,
 )
-from furnest.domain import Money, NormalizedListing, PropertyStatus
+from furnest.domain import Money, NormalizedListing, OwnerType, PropertyStatus
 from furnest.matching.scoring import BreakdownItem, MatchResult
 from furnest.notify.custom_ids import DiscordAction, parse_custom_id
 from furnest.notify.embeds import (
@@ -174,6 +174,16 @@ def test_snapshot_manual_contact() -> None:
     d = detail(property=state(manual_contact_required=True))
 
     assert_snapshot("match_manual_contact", build(d))
+
+
+def test_snapshot_owner_type() -> None:
+    d = replace(detail(), property=state(owner_type=OwnerType.PROPERTY_MANAGER))
+    assert_snapshot("match_owner_type", build(d))
+
+
+def test_an_unknown_owner_type_adds_no_field() -> None:
+    fields = [field["name"] for field in build(detail())["embeds"][0]["fields"]]
+    assert "Owner" not in fields
 
 
 def test_manual_contact_without_a_listing_has_no_contact_field() -> None:

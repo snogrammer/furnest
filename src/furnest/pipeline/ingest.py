@@ -186,7 +186,7 @@ class ListingIngestor:
                 amenities = self._extractor.extract(stored.listing)
                 self._listings.set_amenities(listing_id, amenities)
                 result = match_listing(
-                    stored.listing,
+                    stored.for_matching,
                     active.criteria,
                     criteria_version=active.version,
                     amenities=amenities,

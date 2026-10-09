@@ -169,6 +169,33 @@ def test_property_type(
     assert (result.rule, result.status, result.reason) == (FilterRule.PROPERTY_TYPE, status, reason)
 
 
+# --- owner type -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "deny", "status", "reason"),
+    [
+        ("agent", ["agent"], FAIL, "agent is denied"),
+        ("property_manager", ["agent", "property_manager"], FAIL, "property_manager is denied"),
+        ("individual", ["agent"], PASS, "individual is not denied"),
+        ("unknown", ["agent"], UNKNOWN, "owner type unknown"),
+        ("unknown", ["unknown"], FAIL, "unknown is denied"),
+    ],
+)
+def test_owner_type(kind: str, deny: list[str], status: RuleStatus, reason: str) -> None:
+    result = check({"owner_type": kind}, {"owner_types_deny": deny})
+    assert (result.rule, result.status, result.reason) == (FilterRule.OWNER_TYPE, status, reason)
+
+
+def test_an_unknown_owner_type_blocks_only_when_asked() -> None:
+    fields = {"owner_types_deny": ["agent"], "unknown_fails": ["owner_type"]}
+    lenient = evaluate_hard_filters(
+        listing(owner_type="unknown"), criteria(owner_types_deny=["agent"])
+    )
+    strict = evaluate_hard_filters(listing(owner_type="unknown"), criteria(**fields))
+    assert (lenient.passed, strict.passed) == (True, False)
+
+
 # --- size -------------------------------------------------------------------
 
 
@@ -368,6 +395,7 @@ def full_criteria(**fields: object) -> Criteria:
             "zip_codes": ["00001"],
             "price_max": usd(2000),
             "property_types_allow": ["apartment"],
+            "owner_types_deny": ["agent"],
             "min_beds": 1,
             "min_baths": 1,
             "min_sqft": 400,
@@ -388,6 +416,7 @@ def full_listing(**fields: object) -> NormalizedListing:
             "address": {"postal_code": "00001"},
             "price": {"amount": usd(1800)},
             "property_type": "apartment",
+            "owner_type": "individual",
             "beds": 1,
             "baths": 1,
             "sqft": 600,

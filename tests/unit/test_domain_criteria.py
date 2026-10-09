@@ -14,6 +14,7 @@ from furnest.domain import (
     DistanceUnit,
     FilterRule,
     Money,
+    OwnerType,
     PropertyType,
     diff_criteria,
     register_currency,
@@ -42,6 +43,7 @@ def test_full_profile_round_trips_through_json() -> None:
         price_max={"amount_minor": 300000},
         property_types_allow=["condo", "apartment", "apartment"],
         property_types_deny=["room"],
+        owner_types_deny=["property_manager", "agent", "agent"],
         min_beds=1,
         min_baths=1.5,
         min_sqft=500,
@@ -63,6 +65,7 @@ def test_full_profile_round_trips_through_json() -> None:
     assert profile.zip_codes == ("00001", "00002")
     assert profile.neighborhoods == ("old town", "riverside")
     assert profile.property_types_allow == (PropertyType.APARTMENT, PropertyType.CONDO)
+    assert profile.owner_types_deny == (OwnerType.AGENT, OwnerType.PROPERTY_MANAGER)
     assert profile.must_have_amenities == ("ac", "in_unit_laundry")
     assert profile.nice_to_have_amenities == {"deck_patio": 1.5, "king_bed": 3}
     assert profile.keywords_deny == ("basement", "no pets")
@@ -95,6 +98,7 @@ def test_equal_profiles_serialize_identically() -> None:
         ({"areas": [{"name": "x", "lat": 0, "lng": 0, "radius": 0}]}, "greater than 0"),
         ({"areas": [{"name": " ", "lat": 0, "lng": 0, "radius": 1}]}, "at least 1 character"),
         ({"property_types_allow": ["castle"]}, "enum"),
+        ({"owner_types_deny": ["landlord"]}, "enum"),
         ({"unknown_fails": ["vibes"]}, "enum"),
         ({"surprise": True}, "Extra inputs"),
     ],

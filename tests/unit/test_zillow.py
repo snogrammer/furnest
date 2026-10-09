@@ -12,7 +12,7 @@ import pytest
 from pydantic import SecretStr
 
 from furnest.config import AdapterOverrides, SourcesSettings
-from furnest.domain import Amenity, Criteria, Money, Price, PropertyType
+from furnest.domain import Amenity, Criteria, Money, OwnerType, Price, PropertyType
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.sources import SourceError, discover, resolve_config
 from furnest.sources.adapters.zillow import Zillow
@@ -493,3 +493,98 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
 
     keyed = {source.config.name: source for source in registry.configured(settings(enabled=True))}
     assert (keyed["zillow"].config.enabled, keyed["zillow"].config.disabled_reason) == (True, None)
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+def _owned(**fields: Any) -> Any:  # noqa: ANN401 - a NormalizedListing
+    item = {**items()[1], **fields}
+    (listing,) = parse_item(item, today=TODAY)
+    return listing
+
+
+@pytest.mark.parametrize(
+    ("fields", "expected"),
+    [
+        ({}, OwnerType.UNKNOWN),
+        ({"rental": {"isBuildToRent": True}}, OwnerType.PROPERTY_MANAGER),
+        (
+            {"rental": {"marketingTreatments": ["paid", "multiFamilySalesListing"]}},
+            OwnerType.PROPERTY_MANAGER,
+        ),
+        ({"rental": {"marketingTreatments": ["paidMultifamily"]}}, OwnerType.PROPERTY_MANAGER),
+        (
+            {
+                "rental": {
+                    "marketingTreatments": ["singleFamilyPaid", "feedConnectSingleFamilyFlatFee"]
+                }
+            },
+            OwnerType.PROPERTY_MANAGER,
+        ),
+        ({"attributionInfo": {"brokerName": "Example Realty"}}, OwnerType.AGENT),
+        ({"attributionInfo": {"mlsName": "Example MLS"}}, OwnerType.AGENT),
+        ({"propertyDisplayRules": {"agent": {"agentName": "Jane Example"}}}, OwnerType.AGENT),
+        ({"listingAgent": {"id": 1}}, OwnerType.AGENT),
+        # Empty attribution is no attribution.
+        ({"attributionInfo": {"brokerName": ""}, "propertyDisplayRules": {}}, OwnerType.UNKNOWN),
+        # An agent's listing can be syndicated too: attribution outranks the feed treatment.
+        (
+            {
+                "rental": {"marketingTreatments": ["feedConnectSingleFamilyFlatFee"]},
+                "attributionInfo": {"brokerName": "Example Realty"},
+            },
+            OwnerType.AGENT,
+        ),
+        # Multifamily outranks attribution: the operator is the lister.
+        (
+            {
+                "rental": {"marketingTreatments": ["paidMultifamily"]},
+                "attributionInfo": {"brokerName": "Example Realty"},
+            },
+            OwnerType.PROPERTY_MANAGER,
+        ),
+        # No structure to go on: the description decides.
+        ({"_details": {"description": "No brokers, I am the owner."}}, OwnerType.INDIVIDUAL),
+        ({"_details": {"description": "Call our leasing office."}}, OwnerType.PROPERTY_MANAGER),
+    ],
+)
+def test_owner_type_from_the_items_structure(fields: dict[str, Any], expected: OwnerType) -> None:
+    assert _owned(**fields).owner_type is expected
+
+
+def test_a_building_is_listed_by_a_property_manager() -> None:
+    listings = parse_item(items()[2], today=TODAY)
+    assert {listing.owner_type for listing in listings} == {OwnerType.PROPERTY_MANAGER}
+
+
+def test_attribution_is_read_for_the_owner_type_but_never_kept() -> None:
+    listing = _owned(
+        attributionInfo={"brokerName": "Example Realty", "agentName": "Jane Example"},
+        propertyDisplayRules={"mls": {"brokerName": "Example Realty"}},
+        listingAgent={"name": "Jane Example"},
+    )
+
+    assert listing.owner_type is OwnerType.AGENT
+    dumped = json.dumps(listing.raw)
+    assert "Example Realty" not in dumped
+    assert "Jane Example" not in dumped
+    assert {"attributionInfo", "propertyDisplayRules", "listingAgent"}.isdisjoint(listing.raw)
+
+
+def test_the_live_run_owner_types() -> None:
+    listings = [
+        listing
+        for item in fixture("dataset_live.json")
+        for listing in parse_item(item, today=TODAY)
+    ]
+    manager = OwnerType.PROPERTY_MANAGER
+    assert [(listing.source_id, listing.owner_type) for listing in listings] == [
+        ("100000001", manager),  # a feed-connected single-family listing
+        ("100000002-1bd", manager),
+        ("100000002-2bd", manager),
+        ("100000002-3bd", manager),
+        ("100000003-1bd", manager),
+        ("100000003-2bd", manager),
+        ("100000004", OwnerType.UNKNOWN),
+    ]

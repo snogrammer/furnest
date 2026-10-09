@@ -59,9 +59,11 @@ from furnest.domain import (
     Criteria,
     Money,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
     RentPeriod,
+    infer_owner_type,
     normalize_property_type,
     parse_period,
     parse_price,
@@ -75,6 +77,9 @@ _USD = "USD"
 
 # Item keys left out of ``raw``: people (host, co-hosts) and app deep links.
 _RAW_EXCLUDED = frozenset({"host", "coHosts", "androidLink", "iosLink"})
+# A host with this many reviews runs listings at scale; a team of co-hosts is a company.
+_MANAGER_RATING_COUNT = 1000
+_MANAGER_COHOSTS = 2
 _NOT_INCLUDED = "not included"
 _TITLE_SUFFIX = re.compile(r"(?:^|\s+)-\s+.*\s+-\s+Airbnb$")
 _COUNT = re.compile(r"^(?P<n>\d+(?:\.\d+)?)\s+(?:\w+\s+)?(?P<what>bedroom|bath|half-bath)s?\b")
@@ -178,6 +183,9 @@ def parse_item(item: dict[str, Any], *, window: StayWindow) -> NormalizedListing
         beds=beds,
         baths=baths,
         property_type=_property_type(text(item.get("roomType")), kind, beds),
+        owner_type=infer_owner_type(
+            _title(item, sub), text(item.get("description")), hint=_owner_type(item)
+        ),
         furnished=True,
         amenities=_amenities(item.get("amenities")),
         available_from=window.check_in,
@@ -185,6 +193,25 @@ def parse_item(item: dict[str, Any], *, window: StayWindow) -> NormalizedListing
         contact=Contact(platform_only=True),
         raw={k: v for k, v in item.items() if k not in _RAW_EXCLUDED},
     )
+
+
+def _owner_type(item: dict[str, Any]) -> OwnerType:
+    """Who hosts the place (#113), from counts in the host block, which itself stays
+    out of ``raw``.
+
+    An Airbnb account is a person's by default, so a host is an individual unless the
+    account works at scale: thousands of reviews, or a team of co-hosts. The Superhost
+    badge and the time as host say nothing about that. No host block: unknown.
+    """
+    host = _object(item.get("host"))
+    if not host:
+        return OwnerType.UNKNOWN
+    reviews = whole(host.get("ratingCount")) or 0
+    cohosts = item.get("coHosts")
+    team = len(cohosts) if isinstance(cohosts, list) else 0
+    if reviews >= _MANAGER_RATING_COUNT or team >= _MANAGER_COHOSTS:
+        return OwnerType.PROPERTY_MANAGER
+    return OwnerType.INDIVIDUAL
 
 
 def _object(value: object) -> dict[str, Any]:

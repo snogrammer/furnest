@@ -16,6 +16,7 @@
     <div><dt>Price</dt><dd>{% if primary and primary.summary.monthly_price %}{{ primary.summary.monthly_price.format() }}/mo{% else %}<span class="muted">unknown</span>{% endif %}</dd></div>
     {% set bb = beds_baths(primary.summary.beds, primary.summary.baths) if primary else none %}
     {% if bb %}<div><dt>Size</dt><dd>{{ bb }}{% if primary.listing.sqft %} · {{ primary.listing.sqft }} sqft{% endif %}</dd></div>{% endif %}
+    <div><dt>Owner</dt><dd><span class="status owner-{{ p.owner_type.value }}">{{ owner_label(p.owner_type) }}</span>{% if p.owner_type_override %} <small class="muted">set by hand</small>{% endif %}</dd></div>
     {% if p.address %}<div><dt>Address</dt><dd>{{ p.address }}</dd></div>{% endif %}
   </dl>
   {% if enrichment.risks %}
@@ -99,6 +100,22 @@
     </form>
   </details>
   {% endif %}
+  <details class="owner-type">
+    <summary>Owner type…</summary>
+    <form method="post" action="/properties/{{ p.id }}/owner-type" class="note-form" hx-boost="true">
+      {{ csrf_field(request) }}
+      <div class="field">
+        <label for="owner-type">Who is listing this place? <small class="muted">(read from the source and the listing's wording; your choice wins and is kept)</small></label>
+        <select id="owner-type" name="owner_type">
+          <option value=""{% if not p.owner_type_override %} selected{% endif %}>Use what the listing suggests</option>
+          {% for kind in owner_types %}
+          <option value="{{ kind.value }}"{% if p.owner_type_override == kind %} selected{% endif %}>{{ owner_label(kind) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="secondary">Save owner type</button>
+    </form>
+  </details>
   {% if p.snoozed_until %}<p class="muted">Snoozed until {{ when(p.snoozed_until) }}</p>{% endif %}
 
   <section aria-labelledby="photos">

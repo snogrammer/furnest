@@ -29,6 +29,7 @@ from pydantic import (
 
 from furnest.domain.geo import DistanceUnit
 from furnest.domain.money import Money
+from furnest.domain.owner_type import OwnerType
 from furnest.domain.property_type import PropertyType
 
 
@@ -50,6 +51,7 @@ class FilterRule(StrEnum):
     LOCATION = "location"
     PRICE = "price"
     PROPERTY_TYPE = "property_type"
+    OWNER_TYPE = "owner_type"
     MIN_BEDS = "min_beds"
     MIN_BATHS = "min_baths"
     MIN_SQFT = "min_sqft"
@@ -64,6 +66,7 @@ class FilterRule(StrEnum):
 TagList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique_lower)]
 TextList = Annotated[tuple[str, ...], AfterValidator(_sorted_unique)]
 TypeList = Annotated[tuple[PropertyType, ...], AfterValidator(_sorted_members)]
+OwnerTypeList = Annotated[tuple[OwnerType, ...], AfterValidator(_sorted_members)]
 RuleList = Annotated[tuple[FilterRule, ...], AfterValidator(_sorted_members)]
 Weight = Annotated[float, Field(gt=0, le=100)]
 
@@ -95,6 +98,9 @@ class Criteria(BaseModel):
     # Empty allow list means any type; deny always wins.
     property_types_allow: TypeList = ()
     property_types_deny: TypeList = ()
+    # Deny only, no allow list (#113). A listing whose owner type can't be told is
+    # UNKNOWN for this rule, so ``unknown_fails`` decides whether that blocks it.
+    owner_types_deny: OwnerTypeList = ()
 
     min_beds: int | None = Field(default=None, ge=0)
     min_baths: float | None = Field(default=None, ge=0, multiple_of=0.5)

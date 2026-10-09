@@ -90,6 +90,7 @@ disappears, swapping in another means changing `ACTOR` and the mapping in
 | `minimumStayDays` | `min_lease_months`, rounded up from 30-day months |
 | `photos` | `images` |
 | everything except `reviews` | `raw`. Reviews carry reviewers' names. |
+| (nothing: the actor has no landlord data) | `owner_type`, from the title and description alone (`furnest.domain.owner_type`) |
 
 Every listing is `furnished`. `contact` is `platform_only`, because Furnished Finder
 keeps landlord contact details behind its own messaging.
@@ -192,6 +193,7 @@ URL. Groups without a bedroom count are skipped.
 | `_details.resoFacts.leaseTerm` | `min_lease_months` when it names months ("6 months") |
 | `media.allPropertyPhotos.highResolution`, else `media.propertyPhotoLinks.highResolutionLink` | `images` |
 | everything except `propertyDisplayRules`, `attributionInfo`, `listingAgent`, `contact`; of `_details` only `description` and `resoFacts` | `raw`. The dropped blocks name agents and brokers. The rest of `_details` (price history, nearby homes, schools) is bulky and not about the rental. |
+| `_type` `propertyGroup`, `rental.isBuildToRent` or a `rental.marketingTreatments` entry starting `multifamily`/`paidMultifamily` → property manager; a broker, MLS or agent name present in `propertyDisplayRules`, `attributionInfo` or `listingAgent` → agent; a `singleFamilyPaid`/`feedConnect*` treatment → property manager; else the title and description | `owner_type`. Only the type is kept: the attribution blocks are checked for presence and still stay out of `raw`. `groupType` isn't used, because every item says `apartmentComplex`. |
 
 Every listing is `furnished`, because the search asked for it. `contact` is
 `platform_only`, because Zillow routes renters through its own contact form.
@@ -287,6 +289,7 @@ another means changing `ACTOR` and the mapping in `sources/adapters/airbnb/parse
 | the window's check-in | `available_from` |
 | `images[].imageUrl`, else `thumbnail` | `images` |
 | everything except `host`, `coHosts`, `androidLink`, `iosLink` | `raw`. The dropped blocks name people. |
+| `host.ratingCount` ≥ 1000 or two or more `coHosts` → property manager; any other `host` → individual; no `host` → the title and description | `owner_type`. Only the type is kept; the host block still stays out of `raw`. The Superhost badge isn't used: it says nothing about whether the host is a person. |
 
 **Price.** When the item has the stay's total before taxes, the listing's price is
 that total spread over a month, `total x (365/12) / nights`, quoted monthly. The
@@ -401,6 +404,7 @@ posting fetched once per worker process, and a stop at the first block.
 | gallery photos (`_600x450.jpg`, up to 20) | `images` |
 | an email address written in the description | `contact.email`; otherwise `contact.platform_only` |
 | category, price as shown, neighbourhood, both JSON-LD blocks, the chips, post id, posting date | `raw` |
+| a `broker fee` chip → agent; an `application fee` chip → property manager; else the title and body (`furnest.domain.owner_type`) | `owner_type` |
 
 Every listing is `furnished`, since the search asks for it.
 

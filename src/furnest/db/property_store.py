@@ -28,7 +28,10 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
   the criteria never undoes a decision a person made.
   It also keeps ``manual_contact_required`` in step with the primary listing: set
   while that listing has no email address, so the inquiry is sent by hand through
-  the source (``furnest.email.inquiry``).
+  the source (``furnest.email.inquiry``). ``owner_type`` is kept in step the same
+  way: the primary listing's inferred owner type, unless a person set
+  ``owner_type_override`` (:meth:`SqlPropertyStore.set_owner_type_override`), which
+  wins until it is cleared.
 * :meth:`SqlPropertyStore.mark_gone` moves a property to ``unavailable`` once none
   of its listings is active. A property whose status can't change that way (denied,
   won, lost, archived) gets a ``listings removed`` event in place instead, so the gap
@@ -120,6 +123,7 @@ from furnest.domain import (
     AddressParser,
     Money,
     NormalizedListing,
+    OwnerType,
     ParsedAddress,
     PropertyStatus,
 )
@@ -195,6 +199,9 @@ class PropertyState:
     discord_message_id: str | None = None
     # Set once grouping merged this property into another.
     merged_into_id: int | None = None
+    # Who is behind the unit: the override when set, else the primary listing's guess.
+    owner_type: OwnerType = OwnerType.UNKNOWN
+    owner_type_override: OwnerType | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +325,8 @@ def _state(row: Property) -> PropertyState:
         created_at=row.created_at,
         discord_message_id=row.discord_message_id,
         merged_into_id=row.merged_into_id,
+        owner_type=row.owner_type,
+        owner_type_override=row.owner_type_override,
     )
 
 
@@ -386,6 +395,26 @@ def _manual_contact(listing_row: Listing) -> bool:
     return NormalizedListing.model_validate(listing_row.data).contact.email is None
 
 
+def _inferred_owner_type(listing_row: Listing) -> OwnerType:
+    """The owner type the listing's adapter inferred (see ``furnest.domain.owner_type``)."""
+    return NormalizedListing.model_validate(listing_row.data).owner_type
+
+
+def _effective_owner_type(row: Property, primary: Listing | None) -> OwnerType:
+    if row.owner_type_override is not None:
+        return row.owner_type_override
+    return OwnerType.UNKNOWN if primary is None else _inferred_owner_type(primary)
+
+
+def _sync_owner_type(session: Session, row: Property, primary: Listing | None) -> None:
+    """Bring ``row.owner_type`` in step with the override and the primary listing,
+    redrawing the Discord message when it changed."""
+    kind = _effective_owner_type(row, primary)
+    if kind is not row.owner_type:
+        row.owner_type = kind
+        _sync_message(session, row)
+
+
 def _filtered[*Ts](
     statement: Select[*Ts],
     *,
@@ -394,6 +423,7 @@ def _filtered[*Ts](
     text: str | None,
     include_snoozed: bool,
     changed_since: datetime | None = None,
+    owner_type: OwnerType | None = None,
 ) -> Select[*Ts]:
     """``statement`` over properties joined to their primary listing, filtered."""
     statement = (
@@ -407,6 +437,8 @@ def _filtered[*Ts](
         statement = statement.where(_visible(now))
     if changed_since is not None:
         statement = statement.where(Property.status_changed_at >= changed_since)
+    if owner_type is not None:
+        statement = statement.where(Property.owner_type == owner_type)
     if text:
         statement = statement.where(
             or_(
@@ -667,6 +699,8 @@ def _has_active_listing(session: Session, property_id: int, *, besides: Iterable
 # actor_detail of the events that open and close a gap in a property's listings.
 GONE = "listings removed"
 RELISTED = "relisted"
+# The in-place audit event of a person setting or clearing the owner type (#113).
+OWNER_TYPE = "owner_type"
 
 
 def _mark_gone_in(session: Session, row: Property, *, at: datetime) -> bool:
@@ -773,6 +807,7 @@ def _new_property(
         lat=listing_row.lat,
         lng=listing_row.lng,
         manual_contact_required=_manual_contact(listing_row),
+        owner_type=_inferred_owner_type(listing_row),
         status_changed_at=at,
         created_at=at,
         updated_at=at,
@@ -970,6 +1005,48 @@ class SqlPropertyStore:
         with session_scope(self._session_factory) as session:
             return _notes(session, property_id)
 
+    def set_owner_type_override(
+        self,
+        property_id: int,
+        owner_type: OwnerType | None,
+        *,
+        actor: Actor,
+        at: datetime,
+        detail: str | None = None,
+    ) -> PropertyState:
+        """Set, or with ``None`` clear, the owner type a person chose for the property.
+
+        The effective ``owner_type`` is recomputed (the override, else the primary
+        listing's guess), an in-place audit event with ``actor_detail``
+        :data:`OWNER_TYPE` records the change, and the property's listings are queued
+        for a rescore so the owner-type rule sees it. Setting what is already set
+        changes nothing. Raises :class:`PropertyNotFoundError` and
+        :class:`PropertyMergedError` like :meth:`add_note`.
+        """
+        with session_scope(self._session_factory) as session:
+            row = live_property(session, property_id)
+            if row.owner_type_override == owner_type:
+                return _state(row)
+            row.owner_type_override = owner_type
+            _sync_owner_type(session, row, primary_listing(session, row.id))
+            row.updated_at = at
+            _audit_in_place(
+                session,
+                row,
+                actor=actor,
+                at=at,
+                detail=OWNER_TYPE,
+                payload={
+                    "owner_type_override": None if owner_type is None else owner_type.value,
+                    "owner_type": row.owner_type.value,
+                },
+            )
+            listing_ids = session.scalars(
+                select(Listing.id).where(Listing.property_id == row.id).order_by(Listing.id)
+            ).all()
+            _enqueue_rescore(session, list(listing_ids))
+            return _state(row)
+
     def record_match(self, listing_id: int, result: MatchResult, *, at: datetime) -> PropertyState:
         """Store ``result`` on the listing's property, creating the property if needed.
 
@@ -985,6 +1062,7 @@ class SqlPropertyStore:
             if manual != row.manual_contact_required:
                 row.manual_contact_required = manual
                 _sync_message(session, row)
+            _sync_owner_type(session, row, primary)
             # The property shows its best listing's match; a listing's newer result
             # replaces its own older one even if lower.
             if (
@@ -1156,12 +1234,14 @@ class SqlPropertyStore:
         sort: PropertySort = PropertySort.SCORE,
         include_snoozed: bool = False,
         changed_since: datetime | None = None,
+        owner_type: OwnerType | None = None,
     ) -> PropertyPage:
         """One page of properties with their primary listing, for the dashboard.
 
         Filters as :meth:`query` does, plus ``text``: a case-insensitive substring
-        of the listing title or the address (``%`` and ``_`` match themselves), and
-        ``changed_since``: only properties whose status changed at or after it.
+        of the listing title or the address (``%`` and ``_`` match themselves),
+        ``changed_since``: only properties whose status changed at or after it, and
+        ``owner_type``: only properties with that effective owner type.
         Ties in ``sort`` fall back to newest first, so paging is stable.
         """
         statuses = None if statuses is None else list(statuses)
@@ -1174,6 +1254,7 @@ class SqlPropertyStore:
                 text=text,
                 include_snoozed=include_snoozed,
                 changed_since=changed_since,
+                owner_type=owner_type,
             )
 
         statement = (
@@ -1193,7 +1274,12 @@ class SqlPropertyStore:
             return PropertyPage(rows=rows, total=total)
 
     def status_counts(
-        self, *, now: datetime, text: str | None = None, include_snoozed: bool = False
+        self,
+        *,
+        now: datetime,
+        text: str | None = None,
+        include_snoozed: bool = False,
+        owner_type: OwnerType | None = None,
     ) -> dict[PropertyStatus, int]:
         """How many properties :meth:`search` would find in each status (absent: none)."""
         statement = _filtered(
@@ -1202,6 +1288,7 @@ class SqlPropertyStore:
             statuses=None,
             text=text,
             include_snoozed=include_snoozed,
+            owner_type=owner_type,
         ).group_by(Property.status)
         with session_scope(self._session_factory) as session:
             return {status: count for status, count in session.execute(statement)}
@@ -1366,6 +1453,7 @@ class SqlPropertyStore:
                 old.address = None if old_parsed is None else old_parsed.canonical
                 old.lat, old.lng = primary.lat, primary.lng
                 old.manual_contact_required = _manual_contact(primary)
+                _sync_owner_type(session, old, primary)
             old.updated_at = at
             _audit_in_place(
                 session,

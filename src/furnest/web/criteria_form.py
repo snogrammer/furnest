@@ -6,7 +6,8 @@ conventions:
 - Scalars (beds, dates, weights) are plain inputs. Blank means "not set".
 - Prices are typed in major units ("1500") with one ``currency`` input for both.
 - ZIP codes, neighborhoods and keywords are textareas: one entry per line or comma.
-- Property types, must-have amenities and ``unknown_fails`` are checkbox groups.
+- Property types, denied owner types, must-have amenities and ``unknown_fails`` are
+  checkbox groups.
 - Areas and nice-to-have weights are repeated rows named ``areas-<i>-<field>`` and
   ``nice-<i>-<field>``. A row left blank, or with its ``remove`` box ticked, is dropped.
 
@@ -50,6 +51,7 @@ TEXT_LISTS = ("zip_codes", "neighborhoods", "keywords_allow", "keywords_deny")
 CHECK_LISTS = (
     "property_types_allow",
     "property_types_deny",
+    "owner_types_deny",
     "must_have_amenities",
     "unknown_fails",
 )

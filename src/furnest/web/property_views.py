@@ -16,6 +16,10 @@ its own transaction and skips, with the reason, any it may not move.
 
 The detail page's price history (:func:`price_timeline`) puts every listing's price
 changes in one timeline, each with its change from the one before.
+
+Owner type (#113): the dashboard filters on the property's effective owner type
+(``Filters.owner``), cards and the detail page show it as a chip
+(:func:`owner_label`), and the timeline names a person's override.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.property_store import (
     GONE,
+    OWNER_TYPE,
     RELISTED,
     AuditEntry,
     PropertyMergedError,
@@ -40,7 +45,15 @@ from furnest.db.property_store import (
     PropertySort,
     SqlPropertyStore,
 )
-from furnest.domain import Actor, InvalidTransitionError, Money, PropertyStatus, allowed_targets
+from furnest.domain import (
+    Actor,
+    InvalidTransitionError,
+    Money,
+    OwnerType,
+    PropertyStatus,
+    allowed_targets,
+    owner_type_label,
+)
 
 S = PropertyStatus
 
@@ -98,6 +111,8 @@ class Filters:
     view: View = View.LIST
     page: int = 1
     snoozed: bool = False
+    # Only properties with this effective owner type (#113); None is any.
+    owner: OwnerType | None = None
 
     @property
     def tab(self) -> Tab:
@@ -112,6 +127,7 @@ class Filters:
             "view": self.view.value,
             "page": self.page,
             "snoozed": self.snoozed,
+            "owner": self.owner,
             **overrides,
         }
         defaults = Filters()
@@ -120,6 +136,8 @@ class Filters:
             default = getattr(defaults, name)
             if value == default or (isinstance(default, StrEnum) and value == default.value):
                 continue
+            if isinstance(value, StrEnum):
+                value = value.value
             params[name] = "true" if value is True else str(value)
         query = urlencode(params)
         return f"/?{query}" if query else "/"
@@ -156,7 +174,9 @@ def build_dashboard(
 ) -> Dashboard:
     store = SqlPropertyStore(session_factory)
     text = filters.q or None
-    counts = store.status_counts(now=now, text=text, include_snoozed=filters.snoozed)
+    counts = store.status_counts(
+        now=now, text=text, include_snoozed=filters.snoozed, owner_type=filters.owner
+    )
     tabs = [TabCount(tab, sum(counts.get(s, 0) for s in tab.statuses)) for tab in TABS]
 
     def search(tab: Tab, offset: int) -> tuple[list[PropertyRow], int]:
@@ -168,6 +188,7 @@ def build_dashboard(
             text=text,
             sort=filters.sort,
             include_snoozed=filters.snoozed,
+            owner_type=filters.owner,
         )
         return page.rows, page.total
 
@@ -189,6 +210,10 @@ def build_dashboard(
 
 def status_label(status: PropertyStatus) -> str:
     return status.value.replace("_", " ")
+
+
+def owner_label(kind: OwnerType) -> str:
+    return owner_type_label(kind)
 
 
 def audit_label(entry: AuditEntry, property_id: int | None = None) -> str:
@@ -226,6 +251,13 @@ def _audit_text(entry: AuditEntry) -> str:
             return f"Merged #{payload['merged_from']} into this property{suffix}"
         if entry.actor_detail == GONE:
             return "All listings removed"
+        if entry.actor_detail == OWNER_TYPE:
+            chosen = payload.get("owner_type_override")
+            if chosen is None:
+                return "Owner type override cleared"
+            if chosen in set(OwnerType):
+                return f"Owner type set to {owner_label(OwnerType(chosen))}"
+            return "Owner type set"
         if payload.get("unsnoozed"):
             return "Snooze ended"
         if "snoozed_until" in payload:

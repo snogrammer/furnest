@@ -18,7 +18,7 @@ from furnest.db.property_store import (
     SqlPropertyStore,
 )
 from furnest.db.session import session_scope
-from furnest.domain import Actor, Criteria, NormalizedListing, PropertyStatus
+from furnest.domain import Actor, Criteria, NormalizedListing, OwnerType, PropertyStatus
 from furnest.matching import MatchResult
 from furnest.worker import queue
 
@@ -576,3 +576,81 @@ def test_the_flag_follows_the_listing_and_redraws_the_message(
     assert _sync_jobs(session_factory) == synced + 1
     store.record_match(listing_id, passing(), at=T0 + 2 * HOUR)
     assert _sync_jobs(session_factory) == synced + 1
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+def _owned(source_id: str, owner_type: str) -> NormalizedListing:
+    return NormalizedListing.model_validate(
+        {
+            "source": "test",
+            "source_id": source_id,
+            "url": f"https://example.com/{source_id}",
+            "title": "Furnished place",
+            "owner_type": owner_type,
+        }
+    )
+
+
+def _set_override(
+    session_factory: sessionmaker[Session], property_id: int, kind: OwnerType | None
+) -> None:
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == property_id).values(owner_type_override=kind)
+        )
+
+
+@pytest.mark.parametrize("kind", list(OwnerType))
+def test_a_property_takes_its_listings_owner_type(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore, kind: OwnerType
+) -> None:
+    (listing_id,) = (
+        SqlListingStore(session_factory)
+        .upsert_batch("test", [_owned("a", kind.value)], seen_at=T0)
+        .new_ids
+    )
+
+    created = store.ensure_for_listing(listing_id, at=T0)
+    matched = store.record_match(listing_id, passing(), at=T0)
+
+    assert (created.owner_type, matched.owner_type) == (kind, kind)
+    assert matched.owner_type_override is None
+
+
+def test_the_owner_type_follows_the_listing_and_redraws_the_message(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore
+) -> None:
+    listings = SqlListingStore(session_factory)
+    (listing_id,) = listings.upsert_batch("test", [_owned("a", "unknown")], seen_at=T0).new_ids
+    state = store.record_match(listing_id, passing(), at=T0)
+    store.attach_message(state.id, channel_id="1", message_id="2", rendered=state)
+    synced = _sync_jobs(session_factory)
+
+    listings.upsert_batch("test", [_owned("a", "agent")], seen_at=T0 + HOUR)
+    after = store.record_match(listing_id, passing(), at=T0 + HOUR)
+
+    assert after.owner_type is OwnerType.AGENT
+    assert _sync_jobs(session_factory) == synced + 1
+    store.record_match(listing_id, passing(), at=T0 + 2 * HOUR)
+    assert _sync_jobs(session_factory) == synced + 1
+
+
+def test_an_override_wins_over_the_listing(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore
+) -> None:
+    listings = SqlListingStore(session_factory)
+    (listing_id,) = listings.upsert_batch("test", [_owned("a", "agent")], seen_at=T0).new_ids
+    state = store.record_match(listing_id, passing(), at=T0)
+    _set_override(session_factory, state.id, OwnerType.INDIVIDUAL)
+
+    listings.upsert_batch("test", [_owned("a", "property_manager")], seen_at=T0 + HOUR)
+    after = store.record_match(listing_id, passing(), at=T0 + HOUR)
+
+    assert after.owner_type is OwnerType.INDIVIDUAL
+    assert after.owner_type_override is OwnerType.INDIVIDUAL
+    _set_override(session_factory, state.id, None)
+    assert store.record_match(listing_id, passing(), at=T0 + 2 * HOUR).owner_type is (
+        OwnerType.PROPERTY_MANAGER
+    )

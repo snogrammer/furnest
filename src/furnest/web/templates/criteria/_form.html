@@ -44,6 +44,8 @@
     <legend>Property</legend>
     {{ m.checkboxes(state, errors, "property_types_allow", "Allowed types (none ticked means any)", choices.property_type_options) }}
     {{ m.checkboxes(state, errors, "property_types_deny", "Denied types", choices.property_type_options) }}
+    {{ m.checkboxes(state, errors, "owner_types_deny", "Denied owner types", choices.owner_type_options) }}
+    <p class="muted">Who lists a place is read from the source and the listing's wording, and you can correct it on each property. A listing whose owner type can't be told counts as missing data (see the last section).</p>
     <div class="grid">
       {{ m.input(state, errors, "min_beds", "Minimum beds", "number", "0 means a studio is fine.", 'min="0" step="1"') }}
       {{ m.input(state, errors, "min_baths", "Minimum baths", "number", None, 'min="0" step="0.5"') }}

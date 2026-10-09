@@ -22,6 +22,12 @@ from furnest.domain.money import (
     get_currency,
     register_currency,
 )
+from furnest.domain.owner_type import (
+    OwnerType,
+    infer_owner_type,
+    normalize_owner_type,
+    owner_type_label,
+)
 from furnest.domain.periods import MONTHLY_FACTOR, RentPeriod, parse_period, to_monthly
 from furnest.domain.price import Price, parse_price
 from furnest.domain.property_type import PropertyType, normalize_property_type
@@ -57,6 +63,7 @@ __all__ = [
     "InvalidTransitionError",
     "Money",
     "NormalizedListing",
+    "OwnerType",
     "ParsedAddress",
     "PassthroughAddressParser",
     "Price",
@@ -70,8 +77,11 @@ __all__ = [
     "diff_criteria",
     "get_currency",
     "haversine",
+    "infer_owner_type",
+    "normalize_owner_type",
     "normalize_property_type",
     "normalize_zip",
+    "owner_type_label",
     "parse_period",
     "parse_price",
     "register_currency",

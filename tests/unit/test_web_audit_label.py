@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from furnest.db.property_store import AuditEntry
+from furnest.db.property_store import OWNER_TYPE, AuditEntry
 from furnest.domain import Actor, PropertyStatus
 from furnest.web.property_views import audit_label
 
@@ -27,6 +27,19 @@ def entry(
     )
 
 
+def owner_entry(payload: dict[str, Any]) -> AuditEntry:
+    return AuditEntry(
+        id=1,
+        property_id=1,
+        from_status=S.SUGGESTED,
+        to_status=S.SUGGESTED,
+        actor=Actor.DASHBOARD,
+        actor_detail=OWNER_TYPE,
+        payload=payload,
+        created_at=datetime(2026, 10, 5, tzinfo=UTC),
+    )
+
+
 @pytest.mark.parametrize(
     ("event", "label"),
     [
@@ -38,6 +51,17 @@ def entry(
         ),
         (entry(S.SUGGESTED, S.SUGGESTED, {"unsnoozed": True}), "Snooze ended"),
         (entry(S.APPROVED, S.APPROVED, None), "Updated while approved"),
+        (
+            owner_entry(
+                {"owner_type_override": "property_manager", "owner_type": "property_manager"}
+            ),
+            "Owner type set to Property manager",
+        ),
+        (
+            owner_entry({"owner_type_override": None, "owner_type": "agent"}),
+            "Owner type override cleared",
+        ),
+        (owner_entry({"owner_type_override": "castle"}), "Owner type set"),
     ],
 )
 def test_audit_label(event: AuditEntry, label: str) -> None:

@@ -34,6 +34,7 @@ from furnest.domain import (
     Criteria,
     FilterRule,
     NormalizedListing,
+    OwnerType,
     PropertyType,
     RentPeriod,
 )
@@ -142,6 +143,18 @@ def _property_type(ctx: _Context) -> Verdict | None:
         return RuleStatus.UNKNOWN, "property type unrecognized"
     if allow:
         return RuleStatus.FAIL, f"{kind} is not in the allowed types"
+    return RuleStatus.PASS, f"{kind} is not denied"
+
+
+def _owner_type(ctx: _Context) -> Verdict | None:
+    deny = ctx.criteria.owner_types_deny
+    if not deny:
+        return None
+    kind = ctx.listing.owner_type
+    if kind in deny:
+        return RuleStatus.FAIL, f"{kind} is denied"
+    if kind is OwnerType.UNKNOWN:
+        return RuleStatus.UNKNOWN, "owner type unknown"
     return RuleStatus.PASS, f"{kind} is not denied"
 
 
@@ -262,6 +275,7 @@ _RULES: tuple[tuple[FilterRule, Callable[[_Context], Verdict | None]], ...] = (
     (FilterRule.LOCATION, _location),
     (FilterRule.PRICE, _price),
     (FilterRule.PROPERTY_TYPE, _property_type),
+    (FilterRule.OWNER_TYPE, _owner_type),
     (FilterRule.MIN_BEDS, _min_beds),
     (FilterRule.MIN_BATHS, _min_baths),
     (FilterRule.MIN_SQFT, _min_sqft),

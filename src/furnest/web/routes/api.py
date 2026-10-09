@@ -1,5 +1,5 @@
 """The JSON API, for scripts and automation: properties, their listings, status
-transitions and notes, under ``/api/v1``.
+transitions, notes and the owner type override, under ``/api/v1``.
 
 Every route needs ``Authorization: Bearer <AUTH_TOKEN>`` (:func:`require_bearer`);
 the dashboard's session cookie is not accepted, so there is no CSRF to handle.
@@ -30,11 +30,12 @@ from furnest.db.property_store import (
     SqlPropertyStore,
 )
 from furnest.db.session import make_session_factory
-from furnest.domain import Actor, InvalidTransitionError, PropertyStatus
+from furnest.domain import Actor, InvalidTransitionError, OwnerType, PropertyStatus
 from furnest.web.api_models import (
     ListingOut,
     NoteIn,
     NoteOut,
+    OwnerTypeIn,
     PropertyDetailOut,
     PropertyOut,
     PropertyPageOut,
@@ -103,6 +104,9 @@ def list_properties(
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
     include_snoozed: bool = False,
+    owner_type: Annotated[
+        OwnerType | None, Query(description="Only properties with this effective owner type.")
+    ] = None,
 ) -> PropertyPageOut:
     """Properties with their primary listing, one page at a time."""
     page = _store(request).search(
@@ -113,6 +117,7 @@ def list_properties(
         text=q.strip() or None,
         sort=sort,
         include_snoozed=include_snoozed,
+        owner_type=owner_type,
     )
     return PropertyPageOut.build(page, limit=limit, offset=offset)
 
@@ -187,6 +192,28 @@ def add_note(request: Request, property_id: int, body: NoteIn) -> NoteOut:
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from None
     return NoteOut.build(note)
+
+
+@router.post(
+    "/properties/{property_id}/owner-type",
+    response_model=PropertyOut,
+    responses={**_NOT_FOUND, 409: _error("The property was merged into another")},
+)
+def set_owner_type(request: Request, property_id: int, body: OwnerTypeIn) -> PropertyOut:
+    """Record who is behind the property, overriding what its listing suggests.
+
+    ``{"owner_type": null}`` clears the override. The change is audited and the
+    property's listings are rescored against the active criteria.
+    """
+    try:
+        state = _store(request).set_owner_type_override(
+            property_id, body.owner_type, actor=Actor.API, at=utcnow()
+        )
+    except PropertyMergedError as e:
+        raise _merged(e) from None
+    except PropertyNotFoundError:
+        raise _not_found(property_id) from None
+    return PropertyOut.build(state)
 
 
 docs_router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])

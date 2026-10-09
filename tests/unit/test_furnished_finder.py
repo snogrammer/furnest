@@ -18,6 +18,7 @@ from furnest.domain import (
     Currency,
     Money,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
     register_currency,
@@ -381,3 +382,24 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
         keyed["furnished_finder"].config.enabled,
         keyed["furnished_finder"].config.disabled_reason,
     ) == (True, None)
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("A bright furnished unit near the hospital.", OwnerType.UNKNOWN),
+        ("I am the owner and live nearby.", OwnerType.INDIVIDUAL),
+        ("Managed by Example Property Management.", OwnerType.PROPERTY_MANAGER),
+    ],
+)
+def test_owner_type_comes_from_the_text_alone(description: str, expected: OwnerType) -> None:
+    item = {**items()[0], "description": description, "spaceDescription": None}
+    assert parse_item(item, today=TODAY).owner_type is expected
+
+
+def test_the_documented_items_have_an_unknown_owner_type() -> None:
+    parsed = [parse_item(item, today=TODAY) for item in items()[:3]]
+    assert {listing.owner_type for listing in parsed} == {OwnerType.UNKNOWN}

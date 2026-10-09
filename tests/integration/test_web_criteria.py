@@ -66,6 +66,10 @@ def test_editor_renders_every_section(authed_client: TestClient) -> None:
     ):
         assert f"<legend>{legend}" in page.text
     assert "Not saved yet" in page.text
+    assert "Denied owner types" in page.text
+    assert 'name="owner_types_deny" value="agent"' in page.text
+    assert 'name="owner_types_deny" value="unknown"' not in page.text
+    assert 'name="unknown_fails" value="owner_type"' in page.text
     assert 'name="areas-0-name"' in page.text
     assert 'name="nice-0-tag"' in page.text
     assert 'aria-current="page"' in page.text

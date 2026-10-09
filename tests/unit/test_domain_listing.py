@@ -11,6 +11,7 @@ from furnest.domain import (
     Contact,
     Money,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
     RentPeriod,
@@ -67,6 +68,7 @@ def test_minimal_listing_has_unknowns() -> None:
     assert listing.price is None
     assert listing.monthly_price is None
     assert listing.property_type is PropertyType.OTHER
+    assert listing.owner_type is OwnerType.UNKNOWN
     assert listing.furnished is None
     assert listing.amenities == frozenset()
     assert listing.address.country == "US"
@@ -133,3 +135,22 @@ def test_price_range_and_studio() -> None:
     assert listing.price is not None
     assert listing.price.monthly == Money(amount_minor=288958)
     assert listing.price.monthly_max == Money(amount_minor=365000)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Property Manager", OwnerType.PROPERTY_MANAGER),
+        ("agent", OwnerType.AGENT),
+        ("landlord", OwnerType.INDIVIDUAL),
+        ("co-operative housing trust", OwnerType.UNKNOWN),
+        (None, OwnerType.UNKNOWN),
+    ],
+)
+def test_owner_type_accepts_any_label(raw: str | None, expected: OwnerType) -> None:
+    assert minimal(owner_type=raw).owner_type is expected
+
+
+def test_owner_type_must_be_a_string() -> None:
+    with pytest.raises(ValidationError, match="owner_type must be a string"):
+        minimal(owner_type=3)

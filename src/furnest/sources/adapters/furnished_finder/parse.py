@@ -58,6 +58,7 @@ from furnest.domain import (
     NormalizedListing,
     Price,
     PropertyType,
+    infer_owner_type,
     normalize_property_type,
     parse_price,
 )
@@ -137,12 +138,13 @@ def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
     lat, lng = number(item.get("latitude")), number(item.get("longitude"))
     if lat is None or lng is None:
         lat = lng = None
+    title, description = text(item.get("name")), _description(item)
     return NormalizedListing(
         source=SOURCE,
         source_id=source_id,
         url=url,  # type: ignore[arg-type]
-        title=text(item.get("name")),
-        description=_description(item),
+        title=title,
+        description=description,
         price=_price(item),
         address=Address(
             city=text(item.get("city")) or None, region=text(item.get("state")) or None
@@ -153,6 +155,8 @@ def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
         baths=half(item.get("bathroomCount")),
         sqft=positive(item.get("squareFootage")),
         property_type=_property_type(item),
+        # The actor carries nothing about the landlord, so only the text can tell.
+        owner_type=infer_owner_type(title, description),
         furnished=True,
         amenities=_amenities(item),
         available_from=_available_from(item, today),

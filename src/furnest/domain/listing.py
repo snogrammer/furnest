@@ -7,8 +7,8 @@ which matching treats differently from a known "no".
 
 Validation is strict where a bad value would mislead later stages (coordinates out
 of range, a lease minimum above its maximum, naive timestamps) and forgiving where
-sources are messy: the property type accepts any label and amenity tags are
-lower-cased, so adapters can pass through what they scraped.
+sources are messy: the property type and owner type accept any label and amenity
+tags are lower-cased, so adapters can pass through what they scraped.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from pydantic import (
 )
 
 from furnest.domain.money import Money
+from furnest.domain.owner_type import OwnerType, normalize_owner_type
 from furnest.domain.price import Price
 from furnest.domain.property_type import PropertyType, normalize_property_type
 
@@ -83,6 +84,8 @@ class NormalizedListing(_Frozen):
     baths: float | None = Field(default=None, ge=0, multiple_of=0.5)
     sqft: int | None = Field(default=None, gt=0)
     property_type: PropertyType = PropertyType.OTHER
+    # Who is behind the listing (#113): the adapter's inference, see domain/owner_type.py.
+    owner_type: OwnerType = OwnerType.UNKNOWN
     furnished: bool | None = None
     amenities: frozenset[str] = frozenset()
 
@@ -103,6 +106,13 @@ class NormalizedListing(_Frozen):
         if value is None or isinstance(value, str):
             return normalize_property_type(value)
         raise ValueError("property_type must be a string")
+
+    @field_validator("owner_type", mode="before")
+    @classmethod
+    def _normalize_owner_type(cls, value: object) -> OwnerType:
+        if value is None or isinstance(value, str):
+            return normalize_owner_type(value)
+        raise ValueError("owner_type must be a string")
 
     @field_validator("amenities", mode="before")
     @classmethod

@@ -27,12 +27,19 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
-from furnest.db.models import Listing, ListingImage, PriceHistory, SourceRun, SourceRunStatus
+from furnest.db.models import (
+    Listing,
+    ListingImage,
+    PriceHistory,
+    Property,
+    SourceRun,
+    SourceRunStatus,
+)
 from furnest.db.session import session_scope
-from furnest.domain import Amenity, AmenityResult, NormalizedListing
+from furnest.domain import Amenity, AmenityResult, NormalizedListing, OwnerType
 from furnest.domain.price import Price
 
 # Long enough for a useful error summary, short enough for a table cell.
@@ -65,6 +72,16 @@ class StoredListing:
     removed_at: datetime | None
     # The last amenity extraction, or None if the listing hasn't been extracted yet.
     amenities: AmenityResult | None
+    # The owner type a person set on the listing's property, if any (#113).
+    owner_type_override: OwnerType | None = None
+
+    @property
+    def for_matching(self) -> NormalizedListing:
+        """The listing as the criteria should see it: with the property's owner type
+        override in place of the adapter's guess, when there is one."""
+        if self.owner_type_override is None:
+            return self.listing
+        return self.listing.model_copy(update={"owner_type": self.owner_type_override})
 
 
 @dataclass(frozen=True)
@@ -110,7 +127,7 @@ class SourceRunState:
     error: str | None = None
 
 
-def stored_listing(row: Listing) -> StoredListing:
+def stored_listing(row: Listing, *, owner_type_override: OwnerType | None = None) -> StoredListing:
     listing = NormalizedListing.model_validate(
         {**row.data, "first_seen": row.first_seen, "last_seen": row.last_seen}
     )
@@ -127,7 +144,22 @@ def stored_listing(row: Listing) -> StoredListing:
         missed_runs=row.missed_runs,
         removed_at=row.removed_at,
         amenities=amenities,
+        owner_type_override=owner_type_override,
     )
+
+
+def _with_override(statement: Select[Listing]) -> Select[Any]:
+    """``statement`` over listings, with each one's property's owner type override."""
+    return statement.add_columns(Property.owner_type_override).outerjoin(
+        Property, Property.id == Listing.property_id
+    )
+
+
+def _stored(session: Session, statement: Select[Listing]) -> list[StoredListing]:
+    return [
+        stored_listing(row, owner_type_override=override)
+        for row, override in session.execute(_with_override(statement))
+    ]
 
 
 def price_of(row: PriceHistory) -> Price:
@@ -355,21 +387,20 @@ class SqlListingStore:
 
     def get(self, listing_id: int) -> StoredListing | None:
         with session_scope(self._session_factory) as session:
-            row = session.get(Listing, listing_id)
-            return None if row is None else stored_listing(row)
+            found = _stored(session, select(Listing).where(Listing.id == listing_id))
+            return found[0] if found else None
 
     def many(self, listing_ids: Sequence[int]) -> list[StoredListing]:
         """The listings of ``listing_ids`` that exist, by id."""
         statement = select(Listing).where(Listing.id.in_(list(listing_ids))).order_by(Listing.id)
         with session_scope(self._session_factory) as session:
-            return [stored_listing(row) for row in session.scalars(statement)]
+            return _stored(session, statement)
 
     def find(self, source: str, source_id: str) -> StoredListing | None:
+        statement = select(Listing).where(Listing.source == source, Listing.source_id == source_id)
         with session_scope(self._session_factory) as session:
-            row = session.scalars(
-                select(Listing).where(Listing.source == source, Listing.source_id == source_id)
-            ).first()
-            return None if row is None else stored_listing(row)
+            found = _stored(session, statement.limit(1))
+            return found[0] if found else None
 
     def active(self, source: str | None = None) -> list[StoredListing]:
         """Listings not marked removed, oldest first, optionally for one source."""
@@ -377,7 +408,7 @@ class SqlListingStore:
         if source is not None:
             statement = statement.where(Listing.source == source)
         with session_scope(self._session_factory) as session:
-            return [stored_listing(row) for row in session.scalars(statement)]
+            return _stored(session, statement)
 
     def images(self, listing_id: int) -> list[str]:
         with session_scope(self._session_factory) as session:

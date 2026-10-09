@@ -11,7 +11,7 @@ import pytest
 from pydantic import SecretStr
 
 from furnest.config import AdapterOverrides, SourcesSettings
-from furnest.domain import Amenity, Criteria, Money, Price, PropertyType, RentPeriod
+from furnest.domain import Amenity, Criteria, Money, OwnerType, Price, PropertyType, RentPeriod
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.sources import SourceError, discover, resolve_config
 from furnest.sources.adapters.airbnb import Airbnb
@@ -473,3 +473,51 @@ def test_discovered_and_disabled_until_it_has_a_key() -> None:
 
     keyed = {source.config.name: source for source in registry.configured(settings(enabled=True))}
     assert (keyed["airbnb"].config.enabled, keyed["airbnb"].config.disabled_reason) == (True, None)
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("fields", "expected"),
+    [
+        ({}, OwnerType.UNKNOWN),
+        ({"host": {"id": "1"}}, OwnerType.INDIVIDUAL),
+        ({"host": {"id": "1", "isSuperHost": True}}, OwnerType.INDIVIDUAL),
+        ({"host": {"id": "1", "ratingCount": 999}}, OwnerType.INDIVIDUAL),
+        ({"host": {"id": "1", "ratingCount": 1000}}, OwnerType.PROPERTY_MANAGER),
+        ({"host": {"id": "1"}, "coHosts": [{"id": "2"}]}, OwnerType.INDIVIDUAL),
+        ({"host": {"id": "1"}, "coHosts": [{"id": "2"}, {"id": "3"}]}, OwnerType.PROPERTY_MANAGER),
+        ({"host": {"id": "1", "ratingCount": "lots"}, "coHosts": "two"}, OwnerType.INDIVIDUAL),
+        # A host block beats the text; without one the text decides.
+        ({"host": {"id": "1"}, "description": "Call our leasing office."}, OwnerType.INDIVIDUAL),
+        ({"description": "Call our leasing office."}, OwnerType.PROPERTY_MANAGER),
+    ],
+)
+def test_owner_type_from_the_host_block(fields: dict[str, Any], expected: OwnerType) -> None:
+    assert one(minimal(**fields)).owner_type is expected
+
+
+def test_the_host_is_read_for_the_owner_type_but_never_kept() -> None:
+    listing = one(
+        minimal(
+            host={"id": "1", "name": "Jane Example", "ratingCount": 5000},
+            coHosts=[{"id": "2", "name": "John Example"}],
+        )
+    )
+
+    assert listing.owner_type is OwnerType.PROPERTY_MANAGER
+    dumped = json.dumps(listing.raw)
+    assert "Jane Example" not in dumped
+    assert "John Example" not in dumped
+    assert {"host", "coHosts"}.isdisjoint(listing.raw)
+
+
+def test_the_live_run_owner_types() -> None:
+    listings = [one(item) for item in fixture("dataset_live.json")]
+
+    assert [(listing.source_id, listing.owner_type) for listing in listings] == [
+        ("900000001", OwnerType.PROPERTY_MANAGER),  # three co-hosts
+        ("900000002", OwnerType.INDIVIDUAL),
+        ("900000003", OwnerType.PROPERTY_MANAGER),  # over ten thousand reviews
+    ]

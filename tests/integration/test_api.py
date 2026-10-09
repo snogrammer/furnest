@@ -13,7 +13,14 @@ from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Property
 from furnest.db.property_store import MAX_NOTE_LENGTH, SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import Actor, FilterRule, Money, NormalizedListing, PropertyStatus
+from furnest.domain import (
+    Actor,
+    FilterRule,
+    Money,
+    NormalizedListing,
+    OwnerType,
+    PropertyStatus,
+)
 from furnest.domain.price import Price
 from furnest.matching import BreakdownItem, MatchResult, RuleResult, RuleStatus
 from furnest.web.routes.api import MAX_LIMIT
@@ -517,6 +524,7 @@ def test_the_schema_documents_only_the_api(api: TestClient) -> None:
         "/api/v1/properties/{property_id}/listings",
         "/api/v1/properties/{property_id}/transitions",
         "/api/v1/properties/{property_id}/notes",
+        "/api/v1/properties/{property_id}/owner-type",
     }
     assert schema["components"]["securitySchemes"]["HTTPBearer"]["scheme"] == "bearer"
     get = schema["paths"]["/api/v1/properties/{property_id}"]["get"]
@@ -585,3 +593,82 @@ def test_a_merged_property_says_where_it_went_and_refuses_changes(
     assert moved.json()["detail"] == f"property {absorbed} was merged into {survivor}"
     noted = api.post(f"/api/v1/properties/{absorbed}/notes", json={"body": "x"})
     assert noted.status_code == 409
+
+
+# --- owner type ----------------------------------------------------------------
+
+
+def test_list_filters_by_owner_type(api: TestClient, seed: Seed) -> None:
+    agent = seed(owner_type="agent")
+    seed(owner_type="individual")
+    seed()
+
+    body = api.get("/api/v1/properties", params={"owner_type": "agent"}).json()
+
+    assert [item["property"]["id"] for item in body["items"]] == [agent]
+    assert body["items"][0]["property"]["owner_type"] == "agent"
+    assert body["items"][0]["property"]["owner_type_override"] is None
+    assert api.get("/api/v1/properties", params={"owner_type": "landlord"}).status_code == 422
+    assert api.get("/api/v1/properties").json()["total"] == 3
+
+
+def test_get_shows_the_owner_type_of_the_property_and_its_listing(
+    api: TestClient, seed: Seed
+) -> None:
+    property_id = seed(owner_type="property_manager")
+
+    body = api.get(f"/api/v1/properties/{property_id}").json()
+
+    assert body["property"]["owner_type"] == "property_manager"
+    assert body["property"]["owner_type_override"] is None
+    assert body["listings"][0]["owner_type"] == "property_manager"
+
+
+def test_set_and_clear_the_owner_type_override(
+    api: TestClient, seed: Seed, store: SqlPropertyStore
+) -> None:
+    property_id = seed(owner_type="agent")
+
+    response = api.post(
+        f"/api/v1/properties/{property_id}/owner-type", json={"owner_type": "individual"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["owner_type"] == "individual"
+    assert response.json()["owner_type_override"] == "individual"
+    event = store.audit_events(property_id)[-1]
+    assert (event.actor, event.actor_detail) == (Actor.API, "owner_type")
+    # The listing keeps its own inference; the property carries the override.
+    detail = api.get(f"/api/v1/properties/{property_id}").json()
+    assert detail["listings"][0]["owner_type"] == "agent"
+
+    cleared = api.post(f"/api/v1/properties/{property_id}/owner-type", json={"owner_type": None})
+
+    assert cleared.status_code == 200
+    assert (cleared.json()["owner_type"], cleared.json()["owner_type_override"]) == ("agent", None)
+    assert store.get(property_id).owner_type is OwnerType.AGENT  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize("body", [{"owner_type": "landlord"}, {}, {"owner": "agent"}, "agent"])
+def test_an_invalid_owner_type_body_is_422(api: TestClient, seed: Seed, body: object) -> None:
+    response = api.post(f"/api/v1/properties/{seed()}/owner-type", json=body)
+    assert response.status_code == 422
+
+
+def test_owner_type_on_an_unknown_property_is_404(api: TestClient) -> None:
+    response = api.post("/api/v1/properties/999/owner-type", json={"owner_type": "agent"})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "no property with id 999"}
+
+
+def test_owner_type_on_a_merged_property_is_409(
+    api: TestClient, seed: Seed, session_factory: sessionmaker[Session]
+) -> None:
+    absorbed, survivor = seed(), seed()
+    with session_scope(session_factory) as session:
+        session.get_one(Property, absorbed).merged_into_id = survivor
+
+    response = api.post(f"/api/v1/properties/{absorbed}/owner-type", json={"owner_type": "agent"})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": f"property {absorbed} was merged into {survivor}"}

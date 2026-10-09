@@ -65,9 +65,11 @@ from furnest.domain import (
     Contact,
     Criteria,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
     RentPeriod,
+    infer_owner_type,
     normalize_property_type,
     parse_period,
     parse_price,
@@ -456,12 +458,13 @@ def to_listing(result: SearchResult, detail: Detail | None) -> NormalizedListing
     if lat is None or lng is None:
         lat = lng = None
     email = detail.email if detail else None
+    description = detail.description if detail else ""
     return NormalizedListing(
         source=SOURCE,
         source_id=result.token,
         url=result.url,  # type: ignore[arg-type]
         title=result.title,
-        description=detail.description if detail else "",
+        description=description,
         price=_price(result.price, chips.period),
         address=_address(posting, result.data),
         lat=lat,
@@ -470,6 +473,7 @@ def to_listing(result: SearchResult, detail: Detail | None) -> NormalizedListing
         baths=baths,
         sqft=chips.sqft,
         property_type=_property_type(result, chips, beds),
+        owner_type=infer_owner_type(result.title, description, hint=_owner_type(chips)),
         furnished=True,
         amenities=chips.amenities,
         available_from=_available_from(chips, detail.posted if detail else None),
@@ -477,6 +481,17 @@ def to_listing(result: SearchResult, detail: Detail | None) -> NormalizedListing
         contact=Contact(email=email) if email else Contact(platform_only=True),
         raw=_raw(result, detail, chips),
     )
+
+
+def _owner_type(chips: _Chips) -> OwnerType:
+    """Who posted, from the ``label: value`` chips (#113): a broker fee means an agent,
+    an application fee a leasing office. Otherwise the body text decides."""
+    labels = tuple(chips.labelled)
+    if any(label.startswith("broker fee") for label in labels):
+        return OwnerType.AGENT
+    if any(label.startswith("application fee") for label in labels):
+        return OwnerType.PROPERTY_MANAGER
+    return OwnerType.UNKNOWN
 
 
 def _chips(attributes: tuple[str, ...]) -> _Chips:

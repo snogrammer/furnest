@@ -428,6 +428,9 @@ def merge(
         survivor.address = absorbed.address
     if survivor.lat is None or survivor.lng is None:
         survivor.lat, survivor.lng = absorbed.lat, absorbed.lng
+    if survivor.owner_type_override is None and absorbed.owner_type_override is not None:
+        # What a person said about the unit outlives the row they said it on.
+        survivor.owner_type_override = absorbed.owner_type_override
     if survivor.discord_message_id is None and absorbed.discord_message_id is not None:
         # The survivor takes over the message, so the one post shows the unit.
         survivor.discord_channel_id = absorbed.discord_channel_id
@@ -467,6 +470,7 @@ def after_grouping(session: Session, survivor: Property, *, at: datetime, merged
         _manual_contact,
         _status_before_unavailable,
         _sync_message,
+        _sync_owner_type,
         primary_listing,
     )
 
@@ -477,6 +481,7 @@ def after_grouping(session: Session, survivor: Property, *, at: datetime, merged
         if manual != survivor.manual_contact_required:
             survivor.manual_contact_required = manual
             _sync_message(session, survivor)
+        _sync_owner_type(session, survivor, primary)
     active = primary is not None and primary.removed_at is None
     if survivor.status is PropertyStatus.UNAVAILABLE and active:
         restore_to = _status_before_unavailable(session, survivor.id)

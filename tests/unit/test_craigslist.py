@@ -16,6 +16,7 @@ from furnest.domain import (
     Criteria,
     Currency,
     Money,
+    OwnerType,
     PropertyType,
     RentPeriod,
     register_currency,
@@ -731,3 +732,42 @@ def test_discovered_and_off_by_default_with_no_key_needed() -> None:
 
     on = {source.config.name: source for source in registry.configured(settings(enabled=True))}
     assert on["craigslist"].config.enabled is True
+
+
+# --- Owner type ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("chips", "description", "expected"),
+    [
+        ((), "", OwnerType.UNKNOWN),
+        (("application fee details: 45.00",), "", OwnerType.PROPERTY_MANAGER),
+        (("broker fee: one month",), "", OwnerType.AGENT),
+        # A chip beats the body; without one the body decides.
+        (("broker fee: one month",), "No brokers, I am the owner.", OwnerType.AGENT),
+        ((), "No brokers, I am the owner.", OwnerType.INDIVIDUAL),
+        ((), "Contact our leasing office today.", OwnerType.PROPERTY_MANAGER),
+        (("w/d in unit", "cats are OK - purrr"), "A quiet place.", OwnerType.UNKNOWN),
+    ],
+)
+def test_owner_type_from_chips_and_body(
+    chips: tuple[str, ...], description: str, expected: OwnerType
+) -> None:
+    listing = to_listing(row(), detail(*chips, description=description))
+    assert listing.owner_type is expected
+
+
+def test_a_search_row_alone_has_an_unknown_owner_type() -> None:
+    assert to_listing(row(), None).owner_type is OwnerType.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("detail_apartment.html", OwnerType.PROPERTY_MANAGER),  # application fee chip
+        ("detail_complex.html", OwnerType.PROPERTY_MANAGER),  # "On-Site Management"
+    ],
+)
+def test_the_captured_postings_owner_types(name: str, expected: OwnerType) -> None:
+    listing = to_listing(row(), parse_detail(page(name)))
+    assert listing.owner_type is expected

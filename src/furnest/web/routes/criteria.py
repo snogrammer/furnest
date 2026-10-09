@@ -23,9 +23,11 @@ from furnest.domain import (
     Criteria,
     DistanceUnit,
     FilterRule,
+    OwnerType,
     PropertyType,
     amenity_label,
     diff_criteria,
+    owner_type_label,
 )
 from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.web.auth import require_auth
@@ -40,6 +42,10 @@ router = APIRouter(prefix="/criteria", dependencies=[Depends(require_auth), Depe
 CHOICES: dict[str, Any] = {
     "amenities": [(tag.value, amenity_label(tag)) for tag in Amenity],
     "property_type_options": [(kind.value, kind.value.replace("_", " ")) for kind in PropertyType],
+    # Unknown isn't offered: it is "missing data", handled by the unknown_fails group.
+    "owner_type_options": [
+        (kind.value, owner_type_label(kind)) for kind in OwnerType if kind is not OwnerType.UNKNOWN
+    ],
     "rule_options": [(rule.value, rule.value.replace("_", " ")) for rule in FilterRule],
     "units": [unit.value for unit in DistanceUnit],
 }

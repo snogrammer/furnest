@@ -14,6 +14,10 @@ suggested property and queues the job that drafts the email, as the Discord butt
 does. While the property is ``inquiry_drafted`` the page links to the draft in the
 review queue (``/inquiries``), and the email log lists every email about it.
 
+The detail page shows who is behind the unit (``owner_type``, #113) and has a small
+form to set or clear that by hand (:func:`set_owner_type`); the list can be filtered
+to one owner type (``owner``).
+
 A property flagged ``manual_contact_required`` (its listing gives no email address)
 gets a prominent link to the listing, where the lister is messaged. While its draft
 waits, the page shows the message ready to copy and a **Mark as sent** form, which
@@ -61,7 +65,7 @@ from furnest.db.property_store import (
 )
 from furnest.db.session import make_session_factory, session_scope
 from furnest.db.settings_store import SqlSettingsStore
-from furnest.domain import Actor, InvalidTransitionError, PropertyStatus, beds_baths
+from furnest.domain import Actor, InvalidTransitionError, OwnerType, PropertyStatus, beds_baths
 from furnest.domain.status import TRANSITIONS
 from furnest.email.inquiry import request_inquiry_in
 from furnest.email.templates import MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH
@@ -82,6 +86,7 @@ from furnest.web.property_views import (
     apply_bulk,
     audit_label,
     build_dashboard,
+    owner_label,
     price_timeline,
     status_actions,
     status_label,
@@ -97,6 +102,11 @@ def _source_namer(request: Request) -> Callable[[str], str]:
 router = APIRouter(dependencies=[Depends(require_auth), Depends(require_csrf)])
 
 _TAB_PATTERN = "^(" + "|".join(TAB_KEYS) + ")$"
+# The dashboard filter takes any owner type; the override form only the known ones, or
+# nothing to clear it.
+_OWNER_FILTER_PATTERN = "^(|" + "|".join(k.value for k in OwnerType) + ")$"
+_OWNER_CHOICES = [k for k in OwnerType if k is not OwnerType.UNKNOWN]
+_OWNER_CHOICE_PATTERN = "^(|" + "|".join(k.value for k in _OWNER_CHOICES) + ")$"
 
 # One bulk action moves at most this many properties (a few pages' worth).
 MAX_BULK = 100
@@ -111,8 +121,17 @@ def index(
     view: View = View.LIST,
     page: Annotated[int, Query(ge=1)] = 1,
     snoozed: bool = False,
+    owner: Annotated[str, Query(pattern=_OWNER_FILTER_PATTERN)] = "",
 ) -> Response:
-    filters = Filters(status=status, q=q.strip(), sort=sort, view=view, page=page, snoozed=snoozed)
+    filters = Filters(
+        status=status,
+        q=q.strip(),
+        sort=sort,
+        view=view,
+        page=page,
+        snoozed=snoozed,
+        owner=OwnerType(owner) if owner else None,
+    )
     return _render_dashboard(request, filters)
 
 
@@ -136,6 +155,8 @@ def _render_dashboard(
         "error": error,
         "beds_baths": beds_baths,
         "status_label": status_label,
+        "owner_label": owner_label,
+        "owner_types_all": list(OwnerType),
         "source_name": _source_namer(request),
     }
     if request.headers.get("HX-Request") == "true":
@@ -195,6 +216,8 @@ def _render_detail(
         "max_body": MAX_BODY_LENGTH,
         "beds_baths": beds_baths,
         "status_label": status_label,
+        "owner_label": owner_label,
+        "owner_types": _OWNER_CHOICES,
         "audit_label": audit_label,
         "prices": price_timeline(detail.price_history),
         "price_chart": price_chart(detail.price_history),
@@ -306,8 +329,16 @@ def bulk(
     sort: Annotated[PropertySort, Form()] = PropertySort.SCORE,
     page: Annotated[int, Form(ge=1)] = 1,
     snoozed: Annotated[bool, Form()] = False,
+    owner: Annotated[str, Form(pattern=_OWNER_FILTER_PATTERN)] = "",
 ) -> Response:
-    filters = Filters(status=status, q=q.strip(), sort=sort, page=page, snoozed=snoozed)
+    filters = Filters(
+        status=status,
+        q=q.strip(),
+        sort=sort,
+        page=page,
+        snoozed=snoozed,
+        owner=OwnerType(owner) if owner else None,
+    )
     if not ids:
         return _render_dashboard(
             request, filters, error="Select at least one property.", status_code=422
@@ -365,6 +396,25 @@ def change_status(
             error=f"Can't move to {status_label(to)}: {e.reason}.",
             status_code=409,
         )
+    return RedirectResponse(f"/properties/{property_id}", status_code=303)
+
+
+@router.post("/properties/{property_id}/owner-type", response_class=HTMLResponse)
+def set_owner_type(
+    request: Request,
+    property_id: int,
+    owner_type: Annotated[str, Form(pattern=_OWNER_CHOICE_PATTERN)] = "",
+) -> Response:
+    """Set who is behind the property by hand; an empty value goes back to the listing's guess."""
+    chosen = OwnerType(owner_type) if owner_type else None
+    try:
+        _store(request).set_owner_type_override(
+            property_id, chosen, actor=Actor.DASHBOARD, at=utcnow()
+        )
+    except PropertyMergedError as e:
+        return _merged(e)
+    except PropertyNotFoundError:
+        raise HTTPException(status_code=404) from None
     return RedirectResponse(f"/properties/{property_id}", status_code=303)
 
 

@@ -28,7 +28,7 @@ from furnest.db.property_store import (
     PropertyPricePoint,
     PropertyState,
 )
-from furnest.domain import Actor, Money, PropertyStatus
+from furnest.domain import Actor, Money, OwnerType, PropertyStatus
 from furnest.domain.listing import Address, Contact
 from furnest.domain.price import Price
 from furnest.domain.property_type import PropertyType
@@ -65,6 +65,16 @@ class PropertyOut(_Out):
         description="Set when this property turned out to be the same unit as another and was "
         "merged into it; its listings, notes and emails are there now.",
     )
+    owner_type: OwnerType = Field(
+        default=OwnerType.UNKNOWN,
+        description="Who is behind the unit: owner_type_override when set, else what the "
+        "primary listing suggests.",
+    )
+    owner_type_override: OwnerType | None = Field(
+        default=None,
+        description="The owner type a person chose through POST /owner-type; null means the "
+        "listing's own suggestion is used.",
+    )
 
     @classmethod
     def build(cls, state: PropertyState) -> Self:
@@ -86,6 +96,8 @@ class PropertyOut(_Out):
                 else list(allowed_targets(state.status, Actor.API))
             ),
             merged_into_id=state.merged_into_id,
+            owner_type=state.owner_type,
+            owner_type_override=state.owner_type_override,
         )
 
 
@@ -179,6 +191,8 @@ class ListingOut(ListingSummaryOut):
     lng: float | None
     sqft: int | None
     property_type: PropertyType
+    # The adapter's own inference, before any override on the property.
+    owner_type: OwnerType
     furnished: bool | None
     amenities: list[str]
     available_from: date | None
@@ -205,6 +219,7 @@ class ListingOut(ListingSummaryOut):
             lng=listing.lng,
             sqft=listing.sqft,
             property_type=listing.property_type,
+            owner_type=listing.owner_type,
             furnished=listing.furnished,
             amenities=sorted(listing.amenities),
             available_from=listing.available_from,
@@ -299,6 +314,13 @@ class TransitionIn(_In):
         default=None,
         max_length=_BODY_MAX,
         description="Only with to=denied: saved as a markdown note on the property.",
+    )
+
+
+class OwnerTypeIn(_In):
+    owner_type: OwnerType | None = Field(
+        description="The owner type to record for the property; null clears the override so "
+        "the listing's own suggestion is used again."
     )
 
 

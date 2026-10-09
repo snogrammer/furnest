@@ -4,17 +4,21 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.base import utcnow
 from furnest.db.criteria_store import CriteriaStore, CriteriaVersionNotFoundError
 from furnest.db.listing_store import SqlListingStore, StoredListing
+from furnest.db.models import Property
+from furnest.db.session import session_scope
 from furnest.domain import (
     Actor,
     Amenity,
     AmenityResult,
     Criteria,
     NormalizedListing,
+    OwnerType,
     PropertyStatus,
 )
 from furnest.matching import MatchResult
@@ -179,3 +183,35 @@ def test_scores_only_the_listings_the_payload_names(
 
     assert asked == [[5, 6]]
     assert recorded == ["b"]
+
+
+def test_the_rerun_sees_the_propertys_owner_type_override(
+    session_factory: sessionmaker[Session],
+) -> None:
+    criteria = CriteriaStore(session_factory)
+    criteria.save(
+        Criteria(owner_types_deny=(OwnerType.AGENT,), furnished_required=False), created_by="cli"
+    )
+    listings = SqlListingStore(session_factory)
+    stored = listing("a", 2).listing.model_copy(update={"owner_type": OwnerType.AGENT})
+    (listing_id,) = listings.upsert_batch("test", [stored], seen_at=T0).new_ids
+    pipeline = PropertyPipeline(session_factory, clock=lambda: T0)
+    handler = default_registry(session_factory, pipeline).get(RERUN_CRITERIA)
+    assert handler is not None
+
+    handler.handler(ctx(1))
+    denied = pipeline.store.for_listing(listing_id)
+    assert denied is not None
+    assert denied.status is PropertyStatus.NEW  # an agent's listing fails the rule
+
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property)
+            .where(Property.id == denied.id)
+            .values(owner_type_override=OwnerType.INDIVIDUAL)
+        )
+    handler.handler(ctx(1))
+
+    allowed = pipeline.store.for_listing(listing_id)
+    assert allowed is not None
+    assert allowed.status is PropertyStatus.SUGGESTED
