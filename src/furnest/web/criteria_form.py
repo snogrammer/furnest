@@ -10,6 +10,11 @@ conventions:
   checkbox groups.
 - Areas and nice-to-have weights are repeated rows named ``areas-<i>-<field>`` and
   ``nice-<i>-<field>``. A row left blank, or with its ``remove`` box ticked, is dropped.
+- An area row's name is a "City, State" lookup (#179). A row with a name and no
+  coordinates is filled from :mod:`furnest.domain.places`: the canonical name, the
+  centre, and a 50 mi radius unless one was typed. ``lookup=<i>`` (the row's "Look up"
+  button) clears that row's coordinates first, so a renamed area is re-pointed, and
+  marks the parse as a lookup the caller shows instead of saving.
 
 Submitted rows are renumbered in the order they are kept, so the form re-rendered
 after a failed save and the error keys (e.g. ``areas-1-lat``) use the same indices.
@@ -22,14 +27,22 @@ otherwise, keyed by input name, with ``__all__`` for errors about the whole prof
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import ValidationError
 from starlette.datastructures import FormData
 
-from furnest.domain import DEFAULT_CURRENCY, Criteria, DistanceUnit, Money, get_currency
+from furnest.domain import (
+    DEFAULT_CURRENCY,
+    Criteria,
+    DistanceUnit,
+    Money,
+    find_places,
+    get_currency,
+    resolve_place,
+)
 
 GENERAL = "__all__"
 
@@ -56,6 +69,8 @@ CHECK_LISTS = (
     "unknown_fails",
 )
 AREA_FIELDS = ("name", "lat", "lng", "radius")
+DEFAULT_AREA_RADIUS = "50"
+DEFAULT_AREA_UNIT = DistanceUnit.MILES
 
 _ROW_KEY = re.compile(r"^(areas|nice)-(\d+)-")
 _SPLIT = re.compile(r"[,\n]")
@@ -82,6 +97,7 @@ class ParsedForm:
     state: FormState
     criteria: Criteria | None
     errors: dict[str, str]
+    lookup: bool = False
 
 
 def _show(value: object) -> str:
@@ -138,7 +154,7 @@ def _row_indices(form: FormData, prefix: str) -> list[int]:
     return sorted(found)
 
 
-def _read_state(form: FormData) -> FormState:
+def _read_state(form: FormData, lookup: int | None = None) -> FormState:
     fields = {name: _text(form, name) for name in (*SCALARS, *PRICES, *TEXT_LISTS)}
     fields["currency"] = _text(form, "currency").upper() or DEFAULT_CURRENCY
     checked = {name: set(_strings(form.getlist(name))) for name in CHECK_LISTS}
@@ -149,6 +165,8 @@ def _read_state(form: FormData) -> FormState:
     for i in _row_indices(form, "areas"):
         row = {name: _text(form, f"areas-{i}-{name}") for name in AREA_FIELDS}
         row["unit"] = _text(form, f"areas-{i}-unit") or DistanceUnit.MILES.value
+        if i == lookup and row["name"]:
+            row["lat"] = row["lng"] = ""
         if f"areas-{i}-remove" in form or not any(row[name] for name in AREA_FIELDS):
             continue
         areas.append(row)
@@ -160,6 +178,42 @@ def _read_state(form: FormData) -> FormState:
             continue
         nice.append((tag, weight))
     return FormState(fields=fields, checked=checked, areas=areas, nice=nice)
+
+
+def resolve_area_row(row: dict[str, str]) -> str | None:
+    """Fill a named row without coordinates from the places data, or say why not.
+
+    The row is changed in place. A row that already has a coordinate is left alone, and
+    so is a row that can't be resolved: it is shown again as typed, with the message.
+    """
+    name = row.get("name", "")
+    if not name or row.get("lat") or row.get("lng"):
+        return None
+    place = resolve_place(name)
+    if place is None:
+        options = [p.label for p in find_places(name, limit=5)]
+        if not options:
+            return f'no US city matches {name!r}; try "City, ST"'
+        return "pick one: " + "; ".join(options)
+    row["name"], row["lat"], row["lng"] = place.label, _show(place.lat), _show(place.lng)
+    if not row.get("radius"):
+        row["radius"], row["unit"] = DEFAULT_AREA_RADIUS, DEFAULT_AREA_UNIT.value
+    return None
+
+
+def look_up_row(params: Mapping[str, str], index: int) -> tuple[dict[str, str], str | None]:
+    """One area row as submitted (``areas-<index>-*``), re-resolved from its name."""
+    row = {name: params.get(f"areas-{index}-{name}", "").strip() for name in AREA_FIELDS}
+    row["unit"] = params.get(f"areas-{index}-unit", "").strip() or DistanceUnit.MILES.value
+    if row["name"]:
+        row["lat"] = row["lng"] = ""
+    return row, resolve_area_row(row)
+
+
+def lookup_index(form: FormData) -> int | None:
+    """The area row whose "Look up" button submitted the form, if one did."""
+    value = _text(form, "lookup")
+    return int(value) if value.isdigit() else None
 
 
 def _split(text: str) -> list[str]:
@@ -192,6 +246,9 @@ def _to_data(state: FormState, errors: dict[str, str]) -> dict[str, Any]:
         data[name] = sorted(state.checked.get(name, set()))
     data["furnished_required"] = "furnished_required" in state.checked
 
+    for i, row in enumerate(state.areas):
+        if message := resolve_area_row(row):
+            errors[f"areas-{i}-name"] = message
     data["areas"] = [{k: v for k, v in row.items() if v} for row in state.areas]
 
     weights: dict[str, str] = {}
@@ -227,15 +284,20 @@ def _message(text: str) -> str:
 
 def parse_form(form: FormData) -> ParsedForm:
     """Read a submitted editor form into criteria, or into errors to show beside it."""
-    state = _read_state(form)
+    lookup = lookup_index(form)
+    state = _read_state(form, lookup)
     errors: dict[str, str] = {}
     data = _to_data(state, errors)
     try:
         criteria = Criteria.model_validate(data)
     except ValidationError as exc:
         for error in exc.errors():
-            errors.setdefault(_error_key(error["loc"], state), _message(error["msg"]))
-        return ParsedForm(state, None, errors)
+            key = _error_key(error["loc"], state)
+            # A city that wasn't found already explains the missing coordinates.
+            if key.startswith("areas-") and key.rsplit("-", 1)[0] + "-name" in errors:
+                continue
+            errors.setdefault(key, _message(error["msg"]))
+        return ParsedForm(state, None, errors, lookup is not None)
     if errors:
-        return ParsedForm(state, None, errors)
-    return ParsedForm(state, criteria, {})
+        return ParsedForm(state, None, errors, lookup is not None)
+    return ParsedForm(state, criteria, {}, lookup is not None)

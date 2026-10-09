@@ -118,12 +118,80 @@ def test_blank_and_removed_rows_are_dropped_and_renumbered() -> None:
 
 
 def test_missing_area_fields_are_reported_per_row() -> None:
-    parsed = parse_form(submit(("areas-0-name", "Somewhere")))
+    # A coordinate was typed, so the name isn't looked up: the rest is required.
+    parsed = parse_form(submit(("areas-0-name", "Somewhere"), ("areas-0-lat", "1")))
     assert parsed.errors == {
-        "areas-0-lat": "Field required",
         "areas-0-lng": "Field required",
         "areas-0-radius": "Field required",
     }
+
+
+def test_area_name_alone_is_looked_up_with_the_default_radius() -> None:
+    parsed = parse_form(submit(("areas-0-name", "springfield il"), ("areas-0-unit", "km")))
+    assert parsed.errors == {}
+    assert parsed.criteria is not None
+    (area,) = parsed.criteria.areas
+    assert (area.name, area.radius, area.unit) == ("Springfield, IL", 50, DistanceUnit.MILES)
+    assert 39.5 < area.lat < 40.1
+    assert -89.9 < area.lng < -89.3
+    assert parsed.lookup is False
+
+
+def test_looked_up_area_keeps_a_typed_radius() -> None:
+    parsed = parse_form(
+        submit(
+            ("areas-0-name", "Springfield, IL"), ("areas-0-radius", "10"), ("areas-0-unit", "km")
+        )
+    )
+    assert parsed.criteria is not None
+    (area,) = parsed.criteria.areas
+    assert (area.radius, area.unit) == (10, DistanceUnit.KILOMETERS)
+
+
+def test_typed_coordinates_are_not_overwritten() -> None:
+    parsed = parse_form(
+        submit(
+            ("areas-0-name", "Springfield, IL"),
+            ("areas-0-lat", "39.7"),
+            ("areas-0-lng", "-89.6"),
+            ("areas-0-radius", "5"),
+        )
+    )
+    assert parsed.criteria is not None
+    assert (parsed.criteria.areas[0].lat, parsed.criteria.areas[0].lng) == (39.7, -89.6)
+
+
+def test_unknown_city_is_an_error_on_the_name_and_kept_as_typed() -> None:
+    parsed = parse_form(submit(("areas-0-name", "Nowhereville QQ"), ("areas-0-radius", "5")))
+    assert parsed.criteria is None
+    assert set(parsed.errors) == {"areas-0-name"}
+    assert "no US city matches" in parsed.errors["areas-0-name"]
+    assert parsed.state.areas[0]["name"] == "Nowhereville QQ"
+
+
+def test_ambiguous_city_lists_the_options() -> None:
+    parsed = parse_form(submit(("areas-0-name", "springfield")))
+    assert set(parsed.errors) == {"areas-0-name"}
+    assert "Springfield, IL" in parsed.errors["areas-0-name"]
+    assert parsed.errors["areas-0-name"].startswith("pick one: ")
+
+
+def test_lookup_button_re_resolves_its_row() -> None:
+    # The submitted index (3) is the one the button carries, before renumbering.
+    parsed = parse_form(
+        submit(
+            ("areas-3-name", "Springfield, IL"),
+            ("areas-3-lat", "1"),
+            ("areas-3-lng", "2"),
+            ("areas-3-radius", "5"),
+            ("lookup", "3"),
+        )
+    )
+    assert parsed.lookup is True
+    assert parsed.criteria is not None
+    area = parsed.criteria.areas[0]
+    assert 39.5 < area.lat < 40.1
+    assert area.radius == 5
 
 
 @pytest.mark.parametrize(

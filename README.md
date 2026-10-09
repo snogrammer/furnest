@@ -27,7 +27,7 @@ cp .env.example .env     # set AUTH_TOKEN and AUTH_SESSION_SECRET (random, 16+ c
 docker compose up -d --build
 ```
 
-Open <http://127.0.0.1:8000> and sign in with `AUTH_TOKEN`. Then set your search criteria and, on the Sources page, switch on the sources you want, give each its search locations, and paste the Apify token for the sources that need one. See [docs/deployment.md](docs/deployment.md) for Portainer and Caddy.
+Open <http://127.0.0.1:8000> and sign in with `AUTH_TOKEN`. Then set your search criteria (add an area by typing a city and state, such as "Springfield, IL", and furnest fills in its centre and a 50-mile radius from a bundled, offline US places dataset) and, on the Sources page, switch on the sources you want, give each its search locations, and paste the Apify token for the sources that need one. See [docs/deployment.md](docs/deployment.md) for Portainer and Caddy.
 
 ## Scraping and terms of service
 

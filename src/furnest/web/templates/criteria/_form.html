@@ -2,6 +2,9 @@
 <form id="criteria-form" class="criteria-form" method="post" action="/criteria"
   hx-post="/criteria" hx-target="this" hx-swap="outerHTML">
   {{ csrf_field(request) }}
+  {# Enter in any field saves: the first submit button is the form's default, and the
+     area rows' "Look up" buttons come before the real one. #}
+  <button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">Save criteria</button>
   <p class="muted">
     {% if active %}Editing version {{ active.version }} (active). Saving creates a new version.
     {% else %}Not saved yet. Saving creates version 1.{% endif %}

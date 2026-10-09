@@ -37,7 +37,16 @@ def jobs(session_factory: sessionmaker[Session]) -> list[Job]:
 # --- access -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/criteria", "/criteria/history", "/criteria/rows/area?index=0"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/criteria",
+        "/criteria/history",
+        "/criteria/rows/area?index=0",
+        "/criteria/places?q=springf",
+        "/criteria/rows/area/lookup?index=0",
+    ],
+)
 def test_pages_need_auth(client: TestClient, path: str) -> None:
     assert client.get(path, follow_redirects=False).status_code in (303, 401)
 
@@ -71,6 +80,8 @@ def test_editor_renders_every_section(authed_client: TestClient) -> None:
     assert 'name="owner_types_deny" value="unknown"' not in page.text
     assert 'name="unknown_fails" value="owner_type"' in page.text
     assert 'name="areas-0-name"' in page.text
+    assert 'list="areas-0-places"' in page.text
+    assert "<summary>Coordinates</summary>" in page.text
     assert 'name="nice-0-tag"' in page.text
     assert 'aria-current="page"' in page.text
     assert "https://" not in page.text
@@ -223,6 +234,82 @@ def test_new_row_partials(authed_client: TestClient, kind: str, field: str) -> N
     # The add button is swapped out of band to point at the next index.
     assert 'hx-swap-oob="true"' in response.text
     assert f"/criteria/rows/{kind}?index=5" in response.text
+
+
+# --- City, State lookup (#179) ----------------------------------------------
+
+
+def test_places_suggests_matches(authed_client: TestClient) -> None:
+    response = authed_client.get("/criteria/places?q=springfield", headers=HTMX)
+    assert response.status_code == 200
+    assert '<option value="Springfield, IL">' in response.text
+    assert response.text.count("<option") <= 10
+
+
+def test_places_reads_the_row_input(authed_client: TestClient) -> None:
+    response = authed_client.get("/criteria/places?index=2&areas-2-name=springfield+il")
+    assert '<option value="Springfield, IL">' in response.text
+    assert "<option" not in authed_client.get("/criteria/places?q=zzzz").text
+
+
+def test_row_lookup_fills_coordinates(authed_client: TestClient) -> None:
+    response = authed_client.get(
+        "/criteria/rows/area/lookup?index=2&areas-2-name=springfield+il&areas-2-unit=km",
+        headers=HTMX,
+    )
+    assert response.status_code == 200
+    assert 'value="Springfield, IL"' in response.text
+    assert 'name="areas-2-lat" inputmode="decimal" value="39.' in response.text
+    assert 'name="areas-2-radius" inputmode="decimal" value="50"' in response.text
+    assert '<option value="mi" selected>' in response.text
+    assert "hx-swap-oob" not in response.text
+
+
+def test_row_lookup_reports_an_unknown_city(authed_client: TestClient) -> None:
+    response = authed_client.get(
+        "/criteria/rows/area/lookup?index=0&areas-0-name=Nowhereville+QQ", headers=HTMX
+    )
+    assert response.status_code == 200
+    assert 'id="areas-0-name-error"' in response.text
+    assert 'value="Nowhereville QQ"' in response.text
+
+
+def test_saving_a_city_name_stores_its_coordinates(
+    authed_client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    response = authed_client.post(
+        "/criteria",
+        data=form(authed_client, csrf, **{"areas-0-name": "springfield, illinois"}),
+    )
+    assert response.status_code == 200
+    active = CriteriaStore(session_factory).active()
+    assert active is not None
+    (area,) = active.criteria.areas
+    assert area.name == "Springfield, IL"
+    assert area.radius == 50
+    assert 39.5 < area.lat < 40.1
+
+
+def test_lookup_button_resolves_without_saving(
+    authed_client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    response = authed_client.post(
+        "/criteria",
+        data=form(authed_client, csrf, **{"areas-0-name": "springfield il", "lookup": "0"}),
+    )
+    assert response.status_code == 200
+    assert "Looked up. Review and save." in response.text
+    assert 'value="Springfield, IL"' in response.text
+    assert CriteriaStore(session_factory).history() == []
+
+    unknown = authed_client.post(
+        "/criteria",
+        data=form(authed_client, csrf, **{"areas-0-name": "zzzz", "lookup": "0"}),
+        headers=HTMX,
+    )
+    assert unknown.status_code == 422
+    assert 'id="areas-0-name-error"' in unknown.text
+    assert CriteriaStore(session_factory).history() == []
 
 
 def test_unknown_row_kind_is_404(authed_client: TestClient) -> None:

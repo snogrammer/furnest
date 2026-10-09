@@ -1,20 +1,17 @@
 {% from "criteria/_macros.html" import error, described, add_button %}
 {% set p = "areas-" ~ index %}
-<div class="row area-row">
-  <div class="field">
-    <label for="{{ p }}-name">Name</label>
-    <input id="{{ p }}-name" name="{{ p }}-name" value="{{ row.get('name', '') }}"{{ described(errors, p ~ '-name') }}>
+{# An area is typed as "City, State": the datalist suggests places as you type and
+   picking one re-renders this row with its centre. "Look up" does the same by posting
+   the form, so it works without JavaScript. Coordinates stay editable underneath. #}
+<div class="row area-row" id="{{ p }}-row">
+  <div class="field area-place">
+    <label for="{{ p }}-name">City, State</label>
+    <input id="{{ p }}-name" name="{{ p }}-name" value="{{ row.get('name', '') }}"
+      list="{{ p }}-places" autocomplete="off" placeholder="City, ST"
+      hx-get="/criteria/places?index={{ index }}" hx-trigger="input changed delay:250ms"
+      hx-target="#{{ p }}-places" hx-swap="innerHTML"{{ described(errors, p ~ '-name') }}>
+    <datalist id="{{ p }}-places"></datalist>
     {{ error(errors, p ~ "-name") }}
-  </div>
-  <div class="field">
-    <label for="{{ p }}-lat">Latitude</label>
-    <input id="{{ p }}-lat" name="{{ p }}-lat" inputmode="decimal" value="{{ row.get('lat', '') }}"{{ described(errors, p ~ '-lat') }}>
-    {{ error(errors, p ~ "-lat") }}
-  </div>
-  <div class="field">
-    <label for="{{ p }}-lng">Longitude</label>
-    <input id="{{ p }}-lng" name="{{ p }}-lng" inputmode="decimal" value="{{ row.get('lng', '') }}"{{ described(errors, p ~ '-lng') }}>
-    {{ error(errors, p ~ "-lng") }}
   </div>
   <div class="field">
     <label for="{{ p }}-radius">Radius</label>
@@ -27,6 +24,24 @@
       {% for unit in choices.units %}<option value="{{ unit }}"{% if row.get('unit') == unit %} selected{% endif %}>{{ unit }}</option>{% endfor %}
     </select>
   </div>
+  <button type="submit" class="secondary" name="lookup" value="{{ index }}">Look up</button>
   <label class="remove"><input type="checkbox" name="{{ p }}-remove"> Remove</label>
+  <details class="coords"{% if errors.get(p ~ '-lat') or errors.get(p ~ '-lng') %} open{% endif %}
+    hx-get="/criteria/rows/area/lookup?index={{ index }}" hx-trigger="change from:#{{ p }}-name"
+    hx-include="#{{ p }}-row" hx-target="#{{ p }}-row" hx-swap="outerHTML">
+    <summary>Coordinates</summary>
+    <div class="grid">
+      <div class="field">
+        <label for="{{ p }}-lat">Latitude</label>
+        <input id="{{ p }}-lat" name="{{ p }}-lat" inputmode="decimal" value="{{ row.get('lat', '') }}"{{ described(errors, p ~ '-lat') }}>
+        {{ error(errors, p ~ "-lat") }}
+      </div>
+      <div class="field">
+        <label for="{{ p }}-lng">Longitude</label>
+        <input id="{{ p }}-lng" name="{{ p }}-lng" inputmode="decimal" value="{{ row.get('lng', '') }}"{{ described(errors, p ~ '-lng') }}>
+        {{ error(errors, p ~ "-lng") }}
+      </div>
+    </div>
+  </details>
 </div>
 {% if add_next %}{{ add_button("area", "Add area", index + 1, oob=True) }}{% endif %}

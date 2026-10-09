@@ -1,7 +1,8 @@
 """Pure domain types: NormalizedListing, Criteria, money, rent periods, geo, addresses,
-amenities and the property status state machine.
+amenities, US places and the property status state machine.
 
-Nothing here imports from the rest of furnest or does I/O; everything else depends on it.
+Nothing here imports from the rest of furnest or does I/O (``places`` reads data bundled
+in an installed package); everything else depends on it.
 """
 
 from furnest.domain.address import (
@@ -29,6 +30,7 @@ from furnest.domain.owner_type import (
     owner_type_label,
 )
 from furnest.domain.periods import MONTHLY_FACTOR, RentPeriod, parse_period, to_monthly
+from furnest.domain.places import Place, find_places, resolve_place
 from furnest.domain.price import Price, parse_price
 from furnest.domain.property_type import PropertyType, normalize_property_type
 from furnest.domain.status import (
@@ -66,6 +68,7 @@ __all__ = [
     "OwnerType",
     "ParsedAddress",
     "PassthroughAddressParser",
+    "Place",
     "Price",
     "PropertyStatus",
     "PropertyType",
@@ -75,6 +78,7 @@ __all__ = [
     "beds_baths",
     "check_transition",
     "diff_criteria",
+    "find_places",
     "get_currency",
     "haversine",
     "infer_owner_type",
@@ -85,6 +89,7 @@ __all__ = [
     "parse_period",
     "parse_price",
     "register_currency",
+    "resolve_place",
     "status_rank",
     "to_monthly",
 ]

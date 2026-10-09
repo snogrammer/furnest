@@ -4,7 +4,13 @@ Saving goes through :class:`~furnest.db.criteria_store.CriteriaStore`, so every 
 is a new version and nothing is overwritten. A save that changes nothing is
 reported, not stored. Forms post normally and work without JavaScript. With htmx,
 the editor swaps in just the form partial and the re-run button just a status line.
-Validation failures answer 422 and a re-run with nothing saved answers 409. The
+Validation failures answer 422 and a re-run with nothing saved answers 409.
+
+An area is entered as "City, State" (#179). ``/criteria/places`` fills the name
+input's datalist as the user types, ``/criteria/rows/area/lookup`` re-renders one row
+with the place's coordinates once a name is picked, and a form posted by a row's
+"Look up" button (``lookup=<i>``) is re-rendered resolved but not saved, which is the
+same thing without JavaScript. The
 htmx config in ``base.html`` swaps both, so the messages show in place.
 
 Handlers are plain ``def`` so FastAPI runs the blocking SQLite calls in its threadpool.
@@ -27,11 +33,12 @@ from furnest.domain import (
     PropertyType,
     amenity_label,
     diff_criteria,
+    find_places,
     owner_type_label,
 )
 from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.web.auth import require_auth
-from furnest.web.criteria_form import FormState, parse_form, state_from_criteria
+from furnest.web.criteria_form import FormState, look_up_row, parse_form, state_from_criteria
 from furnest.web.csrf import require_csrf
 from furnest.web.templating import templates
 from furnest.worker import queue
@@ -49,6 +56,9 @@ CHOICES: dict[str, Any] = {
     "rule_options": [(rule.value, rule.value.replace("_", " ")) for rule in FilterRule],
     "units": [unit.value for unit in DistanceUnit],
 }
+
+
+PLACE_SUGGESTIONS = 10
 
 
 def _store(request: Request) -> CriteriaStore:
@@ -102,6 +112,15 @@ def edit(
 async def save(request: Request) -> Response:
     parsed = parse_form(await request.form())
     store = _store(request)
+    if parsed.lookup:
+        return _render_editor(
+            request,
+            store,
+            state=parsed.state,
+            errors=parsed.errors,
+            flash=None if parsed.errors else "Looked up. Review and save.",
+            status_code=422 if parsed.errors else 200,
+        )
     if parsed.criteria is None:
         return _render_editor(
             request, store, state=parsed.state, errors=parsed.errors, status_code=422
@@ -115,6 +134,26 @@ async def save(request: Request) -> Response:
     if _is_htmx(request):
         return _render_editor(request, store, flash=f"Saved as version {record.version}.")
     return RedirectResponse(f"/criteria?saved={record.version}", status_code=303)
+
+
+@router.get("/places", response_class=HTMLResponse)
+def places(
+    request: Request,
+    index: Annotated[int, Query(ge=0)] = 0,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+) -> Response:
+    # htmx sends the typed name under the row's own input name.
+    query = q if q is not None else request.query_params.get(f"areas-{index}-name", "")
+    matches = find_places(query[:200], limit=PLACE_SUGGESTIONS)
+    return templates.TemplateResponse(request, "criteria/_place_options.html", {"places": matches})
+
+
+@router.get("/rows/area/lookup", response_class=HTMLResponse)
+def lookup_area_row(request: Request, index: Annotated[int, Query(ge=0)]) -> Response:
+    row, message = look_up_row(request.query_params, index)
+    errors = {f"areas-{index}-name": message} if message else {}
+    context = {"index": index, "row": row, "choices": CHOICES, "errors": errors, "add_next": False}
+    return templates.TemplateResponse(request, "criteria/_area_row.html", context)
 
 
 @router.get("/rows/{kind}", response_class=HTMLResponse)

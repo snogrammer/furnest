@@ -282,6 +282,20 @@ main {
   border-bottom: 1px dashed var(--border);
 }
 
+/* An area row's coordinates: filled from the City, State lookup, editable on demand. */
+.area-row .coords {
+  grid-column: 1 / -1;
+}
+
+.area-row .coords summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.area-row .coords .grid {
+  margin-top: calc(var(--space) / 2);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -429,7 +443,7 @@ button.secondary {
   }
 
   .area-row {
-    grid-template-columns: 2fr 1fr 1fr 1fr auto auto;
+    grid-template-columns: 3fr 1fr 1fr auto auto;
     align-items: end;
   }
 
