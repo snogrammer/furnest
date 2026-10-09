@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 Port = Annotated[int, Field(ge=1, le=65535)]
 PositiveInt = Annotated[int, Field(gt=0)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
 
 
 class Environment(StrEnum):
@@ -169,6 +170,8 @@ class AuthSettings(_Group):
     session_secret: SecretStr | None = None
     cookie_secure: bool = True
     session_max_age_seconds: PositiveInt = 7 * 24 * 3600
+    # Sessions unused for this long end early. 0 disables the idle timeout.
+    session_idle_timeout_seconds: NonNegativeInt = 0
     # Failed logins and wrong Bearer tokens allowed per client IP (IPv6: per /64)
     # within the window before it is locked out.
     login_max_attempts: PositiveInt = 5

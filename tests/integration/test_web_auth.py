@@ -240,6 +240,27 @@ def test_logout_clears_session(authed_client: TestClient, csrf: Callable[[str], 
     assert authed_client.get("/", headers=HTML, follow_redirects=False).status_code == 303
 
 
+def test_log_out_everywhere_revokes_stolen_cookie(
+    authed_client: TestClient, csrf: Callable[[str], str]
+) -> None:
+    stolen = authed_client.cookies[SESSION_COOKIE]
+    form_token = csrf(authed_client.get("/settings", headers=HTML).text)
+    response = authed_client.post(
+        "/settings/sessions/revoke", data={"csrf_token": form_token}, follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    authed_client.cookies.clear()
+    authed_client.cookies.set(SESSION_COOKIE, stolen)
+    assert authed_client.get("/settings", headers=HTML, follow_redirects=False).status_code == 303
+    assert authed_client.get("/").status_code == 401
+
+
+def test_settings_page_offers_log_out_everywhere(authed_client: TestClient) -> None:
+    assert "Log out everywhere" in authed_client.get("/settings", headers=HTML).text
+
+
 # --- Bearer --------------------------------------------------------------------
 
 

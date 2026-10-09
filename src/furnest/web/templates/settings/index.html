@@ -6,6 +6,13 @@
 {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
 {% if flash %}<p class="flash" role="status">{{ flash }}</p>{% endif %}
 
+<h2>Sessions</h2>
+<form method="post" action="/settings/sessions/revoke">
+  {{ csrf_field(request) }}
+  <p class="muted">Ends every dashboard login, including this one, in every browser. You will need the access token again.</p>
+  <button type="submit">Log out everywhere</button>
+</form>
+
 <h2>Integrations</h2>
 <div class="table-scroll">
 <table class="sources">

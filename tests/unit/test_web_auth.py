@@ -3,7 +3,7 @@
 import time
 
 import pytest
-from itsdangerous import TimestampSigner, URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer
 from pydantic import SecretStr
 from starlette.requests import Request
 
@@ -91,10 +91,7 @@ def test_validly_signed_but_wrong_payload_is_rejected() -> None:
 
 def test_expired_session_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     authenticator = Authenticator(_auth(session_max_age_seconds=60))
-    issued_at = int(time.time()) - 61
-    monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda self: issued_at)
-    cookie = authenticator.issue_session()
-    monkeypatch.undo()
+    cookie = authenticator.issue_session(issued_at=int(time.time()) - 61)
 
     assert not authenticator.session_valid(cookie)
 
@@ -149,3 +146,66 @@ def test_csrf_signer_roundtrip_and_tamper() -> None:
     assert signer.unsign(None) is None
     assert signer.unsign(CsrfSigner("other-secret-0123456789").sign("tok")) is None
     assert signer.unsign(signer._serializer.dumps(123)) is None
+
+
+class _MemoryStore:
+    def __init__(self) -> None:
+        self.data: dict[str, object] = {}
+
+    def get(self, key: str) -> object:
+        return self.data.get(key)
+
+    def set(self, key: str, value: object) -> None:
+        self.data[key] = value
+
+
+def _bound(**kw: int) -> Authenticator:
+    authenticator = Authenticator(_auth(**kw))  # type: ignore[arg-type]
+    authenticator.bind_store(_MemoryStore())  # type: ignore[arg-type]
+    return authenticator
+
+
+def test_revoke_all_invalidates_earlier_sessions_only() -> None:
+    authenticator = _bound()
+    old = authenticator.issue_session()
+    assert authenticator.session_valid(old)
+
+    authenticator.revoke_all()
+
+    assert not authenticator.session_valid(old)
+    assert authenticator.session_valid(authenticator.issue_session())
+
+
+def test_idle_timeout_ends_unused_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    authenticator = _bound(session_idle_timeout_seconds=600)
+    cookie = authenticator.issue_session()
+    now = time.time()
+
+    monkeypatch.setattr(time, "time", lambda: now + 500)
+    assert authenticator.session_valid(cookie)
+    monkeypatch.setattr(time, "time", lambda: now + 700)
+    assert not authenticator.session_valid(cookie)
+
+
+def test_idle_timeout_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    authenticator = _bound()
+    cookie = authenticator.issue_session()
+    now = time.time()
+
+    monkeypatch.setattr(time, "time", lambda: now + 3600)
+    assert authenticator.session_valid(cookie)
+    assert authenticator.refreshed_session(cookie) is None
+
+
+def test_refresh_extends_idle_but_not_absolute_lifetime(monkeypatch: pytest.MonkeyPatch) -> None:
+    authenticator = _bound(session_idle_timeout_seconds=600, session_max_age_seconds=1000)
+    cookie = authenticator.issue_session()
+    now = time.time()
+
+    monkeypatch.setattr(time, "time", lambda: now + 500)
+    refreshed = authenticator.refreshed_session(cookie)
+    assert refreshed is not None
+    monkeypatch.setattr(time, "time", lambda: now + 900)
+    assert authenticator.session_valid(refreshed)  # idle only 400s
+    monkeypatch.setattr(time, "time", lambda: now + 1100)
+    assert not authenticator.session_valid(refreshed)  # past absolute lifetime

@@ -25,10 +25,13 @@ from furnest.config import (
 )
 from furnest.db.session import make_session_factory
 from furnest.db.settings_store import SqlSettingsStore
-from furnest.web.auth import require_auth
+from furnest.logging import get_logger
+from furnest.web.auth import clear_session_cookie, client_key, require_auth
 from furnest.web.csrf import require_csrf
 from furnest.web.settings_view import build_groups, build_integrations, build_runtime_rows
 from furnest.web.templating import templates
+
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/settings", dependencies=[Depends(require_auth), Depends(require_csrf)])
 
@@ -77,6 +80,16 @@ def index(
     elif reset is not None:
         flash = f"{reset} is back to its default."
     return _render(request, flash=flash)
+
+
+@router.post("/sessions/revoke")
+def revoke_sessions(request: Request) -> Response:
+    """Log out everywhere: every session cookie issued so far stops working."""
+    request.app.state.authenticator.revoke_all()
+    log.info("sessions_revoked", client_ip=client_key(request))
+    response = RedirectResponse("/login", status_code=303)
+    clear_session_cookie(request, response)
+    return response
 
 
 @router.post("/runtime/{key}", response_class=HTMLResponse)

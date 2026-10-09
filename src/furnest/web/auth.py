@@ -8,8 +8,12 @@ A request is authenticated in one of two ways:
 
 The session cookie is signed with ``AUTH_SESSION_SECRET`` (itsdangerous) and
 carries a keyed fingerprint of the token, so rotating either ``AUTH_TOKEN`` or the
-secret logs every browser out. Sessions are stateless: logout deletes the cookie,
-it does not revoke it server side. Token comparison is constant time.
+secret logs every browser out. The cookie also carries a session generation, kept in
+the ``settings`` table: "log out everywhere" bumps it, which invalidates every cookie
+issued before. Plain logout only deletes the cookie in that browser. An optional idle
+timeout (``AUTH_SESSION_IDLE_TIMEOUT_SECONDS``) ends sessions that were not used for
+that long; the cookie is re-issued as the session is used, the absolute lifetime
+still counts from the original login. Token comparison is constant time.
 
 Routers opt in with ``dependencies=[Depends(require_auth)]``. An unauthenticated
 browser page load is redirected to ``/login``; everything else gets a 401. The JSON
@@ -25,7 +29,8 @@ import hashlib
 import hmac
 import ipaddress
 import math
-from typing import Literal
+import time
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
@@ -35,6 +40,7 @@ from pydantic import SecretStr
 from starlette.responses import Response
 
 from furnest.config import AuthSettings, Settings
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.logging import get_logger
 from furnest.web.ratelimit import SlidingWindowLimiter
 
@@ -43,6 +49,9 @@ log = get_logger(__name__)
 SESSION_COOKIE = "furnest_session"
 _SESSION_SALT = "furnest.session"
 _SESSION_VERSION = 1
+SESSION_GENERATION_KEY = "auth.session_generation"
+# Re-issue an idle-timeout cookie at most this often.
+_TOUCH_INTERVAL_SECONDS = 60
 _MIN_SECRET_LENGTH = 16
 _PLACEHOLDER_PREFIX = "change-me"
 
@@ -74,27 +83,78 @@ class Authenticator:
         self._fingerprint = hmac.new(secret.encode(), self._token, hashlib.sha256).hexdigest()
         self._serializer = URLSafeTimedSerializer(secret, salt=_SESSION_SALT)
         self.max_age = auth.session_max_age_seconds
+        self.idle_timeout = auth.session_idle_timeout_seconds
         self.secret = secret
+        self._store: SqlSettingsStore | None = None
+
+    def bind_store(self, store: SqlSettingsStore) -> None:
+        """Use ``store`` for the session generation (once the database is available)."""
+        self._store = store
+
+    def generation(self) -> int:
+        value = self._store.get(SESSION_GENERATION_KEY) if self._store is not None else 0
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def revoke_all(self) -> int:
+        """Invalidate every session issued so far. Returns the new generation."""
+        if self._store is None:
+            msg = "no settings store bound"
+            raise RuntimeError(msg)
+        new = self.generation() + 1
+        self._store.set(SESSION_GENERATION_KEY, new)
+        return new
 
     def token_matches(self, candidate: str) -> bool:
         return hmac.compare_digest(candidate.encode(), self._token)
 
-    def issue_session(self) -> str:
-        return self._serializer.dumps({"v": _SESSION_VERSION, "tf": self._fingerprint})
+    def issue_session(self, *, issued_at: int | None = None) -> str:
+        now = int(time.time())
+        return self._serializer.dumps(
+            {
+                "v": _SESSION_VERSION,
+                "tf": self._fingerprint,
+                "g": self.generation(),
+                "ia": now if issued_at is None else issued_at,
+                "la": now,
+            }
+        )
 
-    def session_valid(self, cookie: str | None) -> bool:
+    def _payload(self, cookie: str | None) -> dict[str, Any] | None:
         if not cookie:
-            return False
+            return None
         try:
-            payload = self._serializer.loads(cookie, max_age=self.max_age)
-        except BadSignature:  # also covers SignatureExpired
-            return False
-        return (
+            payload = self._serializer.loads(cookie)
+        except BadSignature:
+            return None
+        if not (
             isinstance(payload, dict)
             and payload.get("v") == _SESSION_VERSION
             and isinstance(payload.get("tf"), str)
             and hmac.compare_digest(payload["tf"], self._fingerprint)
-        )
+            and payload.get("g") == self.generation()
+        ):
+            return None
+        issued_at, last_active = payload.get("ia"), payload.get("la")
+        if not (isinstance(issued_at, int) and isinstance(last_active, int)):
+            return None
+        now = time.time()
+        if now - issued_at > self.max_age:
+            return None
+        if self.idle_timeout and now - last_active > self.idle_timeout:
+            return None
+        return dict(payload)
+
+    def session_valid(self, cookie: str | None) -> bool:
+        return self._payload(cookie) is not None
+
+    def refreshed_session(self, cookie: str | None) -> str | None:
+        """A fresh cookie for a valid session whose idle clock is worth restarting."""
+        if not self.idle_timeout:
+            return None
+        payload = self._payload(cookie)
+        if payload is None or time.time() - payload["la"] < _TOUCH_INTERVAL_SECONDS:
+            return None
+        return self.issue_session(issued_at=payload["ia"])
 
 
 def _authenticator(request: Request) -> Authenticator:
@@ -187,11 +247,17 @@ def _wants_html(request: Request) -> bool:
     return "text/html" in request.headers.get("accept", "")
 
 
-def require_auth(request: Request) -> None:
+def require_auth(request: Request, response: Response) -> None:
     """Dependency: let authenticated requests through, turn the rest away."""
     method = _authenticate(request)
     if method is not None:
         request.state.auth = method
+        if method == "session":
+            refreshed = _authenticator(request).refreshed_session(
+                request.cookies.get(SESSION_COOKIE)
+            )
+            if refreshed is not None:
+                set_session_cookie(request, response, refreshed)
         return
     if request.method in ("GET", "HEAD") and _wants_html(request):
         path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
@@ -229,11 +295,11 @@ def cookie_secure(request: Request) -> bool:
     return settings.auth.cookie_secure or request.url.scheme == "https"
 
 
-def set_session_cookie(request: Request, response: Response) -> None:
+def set_session_cookie(request: Request, response: Response, value: str | None = None) -> None:
     authenticator = _authenticator(request)
     response.set_cookie(
         SESSION_COOKIE,
-        authenticator.issue_session(),
+        value or authenticator.issue_session(),
         max_age=authenticator.max_age,
         path="/",
         httponly=True,

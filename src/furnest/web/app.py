@@ -37,6 +37,8 @@ from furnest import __version__
 from furnest.config import Settings, get_settings
 from furnest.db.engine import create_engine_from_settings
 from furnest.db.migrate import upgrade
+from furnest.db.session import make_session_factory
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.logging import get_logger
 from furnest.sources.registry import SourceRegistry, discover
 from furnest.web.auth import Authenticator, register_auth_handlers
@@ -84,6 +86,7 @@ def create_app(
                 upgrade(app_engine)
                 log.info("migrations_applied_on_start")
             app.state.engine = app_engine
+            authenticator.bind_store(SqlSettingsStore(make_session_factory(app_engine)))
             yield
         finally:
             if owned:
