@@ -3,7 +3,8 @@
 A request is authenticated in one of two ways:
 
 * ``Authorization: Bearer <AUTH_TOKEN>``, for scripts and the JSON API;
-* the ``furnest_session`` cookie, set by ``POST /login`` after the token was typed
+* the ``furnest_session`` cookie (``__Host-furnest_session`` when Secure, so a
+  sibling subdomain can't plant or shadow it), set by ``POST /login`` after the token was typed
   into the login form.
 
 The session cookie is signed with ``AUTH_SESSION_SECRET`` (itsdangerous) and
@@ -25,10 +26,12 @@ failed logins on ``/login``. Once it is spent, Bearer requests get a 429 with
 ``Retry-After`` without the token being checked, so a lockout can't be guessed past.
 """
 
+import base64
 import hashlib
 import hmac
 import ipaddress
 import math
+import secrets
 import time
 from typing import Any, Literal
 from urllib.parse import urlencode
@@ -47,8 +50,10 @@ from furnest.web.ratelimit import SlidingWindowLimiter
 log = get_logger(__name__)
 
 SESSION_COOKIE = "furnest_session"
+HOST_PREFIX = "__Host-"
 _SESSION_SALT = "furnest.session"
-_SESSION_VERSION = 1
+_SESSION_VERSION = 2
+_CSRF_CONTEXT = b"furnest.csrf.session:"
 SESSION_GENERATION_KEY = "auth.session_generation"
 # Re-issue an idle-timeout cookie at most this often.
 _TOUCH_INTERVAL_SECONDS = 60
@@ -107,11 +112,12 @@ class Authenticator:
     def token_matches(self, candidate: str) -> bool:
         return hmac.compare_digest(candidate.encode(), self._token)
 
-    def issue_session(self, *, issued_at: int | None = None) -> str:
+    def issue_session(self, *, issued_at: int | None = None, session_id: str | None = None) -> str:
         now = int(time.time())
         return self._serializer.dumps(
             {
                 "v": _SESSION_VERSION,
+                "sid": session_id or secrets.token_urlsafe(16),
                 "tf": self._fingerprint,
                 "g": self.generation(),
                 "ia": now if issued_at is None else issued_at,
@@ -132,6 +138,8 @@ class Authenticator:
             and isinstance(payload.get("tf"), str)
             and hmac.compare_digest(payload["tf"], self._fingerprint)
             and payload.get("g") == self.generation()
+            and isinstance(payload.get("sid"), str)
+            and payload["sid"]
         ):
             return None
         issued_at, last_active = payload.get("ia"), payload.get("la")
@@ -154,7 +162,17 @@ class Authenticator:
         payload = self._payload(cookie)
         if payload is None or time.time() - payload["la"] < _TOUCH_INTERVAL_SECONDS:
             return None
-        return self.issue_session(issued_at=payload["ia"])
+        return self.issue_session(issued_at=payload["ia"], session_id=payload["sid"])
+
+    def csrf_token_for(self, cookie: str | None) -> str | None:
+        """The CSRF token bound to a valid session (an HMAC of its id), else ``None``."""
+        payload = self._payload(cookie)
+        if payload is None:
+            return None
+        digest = hmac.new(
+            self.secret.encode(), _CSRF_CONTEXT + payload["sid"].encode(), hashlib.sha256
+        ).digest()
+        return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
 def _authenticator(request: Request) -> Authenticator:
@@ -170,6 +188,15 @@ def bearer_token(request: Request) -> str | None:
     return credentials.strip()
 
 
+def session_cookie_name(secure: bool) -> str:
+    return HOST_PREFIX + SESSION_COOKIE if secure else SESSION_COOKIE
+
+
+def session_cookie_value(request: Request) -> str | None:
+    """The session cookie for this request's mode; the other name is never trusted."""
+    return request.cookies.get(session_cookie_name(cookie_secure(request)))
+
+
 def auth_method(request: Request) -> AuthMethod | None:
     """How the request is authenticated, or ``None``.
 
@@ -180,7 +207,7 @@ def auth_method(request: Request) -> AuthMethod | None:
     token = bearer_token(request)
     if token is not None:
         return "bearer" if authenticator.token_matches(token) else None
-    if authenticator.session_valid(request.cookies.get(SESSION_COOKIE)):
+    if authenticator.session_valid(session_cookie_value(request)):
         return "session"
     return None
 
@@ -253,9 +280,7 @@ def require_auth(request: Request, response: Response) -> None:
     if method is not None:
         request.state.auth = method
         if method == "session":
-            refreshed = _authenticator(request).refreshed_session(
-                request.cookies.get(SESSION_COOKIE)
-            )
+            refreshed = _authenticator(request).refreshed_session(session_cookie_value(request))
             if refreshed is not None:
                 set_session_cookie(request, response, refreshed)
         return
@@ -298,7 +323,7 @@ def cookie_secure(request: Request) -> bool:
 def set_session_cookie(request: Request, response: Response, value: str | None = None) -> None:
     authenticator = _authenticator(request)
     response.set_cookie(
-        SESSION_COOKIE,
+        session_cookie_name(cookie_secure(request)),
         value or authenticator.issue_session(),
         max_age=authenticator.max_age,
         path="/",
@@ -309,8 +334,9 @@ def set_session_cookie(request: Request, response: Response, value: str | None =
 
 
 def clear_session_cookie(request: Request, response: Response) -> None:
+    secure = cookie_secure(request)
     response.delete_cookie(
-        SESSION_COOKIE, path="/", httponly=True, samesite="lax", secure=cookie_secure(request)
+        session_cookie_name(secure), path="/", httponly=True, samesite="lax", secure=secure
     )
 
 

@@ -13,6 +13,7 @@ from furnest.config import LoggingSettings, Settings
 from furnest.logging import configure_logging
 from furnest.web.app import create_app
 from furnest.web.auth import (
+    HOST_PREFIX,
     SESSION_COOKIE,
     AuthConfigError,
     require_auth,
@@ -157,12 +158,66 @@ def test_correct_token_sets_session_cookie_and_redirects(
     assert "Log out" in page.text
 
 
-def test_login_rotates_csrf_token(client: TestClient, login: LoginFn) -> None:
-    client.get("/login")
-    before = client.cookies[CSRF_COOKIE]
+def test_login_retires_pre_session_csrf_cookie(
+    client: TestClient, login: LoginFn, csrf: Callable[[str], str]
+) -> None:
+    pre_session = csrf(client.get("/login").text)
+    assert CSRF_COOKIE in client.cookies
     login(client)
 
-    assert client.cookies[CSRF_COOKIE] != before
+    assert CSRF_COOKIE not in client.cookies
+    assert csrf(client.get("/", headers=HTML).text) != pre_session
+
+
+def test_csrf_token_is_bound_to_the_session(
+    client: TestClient, login: LoginFn, csrf: Callable[[str], str]
+) -> None:
+    login(client)
+    first = csrf(client.get("/", headers=HTML).text)
+    assert csrf(client.get("/", headers=HTML).text) == first
+
+    client.post("/logout", data={"csrf_token": first})
+    login(client)
+    assert csrf(client.get("/", headers=HTML).text) != first
+
+
+def test_pre_session_pair_is_useless_with_a_session(
+    client: TestClient, login: LoginFn, csrf: Callable[[str], str]
+) -> None:
+    # What a sibling subdomain can get: a validly signed pair from /login.
+    page = client.get("/login")
+    planted_token = csrf(page.text)
+    planted_cookie = client.cookies[CSRF_COOKIE]
+    login(client)
+    client.cookies.set(CSRF_COOKIE, planted_cookie)
+
+    response = client.post("/logout", data={"csrf_token": planted_token})
+
+    assert response.status_code == 403
+
+
+def test_cross_site_requests_are_refused(
+    client: TestClient, login: LoginFn, csrf: Callable[[str], str]
+) -> None:
+    login(client)
+    token = csrf(client.get("/", headers=HTML).text)
+    data = {"csrf_token": token}
+
+    for headers in (
+        {"Sec-Fetch-Site": "cross-site"},
+        {"Sec-Fetch-Site": "same-site"},
+        {"Origin": "https://evil.example"},
+        {"Origin": "null"},
+    ):
+        assert client.post("/logout", data=data, headers=headers).status_code == 403, headers
+
+    ok = client.post(
+        "/logout",
+        data=data,
+        headers={"Sec-Fetch-Site": "same-origin", "Origin": str(client.base_url)},
+        follow_redirects=False,
+    )
+    assert ok.status_code == 303
 
 
 def test_session_cookie_is_secure_when_configured(
@@ -175,7 +230,8 @@ def test_session_cookie_is_secure_when_configured(
     with TestClient(create_app(Settings(), engine=migrated_engine)) as client:
         page = client.get("/login")
         # httpx will not send a Secure cookie over plain HTTP, so hand it back manually.
-        client.cookies.set(CSRF_COOKIE, re.split("[=;]", _cookie_header(page, CSRF_COOKIE))[1])
+        csrf_name = HOST_PREFIX + CSRF_COOKIE
+        client.cookies.set(csrf_name, re.split("[=;]", _cookie_header(page, csrf_name))[1])
         response = client.post(
             "/login",
             data={"token": auth_token, "csrf_token": csrf(page.text)},
@@ -183,8 +239,11 @@ def test_session_cookie_is_secure_when_configured(
         )
 
     assert response.status_code == 303
-    assert "Secure" in _cookie_header(response, SESSION_COOKIE)
-    assert "Secure" in _cookie_header(page, CSRF_COOKIE)
+    session_header = _cookie_header(response, HOST_PREFIX + SESSION_COOKIE)
+    assert "Secure" in session_header
+    assert "Path=/" in session_header
+    assert "Domain" not in session_header
+    assert "Secure" in _cookie_header(page, HOST_PREFIX + CSRF_COOKIE)
 
 
 def test_login_follows_safe_next_only(
@@ -371,11 +430,12 @@ def test_csrf_form_field_is_accepted(post_client: TestClient, csrf: Callable[[st
     assert post_client.post("/action", data={"csrf_token": token}).status_code == 200
 
 
-def test_csrf_token_without_matching_cookie_is_rejected(
-    post_client: TestClient, csrf: Callable[[str], str]
+def test_csrf_token_from_another_session_is_rejected(
+    post_client: TestClient, csrf: Callable[[str], str], login: LoginFn
 ) -> None:
     token = csrf(post_client.get("/", headers=HTML).text)
-    post_client.cookies.delete(CSRF_COOKIE)
+    post_client.cookies.clear()
+    login(post_client)
 
     assert post_client.post("/action", data={"csrf_token": token}).status_code == 403
 
@@ -488,7 +548,7 @@ def test_forwarded_proto_https_marks_cookies_secure(
 
     response = client.get("/login", headers={"X-Forwarded-Proto": "https"})
 
-    assert "Secure" in _cookie_header(response, CSRF_COOKIE)
+    assert "Secure" in _cookie_header(response, HOST_PREFIX + CSRF_COOKIE)
 
 
 # --- Logging -------------------------------------------------------------------

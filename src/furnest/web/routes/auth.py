@@ -4,7 +4,7 @@ Failed logins count against the client's rate limit (shared with wrong Bearer
 tokens, see :mod:`furnest.web.auth`). Once it is exhausted,
 ``POST /login`` answers 429 without even looking at the submitted token, so a
 lockout cannot be used to keep guessing. A successful login clears the count and
-rotates the CSRF token.
+retires the pre-session CSRF token (the session's own takes over).
 """
 
 from typing import Annotated
@@ -23,7 +23,7 @@ from furnest.web.auth import (
     safe_next,
     set_session_cookie,
 )
-from furnest.web.csrf import new_token, require_csrf, set_csrf_cookie
+from furnest.web.csrf import clear_csrf_cookie, new_token, require_csrf, set_csrf_cookie
 from furnest.web.templating import templates
 
 log = get_logger(__name__)
@@ -75,7 +75,7 @@ def login(
     log.info("login_succeeded", client_ip=ip)
     response = RedirectResponse(target, status_code=303)
     set_session_cookie(request, response)
-    set_csrf_cookie(request, response, new_token())
+    clear_csrf_cookie(request, response)
     return response
 
 

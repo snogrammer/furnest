@@ -1,25 +1,33 @@
-"""CSRF protection: a signed double-submit token.
+"""CSRF protection, in two layers.
 
-The ``furnest_csrf`` cookie holds a random token signed with ``AUTH_SESSION_SECRET``.
-Pages echo the raw token back in a hidden ``csrf_token`` form field (``csrf_field``
-macro) and, for htmx requests, in the ``X-CSRF-Token`` header (``hx-headers`` on
-``<body>``). An unsafe request passes only when what it sends matches the token in
-its cookie. The signature stops a made-up cookie value from being accepted. It
-does not stop a sibling subdomain from planting a validly signed pair fetched from
-``/login``, since the token isn't bound to the session (#155).
+1. A token. With a session, the token is an HMAC of the session id (see
+   ``Authenticator.csrf_token_for``): it only works for that session, so a pair
+   fetched elsewhere and planted as cookies (cookie tossing from a sibling
+   subdomain) is useless. Nothing is stored; the server recomputes it. Before
+   there is a session (the login form) a signed double-submit cookie is used:
+   ``furnest_csrf`` holds a random token signed with ``AUTH_SESSION_SECRET``. Over
+   HTTPS the cookie is named ``__Host-furnest_csrf``, which browsers refuse to
+   accept from a sibling subdomain; plain-HTTP local dev falls back to the bare
+   name. Pages echo the token in a hidden ``csrf_token`` form field (``csrf_field``
+   macro) and, for htmx requests, in the ``X-CSRF-Token`` header (``hx-headers`` on
+   ``<body>``).
+2. ``Sec-Fetch-Site`` / ``Origin``: an unsafe request that a browser marks as
+   cross-site, or whose ``Origin`` is not this host, is refused before the token
+   is looked at. Requests carrying neither header (non-browser clients) rely on
+   the token alone.
 
-The same mechanism guards the login form, so it works before there is a session.
 Requests authenticated with a valid Bearer token are exempt: browsers never attach
 that header on their own, so there is nothing to forge. A wrong one gets no pass.
 
-``CsrfMiddleware`` reads the cookie at the start of each request. A template that
-needs a token and finds none mints one, and the middleware then sets the cookie
-on that response. Nothing else gets a cookie, so health checks and static files stay
-cookie-free.
+``CsrfMiddleware`` reads the pre-session cookie at the start of each request. A
+template that needs a pre-session token and finds none mints one, and the middleware
+then sets the cookie on that response. Nothing else gets a cookie, so health checks
+and static files stay cookie-free.
 """
 
 import hmac
 import secrets
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -28,9 +36,15 @@ from starlette.requests import cookie_parser
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from furnest.web.auth import auth_method, cookie_secure
+from furnest.web.auth import (
+    HOST_PREFIX,
+    auth_method,
+    cookie_secure,
+    session_cookie_value,
+)
 
 CSRF_COOKIE = "furnest_csrf"
+_CROSS_SITE_OK = frozenset({"same-origin", "none"})
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FIELD = "csrf_token"
 _SALT = "furnest.csrf"
@@ -40,6 +54,10 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 _FROM_COOKIE = "csrf_cookie_token"  # token from a validly signed cookie, or None
 _CURRENT = "csrf_token"  # token templates render; minted if the cookie had none
 _ISSUE = "csrf_issue"  # set when a new token must be sent as a cookie
+
+
+def csrf_cookie_name(secure: bool) -> str:
+    return HOST_PREFIX + CSRF_COOKIE if secure else CSRF_COOKIE
 
 
 class CsrfSigner:
@@ -63,8 +81,18 @@ def new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _session_token(request: Request) -> str | None:
+    token: str | None = request.app.state.authenticator.csrf_token_for(
+        session_cookie_value(request)
+    )
+    return token
+
+
 def csrf_token(request: Request) -> str:
-    """The token to embed in this page; mints one (and its cookie) when needed."""
+    """The token to embed in this page; mints a pre-session one (and cookie) if needed."""
+    bound = _session_token(request)
+    if bound is not None:
+        return bound
     token: str | None = getattr(request.state, _CURRENT, None)
     if token is None:
         token = new_token()
@@ -75,7 +103,12 @@ def csrf_token(request: Request) -> str:
 
 def _set_cookie(response: Response, signer: CsrfSigner, token: str, *, secure: bool) -> None:
     response.set_cookie(
-        CSRF_COOKIE, signer.sign(token), path="/", httponly=True, samesite="strict", secure=secure
+        csrf_cookie_name(secure),
+        signer.sign(token),
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=secure,
     )
 
 
@@ -84,13 +117,35 @@ def set_csrf_cookie(request: Request, response: Response, token: str) -> None:
     _set_cookie(response, request.app.state.csrf_signer, token, secure=cookie_secure(request))
 
 
+def clear_csrf_cookie(request: Request, response: Response) -> None:
+    """Drop the pre-session cookie, e.g. once login has bound the token to a session."""
+    secure = cookie_secure(request)
+    response.delete_cookie(
+        csrf_cookie_name(secure), path="/", httponly=True, samesite="strict", secure=secure
+    )
+
+
+def _same_origin(request: Request) -> bool:
+    """The browser-supplied provenance headers, when present, say same-origin."""
+    site = request.headers.get("sec-fetch-site")
+    if site is not None and site.lower() not in _CROSS_SITE_OK:
+        return False
+    origin = request.headers.get("origin")
+    if origin is not None:
+        host = request.headers.get("host", "")
+        return urlsplit(origin).netloc.lower() == host.lower() and bool(host)
+    return True
+
+
 async def require_csrf(request: Request) -> None:
     """Dependency: reject unsafe requests whose token does not match their cookie."""
     if request.method in _SAFE_METHODS or auth_method(request) == "bearer":
         # A valid Bearer token can't be forged cross-site (browsers never attach
         # it on their own). A wrong one gets no exemption.
         return
-    expected: str | None = getattr(request.state, _FROM_COOKIE, None)
+    if not _same_origin(request):
+        raise HTTPException(status_code=403, detail="Cross-site request refused")
+    expected = _session_token(request) or getattr(request.state, _FROM_COOKIE, None)
     supplied = request.headers.get(CSRF_HEADER)
     if supplied is None and request.headers.get("content-type", "").startswith(
         ("application/x-www-form-urlencoded", "multipart/form-data")
@@ -115,7 +170,8 @@ class CsrfMiddleware:
             return
 
         state = scope.setdefault("state", {})
-        token = self.signer.unsign(_read_cookie(scope, CSRF_COOKIE))
+        secure = self.cookie_secure or scope.get("scheme") == "https"
+        token = self.signer.unsign(_read_cookie(scope, csrf_cookie_name(secure)))
         state[_FROM_COOKIE] = token
         state[_CURRENT] = token
         state[_ISSUE] = False
@@ -123,7 +179,6 @@ class CsrfMiddleware:
         async def send_with_cookie(message: Message) -> None:
             if message["type"] == "http.response.start" and state.get(_ISSUE):
                 carrier = Response()
-                secure = self.cookie_secure or scope.get("scheme") == "https"
                 _set_cookie(carrier, self.signer, state[_CURRENT], secure=secure)
                 headers = MutableHeaders(scope=message)
                 for value in carrier.headers.getlist("set-cookie"):
