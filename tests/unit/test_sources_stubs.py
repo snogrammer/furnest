@@ -5,10 +5,10 @@ import pytest
 from furnest.config import AdapterOverrides, SourcesSettings
 from furnest.domain import Criteria
 from furnest.sources import Capabilities, SourceError, StubAdapter, discover, resolve_config
-from furnest.sources.adapters.stubs import ApartmentsCom, Blueground, HotPads, Zumper
+from furnest.sources.adapters.stubs import ApartmentsCom, HotPads, Zumper
 from furnest.sources.config import NOT_BUILT_REASON
 
-STUBS: list[type[StubAdapter]] = [ApartmentsCom, Blueground, HotPads, Zumper]
+STUBS: list[type[StubAdapter]] = [ApartmentsCom, HotPads, Zumper]
 
 
 class NeedsEverything(StubAdapter):

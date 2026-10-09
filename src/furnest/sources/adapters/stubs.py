@@ -19,21 +19,6 @@ from furnest.sources.stub import StubAdapter
 _PROVIDER = Capabilities(has_api=True, requires_api_key=True)
 
 
-class Blueground(StubAdapter):
-    """Blueground: furnished apartments for a month or longer (#119).
-
-    TODO: fetch city pages (``/furnished-apartments-<city>-usa``) directly. They answer
-    plain HTTP with no bot check, and robots.txt allows them. Map each page's JSON-LD
-    ``Apartment`` list (beds, baths, coordinates, photo) and
-    ``window.__INITIAL_STATE__`` (price, availability). The terms forbid automated
-    scanning, so it stays off by default, with that caveat in the docs, as for Craigslist.
-    """
-
-    name = "blueground"
-    display_name = "Blueground"
-    site_url = "https://www.theblueground.com/"
-
-
 class Zumper(StubAdapter):
     """Zumper: long-term rentals with a furnished filter.
 

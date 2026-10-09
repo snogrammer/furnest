@@ -496,6 +496,84 @@ reservations are made on Landing.
 - The cache lives in the worker process; after a restart homes are fetched again.
 - The fixtures (`tests/fixtures/landing/`) are trimmed live captures from 2026-10-09.
 
+## Blueground (`blueground`)
+
+**Access:** direct HTTP through `SourceHttpClient`, so robots.txt, the rate limit,
+retries and block detection all apply. No API key, no cost. Off by default.
+`search_locations` holds Blueground **city slugs**, the middle of the city page's
+address (`chicago` for `/furnished-apartments-chicago-usa`; `new-york`).
+
+```env
+SOURCES_ADAPTERS={"blueground": {"enabled": true, "search_locations": ["chicago"], "interval_minutes": 360, "max_results": 50}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API or feed | None is published. |
+| Direct HTTP scraping | City pages answer plain HTTP with a 200 and no bot check. `robots.txt` allows them and disallows only `/book`, `/users`, `/payments` and similar account and checkout paths. Each page holds a JSON-LD list of `Apartment` items (beds, baths, floor size, coordinates, one photo, street address) and a `window.__INITIAL_STATE__` with the full rows. **Chosen.** |
+| Third-party data provider | Nothing is blocked, so a paid provider isn't needed. |
+
+Blueground's terms forbid "any automated program ... to scan, copy, index" its
+content, even though robots.txt allows these pages. The adapter stays polite: off by
+default, one request per page of 18 homes, the global `SOURCES_REQUESTS_PER_MINUTE`
+(6) unless overridden, and a stop at the first block. Turning it on is your call.
+
+### How a run works
+
+1. The stay is the minimum lease (or a month, never under Blueground's 30 nights)
+   from the earliest move-in or today.
+2. Each city page is requested with `?checkIn=&checkOut=`. Without dates every price
+   is 0; with them the page lists only homes free for the stay, each with its monthly
+   rent for those dates. Later pages add `&page=<n>`.
+3. Pages are taken from the cities in turn (every city's first page, then every
+   second page, and so on) until `max_results` homes are in, a city has no more, or
+   the request budget is spent: what fits in 80% of `run_timeout_seconds` at
+   `requests_per_minute`, though every city gets its first page.
+4. Rows come from the state; JSON-LD fills in beds, baths, floor size, coordinates
+   and the photo when a row lacks them.
+
+### Degrading
+
+- No `search_locations`, or one that isn't a slug: each run fails with a message
+  saying so.
+- An unknown city (404), robots.txt disallowing the page, or a 403 or block page: the
+  run fails and nothing is marked missing.
+- A page without `__INITIAL_STATE__` or its home list (a new layout, say): the run
+  fails rather than reading as "no listings". A page whose list is present but empty
+  is "no listings".
+- A row without a usable path or name is skipped and logged as
+  `blueground.row_skipped`.
+
+### Field mapping
+
+| Page | `NormalizedListing` |
+| --- | --- |
+| last part of `path` (`p/furnished-apartments/chi-819`) | `source_id` (`chi-819`); `url` is the site plus `path` |
+| `name` | `title` |
+| `rent.amount` for the searched stay (0 means none) | `price`, monthly USD; none rather than 0 |
+| `name` without the `building` prefix, `address.city`, the state from the city's ancestry, `address.level2` | `address` (street, city, state, neighbourhood; no ZIP) |
+| `address.lat`/`lng`, else JSON-LD `latitude`/`longitude` | `lat`, `lng` |
+| `bedrooms` (0 is a studio), `bathrooms`, `lotSize` (sq ft); else the JSON-LD equivalents | `beds`, `baths`, `sqft`, `property_type` |
+| `availableFrom` | `available_from` |
+| `utilitiesIncludedInRent` and photo captions (in-unit laundry, gym, pool, balcony, ...) | `amenities` |
+| `photos` (the home's, then the building's, up to 20), else the JSON-LD photo | `images` |
+
+Every listing is `furnished`, a `property_manager`'s, with `min_lease_months` 1 and a
+`platform_only` contact: booking happens on Blueground.
+
+### Known limits
+
+- Bedrooms, price and baths aren't sent: the page's filter parameters aren't
+  documented, and matching applies the criteria anyway. A city with hundreds of homes
+  may fill `max_results` before reaching ones that match.
+- The rent is the monthly figure for the searched stay (it differs from the
+  `baseRent` list price), so it changes with the window.
+- Listings carry no description beyond a generated one, and no ZIP.
+- The fixtures (`tests/fixtures/blueground/`) are sanitized live captures from
+  2026-10-09. A layout change shows up as a failed run, not as an empty one.
+
 ## Data providers and self-hosted alternatives (#111)
 
 Furnished Finder, Zillow and Airbnb all go through Apify, which costs money, so #111
@@ -574,7 +652,7 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 | Airbnb (monthly stays) | Built (above) | Apify data provider | None | robots.txt disallows search; terms forbid scraping | Done |
 | Craigslist (housing, furnished) | Built (above) | Direct HTTP | None (RSS blocked) | robots.txt allows `/search` and `/view`; terms forbid automated access | Done |
 | Landing (`landing`) | Built (above) | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth | robots.txt allows `/api/public` and disallows the HTML search pages; the terms forbid spiders on the site, so the API only | Done |
-| Blueground (`blueground`) | Stub; follow-up #119 | Direct HTTP | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Easy to medium: map the JSON-LD `Apartment` list (beds, baths, coordinates, photo) and `window.__INITIAL_STATE__` (price, availability) |
+| Blueground (`blueground`) | Built (above) | Direct HTTP, through `SourceHttpClient` | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Done |
 | Zumper (`zumper`) | Stub | Data provider (Apify, e.g. `memo23/zumper-cheerio`, `benthepythondev/zumper-rental-scraper`) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge" | Medium: compare the actors' furnished filters and output |
 | Apartments.com (`apartments_com`) | Stub | Data provider (Apify, e.g. `epctex/apartments-scraper`, about 1,000 users) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers | Medium: check that the actor's furnished filter maps onto criteria |
 | HotPads (`hotpads`) | Stub | Data provider (Apify, e.g. `benthepythondev/hotpads-rental-scraper`) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Medium. Much of its inventory is Zillow's, so measure what it adds after dedup first |
