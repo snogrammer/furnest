@@ -1,5 +1,6 @@
 """Shared pytest configuration. Fixtures common to all test tiers go here."""
 
+import ipaddress
 import logging
 import shutil
 from collections.abc import Iterator
@@ -115,3 +116,21 @@ def migrated_engine(engine: Engine, migrated_template: Path) -> Engine:
 def session_factory(migrated_engine: Engine) -> sessionmaker[Session]:
     """A session factory on the migrated database."""
     return make_session_factory(migrated_engine)
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every hostname to a public address, so tests never touch real DNS.
+
+    Tests of the SSRF guard pass their own resolver or override this.
+    """
+    from furnest import netguard
+
+    def resolve(host: str, port: int) -> list[str]:
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            return ["93.184.216.34"]
+        return [host]
+
+    monkeypatch.setattr(netguard, "default_resolver", resolve)

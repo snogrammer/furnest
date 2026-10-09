@@ -13,6 +13,8 @@ broken URL can't cost much:
 * each host gets its own token bucket (``IMAGES_REQUESTS_PER_MINUTE``);
 * the response must be ``image/*``, and is abandoned as soon as its declared or
   streamed size passes ``IMAGES_MAX_BYTES``;
+* the host (and every redirect hop) must resolve to public addresses only; see
+  :mod:`furnest.netguard`;
 * there are no retries. The caller records the failure and moves on.
 
 :func:`compute_phash` refuses images with more than ``IMAGES_MAX_PIXELS`` pixels
@@ -34,6 +36,7 @@ import imagehash
 from PIL import Image, UnidentifiedImageError
 
 from furnest.config import ImageSettings, SourcesSettings
+from furnest.netguard import Resolver, UnsafeAddressError, guarded_client_args
 from furnest.sources.errors import SourceError
 from furnest.sources.ratelimit import TokenBucket
 from furnest.sources.robots import RobotsCache
@@ -113,18 +116,25 @@ class ImageFetcher:
         transport: httpx2.BaseTransport | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        resolver: Resolver | None = None,
     ) -> None:
         self._settings = settings
         self._user_agent = sources.user_agent
         self._respect_robots = sources.respect_robots
         self._clock = clock
         self._sleep = sleep
+        proxy = str(sources.proxy_url) if sources.proxy_url else None
         self._http = httpx2.Client(
-            transport=transport,
             timeout=httpx2.Timeout(float(settings.timeout_seconds)),
             headers={"User-Agent": sources.user_agent, "Accept": "image/*"},
-            proxy=str(sources.proxy_url) if sources.proxy_url else None,
+            proxy=proxy,
             follow_redirects=True,
+            **guarded_client_args(
+                transport=transport,
+                proxy=proxy,
+                allow_private=sources.allow_private_addresses,
+                resolver=resolver,
+            ),
         )
         self._limiters: dict[str, TokenBucket] = {}
         self.robots = RobotsCache(self._fetch_robots, clock=clock)
@@ -145,6 +155,8 @@ class ImageFetcher:
                 return self._read(response, url, deadline)
         except httpx2.TimeoutException as exc:
             raise ImageFetchError("timeout", url=url) from exc
+        except UnsafeAddressError as exc:
+            raise ImageFetchError("blocked address", url=url) from exc
         except httpx2.HTTPError as exc:
             raise ImageFetchError(f"transport error: {type(exc).__name__}", url=url) from exc
 
@@ -198,7 +210,7 @@ class ImageFetcher:
         self._limiter(robots_url).acquire()
         try:
             response = self._http.get(robots_url)
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, UnsafeAddressError) as exc:
             msg = f"robots.txt fetch failed: {type(exc).__name__}"
             raise SourceError(msg, url=robots_url) from exc
         return response.status_code, response.text

@@ -72,3 +72,18 @@ reason = "Capture inputs: a real-looking email the capture must scrub."
 path = "src/furnest/web/static/vendor/*"
 kinds = ["domain", "email", "ip"]
 reason = "Vendored third-party code (swagger-ui), kept byte-for-byte."
+
+[[exempt]]
+path = "tests/conftest.py"
+kinds = ["ip"]
+reason = "Fake DNS answer: the SSRF guard only accepts a public address."
+
+[[exempt]]
+path = "tests/unit/test_netguard.py"
+kinds = ["ip"]
+reason = "SSRF guard inputs: public and non-public address literals."
+
+[[exempt]]
+path = "src/furnest/netguard.py"
+kinds = ["ip"]
+reason = "The NAT64 well-known prefix is a standard well-known range the guard must name."

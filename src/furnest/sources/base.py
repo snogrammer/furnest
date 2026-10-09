@@ -60,6 +60,7 @@ class AdapterConfig:
     user_agent: str
     request_timeout_seconds: int
     respect_robots: bool = True
+    allow_private_addresses: bool = False
     max_retries: int = 3
     run_timeout_seconds: int = 900
     search_locations: tuple[str, ...] = ()

@@ -66,6 +66,7 @@ def resolve_config(
             overrides.request_timeout_seconds, settings.request_timeout_seconds
         ),
         respect_robots=_pick(overrides.respect_robots, settings.respect_robots),
+        allow_private_addresses=settings.allow_private_addresses,
         max_retries=_pick(overrides.max_retries, settings.max_retries),
         run_timeout_seconds=_pick(overrides.run_timeout_seconds, settings.run_timeout_seconds),
         search_locations=overrides.search_locations or (),

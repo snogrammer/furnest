@@ -533,6 +533,9 @@ class SourcesSettings(_Group):
     requests_per_minute: PositiveFloat = 6.0
     proxy_url: AnyUrl | None = None
     respect_robots: bool = True
+    # Off by default: scraped URLs and redirects to loopback, private, link-local and
+    # metadata addresses are refused. Turn on only if a source really lives on your LAN.
+    allow_private_addresses: bool = False
     # Retries after the first attempt for 429s, 5xx responses and transport errors.
     max_retries: Annotated[int, Field(ge=0)] = 3
     # Upper bound on listings one run asks for, for sources that page or bill per result.

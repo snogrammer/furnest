@@ -17,6 +17,9 @@ Every request goes through the same steps:
    failure once retries run out, raises :class:`SourceError` with the cause
    chained. Everything else is returned.
 
+Every hop, redirects included, is refused if its host resolves to a non-public
+address (:mod:`furnest.netguard`), unless ``config.allow_private_addresses`` is set.
+
 The client is built from the adapter's resolved :class:`AdapterConfig`: timeout,
 user agent and proxy (:func:`client_options`). Tests pass an
 ``httpx2.MockTransport``, plus a fake clock, sleep and random source.
@@ -35,6 +38,7 @@ from typing import Any, Self
 import httpx2
 
 from furnest.logging import get_logger
+from furnest.netguard import Resolver, UnsafeAddressError, guarded_client_args
 from furnest.sources.base import AdapterConfig
 from furnest.sources.errors import SourceBlockedError, SourceError
 from furnest.sources.ratelimit import TokenBucket
@@ -80,12 +84,21 @@ class SourceHttpClient:
         sleep: Callable[[float], None] = time.sleep,
         rng: Callable[[], float] = random.random,
         block_markers: Iterable[str] = (),
+        resolver: Resolver | None = None,
     ) -> None:
         self.config = config
         self._sleep = sleep
         self._rng = rng
         self._markers = tuple(m.lower() for m in (*DEFAULT_BLOCK_MARKERS, *block_markers))
-        self._http = httpx2.Client(transport=transport, **client_options(config))
+        self._http = httpx2.Client(
+            **client_options(config),
+            **guarded_client_args(
+                transport=transport,
+                proxy=config.proxy_url,
+                allow_private=config.allow_private_addresses,
+                resolver=resolver,
+            ),
+        )
         self.limiter = TokenBucket(config.requests_per_minute, clock=clock, sleep=sleep)
         self.robots = RobotsCache(self._fetch_robots, clock=clock)
 
@@ -140,6 +153,10 @@ class SourceHttpClient:
             self.limiter.acquire()
             try:
                 response = self._http.request(method, url, **kwargs)
+            except UnsafeAddressError as exc:  # never retried
+                log.warning("source.unsafe_address", adapter=self.config.name, url=url)
+                msg = f"refused {url}: {exc}"
+                raise SourceError(msg, url=url) from exc
             except httpx2.TransportError as exc:  # timeouts are TransportErrors too
                 if attempt >= self.config.max_retries:
                     msg = f"{type(exc).__name__} for {url} after {attempt + 1} attempts"
