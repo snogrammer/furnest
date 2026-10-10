@@ -106,7 +106,7 @@ def test_editor_shows_template_and_preview(
 ) -> None:
     store.set_signature("A. Person")
     CriteriaStore(session_factory).save(
-        Criteria(my_move_in_date=date(2027, 8, 9), my_lease_months=3), created_by="test"
+        Criteria(move_in=date(2027, 8, 9), move_out=date(2027, 11, 9)), created_by="test"
     )
 
     page = authed_client.get("/email-templates/default")

@@ -48,17 +48,15 @@ def test_full_profile_round_trips_through_json() -> None:
         min_baths=1.5,
         min_sqft=500,
         furnished_required=False,
-        move_in_earliest=date(2026, 11, 1),
-        move_in_latest=date(2026, 12, 1),
-        lease_min_months=1,
-        lease_max_months=6,
+        move_in=date(2026, 11, 1),
+        move_in_flex_days=14,
+        move_out=date(2027, 4, 1),
+        move_out_flex_days=60,
         must_have_amenities=["In_Unit_Laundry", "ac"],
         nice_to_have_amenities={"King_Bed": 3, "deck_patio": 1.5},
         keywords_allow=["Quiet"],
         keywords_deny=["NO PETS", "basement"],
         unknown_fails=["furnished", "location", "furnished"],
-        my_move_in_date=date(2026, 11, 15),
-        my_lease_months=3,
     )
     assert profile.areas == (Area(name="Downtown", lat=40.0, lng=-105.0, radius=5),)
     assert profile.areas[0].unit is DistanceUnit.MILES
@@ -87,8 +85,10 @@ def test_equal_profiles_serialize_identically() -> None:
             {"property_types_allow": ["condo"], "property_types_deny": ["condo"]},
             "allowed and denied",
         ),
-        ({"move_in_earliest": "2026-12-01", "move_in_latest": "2026-11-01"}, "move_in_earliest"),
-        ({"lease_min_months": 6, "lease_max_months": 3}, "lease_min_months"),
+        ({"move_in": "2026-12-01", "move_out": "2026-11-01"}, "move_out must be after"),
+        ({"move_in": "2026-12-01", "move_out": "2026-12-01"}, "move_out must be after"),
+        ({"move_in_flex_days": 366}, "less than or equal to 365"),
+        ({"move_out_flex_days": -1}, "greater than or equal to 0"),
         ({"must_have_amenities": ["ac"], "nice_to_have_amenities": {"AC": 1}}, "required and nice"),
         ({"keywords_allow": ["quiet"], "keywords_deny": ["Quiet"]}, "keywords both"),
         ({"nice_to_have_amenities": {"ac": 0}}, "greater than 0"),
@@ -144,3 +144,41 @@ def test_versions_saved_before_fit_weights_still_load() -> None:
     loaded = Criteria.model_validate(stored)
     assert loaded.price_fit_weight is None
     assert loaded.extra_beds_weight is None
+
+
+def test_versions_saved_before_target_dates_are_migrated() -> None:
+    stored = Criteria(min_beds=1).model_dump(mode="json")
+    for name in ("move_in", "move_in_flex_days", "move_out", "move_out_flex_days"):
+        del stored[name]
+    stored |= {
+        "move_in_earliest": "2026-11-01",
+        "move_in_latest": "2026-11-15",
+        "lease_min_months": 3,
+        "lease_max_months": 6,
+        "my_move_in_date": "2026-11-10",
+        "my_lease_months": 4,
+    }
+    loaded = Criteria.model_validate(stored)
+    assert loaded.move_in == date(2026, 11, 15)
+    assert loaded.move_in_flex_days == 14
+    assert loaded.move_out == date(2027, 2, 15)
+    assert loaded.min_beds == 1
+    assert diff_criteria(loaded, loaded) == []
+
+
+def test_old_version_with_only_an_earliest_date_keeps_default_flex() -> None:
+    loaded = Criteria.model_validate({"move_in_earliest": "2026-11-01", "lease_min_months": None})
+    assert (loaded.move_in, loaded.move_out, loaded.move_in_flex_days) == (
+        date(2026, 11, 1),
+        None,
+        7,
+    )
+
+
+def test_windows_and_lease_range() -> None:
+    c = Criteria(move_in=date(2026, 11, 8), move_out=date(2027, 5, 8))
+    assert c.move_in_window() == (date(2026, 11, 1), date(2026, 11, 15))
+    assert c.move_out_window() == (date(2027, 2, 7), date(2027, 8, 6))
+    assert c.lease_months_range() == (2, 10)
+    assert Criteria().move_in_window() is None
+    assert Criteria(move_in=date(2026, 11, 8)).lease_months_range() == (None, None)

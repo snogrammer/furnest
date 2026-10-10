@@ -50,9 +50,9 @@ def test_window_is_a_month_from_today_by_default() -> None:
 
 
 def test_window_follows_move_in_and_lease_and_is_clamped_to_a_year() -> None:
-    criteria = Criteria(move_in_earliest=date(2026, 12, 1), lease_min_months=3)
+    criteria = Criteria(move_in=date(2026, 12, 1), move_out=date(2027, 3, 1))
     assert landing_window(criteria, today=TODAY) == StayWindow(date(2026, 12, 1), date(2027, 3, 1))
-    far = Criteria(move_in_earliest=date(2028, 1, 1), lease_min_months=1)
+    far = Criteria(move_in=date(2028, 1, 1), move_out=date(2028, 2, 1))
     window = landing_window(far, today=TODAY)
     assert window.check_in == date(2027, 10, 9)
     assert window.nights >= 28

@@ -349,7 +349,7 @@ def test_input_always_asks_for_furnished_rentals_and_carries_supported_filters()
         min_beds=2,
         min_baths=1.5,
         property_types_deny=(PropertyType.ROOM,),
-        move_in_latest=date(2026, 12, 1),
+        move_in=date(2026, 12, 1),
     )
 
     run_input = build_input(criteria, locations=("Exampleville, XX",), max_results=50, today=TODAY)
@@ -369,7 +369,7 @@ def test_input_always_asks_for_furnished_rentals_and_carries_supported_filters()
 
 
 def test_input_leaves_out_what_criteria_leave_open() -> None:
-    criteria = Criteria(min_beds=0, min_baths=0.5, move_in_latest=date(2026, 1, 1))
+    criteria = Criteria(min_beds=0, min_baths=0.5, move_in=date(2026, 1, 1))
 
     run_input = build_input(criteria, locations=("A", "B"), max_results=10, today=TODAY)
 

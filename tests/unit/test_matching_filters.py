@@ -259,13 +259,14 @@ def test_furnished(furnished: bool | None, status: RuleStatus, reason: str) -> N
 @pytest.mark.parametrize(
     ("available", "status", "reason"),
     [
-        (date(2026, 11, 15), PASS, "available from 2026-11-15, within the move-in window"),
+        (date(2026, 11, 30), PASS, "available from 2026-11-30, within the move-in window"),
         # Free before the window opens means free during it.
-        (date(2026, 10, 1), PASS, "available from 2026-10-01, within the move-in window"),
+        (date(2026, 10, 1), PASS, "available from 2026-10-01, before the move-in window opens"),
+        (date(2026, 12, 8), PASS, "available from 2026-12-08, within the move-in window"),
         (
             date(2026, 12, 15),
             FAIL,
-            "available from 2026-12-15, after latest move-in 2026-12-01",
+            "available from 2026-12-15, after latest move-in 2026-12-08",
         ),
         (None, UNKNOWN, "availability date unknown"),
     ],
@@ -273,17 +274,20 @@ def test_furnished(furnished: bool | None, status: RuleStatus, reason: str) -> N
 def test_move_in(available: date | None, status: RuleStatus, reason: str) -> None:
     result = check(
         {"available_from": available},
-        {"move_in_earliest": date(2026, 11, 1), "move_in_latest": date(2026, 12, 1)},
+        {"move_in": date(2026, 12, 1), "move_in_flex_days": 7},
     )
     assert (result.rule, result.status, result.reason) == (FilterRule.MOVE_IN, status, reason)
 
 
-def test_move_in_with_only_earliest_never_fails() -> None:
-    result = check({"available_from": date(2027, 6, 1)}, {"move_in_earliest": date(2026, 11, 1)})
-    assert result.status is PASS
+# --- lease ---
 
-
-# --- lease ------------------------------------------------------------------
+# Stay of Nov 1 to about Mar 1, give or take 40 days: lease_months_range() is (2, 6).
+_STAY_2_TO_6 = {
+    "move_in": date(2026, 11, 1),
+    "move_in_flex_days": 0,
+    "move_out": date(2027, 3, 1),
+    "move_out_flex_days": 40,
+}
 
 
 @pytest.mark.parametrize(
@@ -298,13 +302,26 @@ def test_move_in_with_only_earliest_never_fails() -> None:
     ],
 )
 def test_lease(lease: dict[str, object], status: RuleStatus, reason: str) -> None:
-    result = check(lease, {"lease_min_months": 2, "lease_max_months": 6})
+    evaluated = evaluate_hard_filters(listing(**lease), criteria(**_STAY_2_TO_6))
+    (result,) = (r for r in evaluated.rules if r.rule is FilterRule.LEASE)
     assert (result.rule, result.status, result.reason) == (FilterRule.LEASE, status, reason)
 
 
-def test_lease_with_one_bound_needs_only_the_matching_listing_bound() -> None:
-    assert check({"min_lease_months": 1}, {"lease_max_months": 6}).status is PASS
-    assert check({"max_lease_months": 12}, {"lease_min_months": 2}).status is PASS
+def test_lease_needs_both_a_move_in_and_a_move_out() -> None:
+    evaluated = evaluate_hard_filters(listing(), criteria(move_in=date(2026, 11, 1)))
+    assert [r.rule for r in evaluated.rules] == [FilterRule.MOVE_IN]
+
+
+def test_listing_available_days_after_target_with_six_month_minimum_passes() -> None:
+    target = {
+        "move_in": date(2026, 11, 8),
+        "move_in_flex_days": 7,
+        "move_out": date(2027, 5, 8),
+        "move_out_flex_days": 90,
+    }
+    fields = {"available_from": date(2026, 11, 11), "min_lease_months": 6}
+    result = evaluate_hard_filters(listing(**fields), criteria(**target))
+    assert result.passed
 
 
 # --- amenities --------------------------------------------------------------
@@ -399,8 +416,10 @@ def full_criteria(**fields: object) -> Criteria:
             "min_beds": 1,
             "min_baths": 1,
             "min_sqft": 400,
-            "move_in_latest": date(2026, 12, 1),
-            "lease_max_months": 6,
+            "move_in": date(2026, 12, 1),
+            "move_in_flex_days": 0,
+            "move_out": date(2027, 3, 1),
+            "move_out_flex_days": 0,
             "must_have_amenities": ["ac"],
             "keywords_allow": ["quiet"],
             "keywords_deny": ["basement"],
@@ -423,6 +442,7 @@ def full_listing(**fields: object) -> NormalizedListing:
             "furnished": True,
             "available_from": date(2026, 11, 1),
             "min_lease_months": 1,
+            "max_lease_months": 12,
             "amenities": ["ac"],
             **fields,
         }

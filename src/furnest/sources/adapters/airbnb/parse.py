@@ -102,14 +102,17 @@ class StayWindow:
 
 
 def stay_window(criteria: Criteria, *, today: date) -> StayWindow:
-    """From the earliest move-in (or today) for the minimum lease, or a month.
+    """From the target move-in (or today) to the target move-out, or a month later.
 
-    A month is never shorter than 28 nights, Airbnb's monthly-stay threshold.
+    A move-out that isn't after check-in is ignored. A month is never shorter than 28
+    nights, Airbnb's monthly-stay threshold.
     """
-    earliest = criteria.move_in_earliest
-    check_in = earliest if earliest is not None and earliest >= today else today
-    months = criteria.lease_min_months or 1
-    return StayWindow(check_in, _add_months(check_in, months))
+    move_in = criteria.move_in
+    check_in = move_in if move_in is not None and move_in >= today else today
+    move_out = criteria.move_out
+    if move_out is not None and move_out > check_in:
+        return StayWindow(check_in, move_out)
+    return StayWindow(check_in, _add_months(check_in, 1))
 
 
 def _add_months(day: date, months: int) -> date:

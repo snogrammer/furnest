@@ -47,10 +47,10 @@ FULL = Criteria(
     min_baths=1.5,
     min_sqft=600,
     furnished_required=True,
-    move_in_earliest=date(2026, 11, 1),
-    move_in_latest=date(2026, 12, 1),
-    lease_min_months=3,
-    lease_max_months=12,
+    move_in=date(2026, 11, 1),
+    move_in_flex_days=14,
+    move_out=date(2027, 4, 1),
+    move_out_flex_days=60,
     must_have_amenities=("ac",),
     nice_to_have_amenities={"pool": 2.5, "gym": 1},
     keywords_allow=("quiet",),
@@ -58,8 +58,6 @@ FULL = Criteria(
     unknown_fails=(FilterRule.PRICE, FilterRule.FURNISHED),
     price_fit_weight=3,
     extra_beds_weight=1,
-    my_move_in_date=date(2026, 11, 15),
-    my_lease_months=6,
 )
 
 

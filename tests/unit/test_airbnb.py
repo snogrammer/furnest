@@ -331,8 +331,8 @@ def test_input_asks_for_a_month_from_the_earliest_move_in_and_supported_filters(
         price_max=usd(3000),
         min_beds=2,
         min_baths=1.5,
-        move_in_earliest=date(2026, 11, 15),
-        lease_min_months=3,
+        move_in=date(2026, 11, 15),
+        move_out=date(2027, 2, 15),
     )
 
     run_input = build_input(criteria, locations=("Exampleville, IL",), max_results=50, today=TODAY)
@@ -352,7 +352,7 @@ def test_input_asks_for_a_month_from_the_earliest_move_in_and_supported_filters(
 
 
 def test_input_leaves_out_what_criteria_leave_open() -> None:
-    criteria = Criteria(min_beds=0, min_baths=0.5, move_in_earliest=date(2026, 1, 1))
+    criteria = Criteria(min_beds=0, min_baths=0.5, move_in=date(2026, 1, 1))
 
     run_input = build_input(criteria, locations=("A", "B"), max_results=10, today=TODAY)
 
@@ -362,17 +362,18 @@ def test_input_leaves_out_what_criteria_leave_open() -> None:
 
 
 @pytest.mark.parametrize(
-    ("check_in", "months", "check_out"),
+    ("check_in", "move_out", "check_out"),
     [
-        (date(2027, 1, 31), 1, date(2027, 2, 28)),  # clamped: still 28 nights
-        (date(2027, 1, 31), 2, date(2027, 3, 31)),
-        (date(2026, 12, 31), 2, date(2027, 2, 28)),
-        (date(2027, 2, 1), 1, date(2027, 3, 1)),  # exactly 28 nights
-        (date(2026, 11, 30), 12, date(2027, 11, 30)),
+        (date(2027, 1, 31), None, date(2027, 2, 28)),  # a month, clamped: still 28 nights
+        (date(2027, 1, 31), date(2027, 3, 31), date(2027, 3, 31)),
+        (date(2026, 12, 31), date(2027, 2, 28), date(2027, 2, 28)),
+        (date(2027, 2, 1), None, date(2027, 3, 1)),  # exactly 28 nights
+        (date(2026, 11, 30), date(2027, 11, 30), date(2027, 11, 30)),
+        (date(2026, 11, 30), date(2026, 11, 1), date(2026, 12, 30)),  # move-out ignored
     ],
 )
-def test_stay_windows(check_in: date, months: int, check_out: date) -> None:
-    criteria = Criteria(move_in_earliest=check_in, lease_min_months=months)
+def test_stay_windows(check_in: date, move_out: date | None, check_out: date) -> None:
+    criteria = Criteria.model_construct(move_in=check_in, move_out=move_out)
 
     window = stay_window(criteria, today=TODAY)
 

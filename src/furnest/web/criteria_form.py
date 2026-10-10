@@ -52,14 +52,12 @@ SCALARS = (
     "min_beds",
     "min_baths",
     "min_sqft",
-    "move_in_earliest",
-    "move_in_latest",
-    "lease_min_months",
-    "lease_max_months",
+    "move_in",
+    "move_in_flex_days",
+    "move_out",
+    "move_out_flex_days",
     "price_fit_weight",
     "extra_beds_weight",
-    "my_move_in_date",
-    "my_lease_months",
 )
 PRICES = ("price_min", "price_max")
 TEXT_LISTS = ("zip_codes", "neighborhoods", "keywords_allow", "keywords_deny")
@@ -282,6 +280,9 @@ def _split(text: str) -> list[str]:
 
 def _to_data(state: FormState, errors: dict[str, str]) -> dict[str, Any]:
     data: dict[str, Any] = {name: state.fields[name] or None for name in SCALARS}
+    for name in ("move_in_flex_days", "move_out_flex_days"):
+        if data[name] is None:
+            del data[name]  # blank means the default
 
     currency = state.fields["currency"]
     try:

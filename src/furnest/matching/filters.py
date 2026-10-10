@@ -195,20 +195,23 @@ def _furnished(ctx: _Context) -> Verdict | None:
 
 
 def _move_in(ctx: _Context) -> Verdict | None:
-    earliest, latest = ctx.criteria.move_in_earliest, ctx.criteria.move_in_latest
-    if earliest is None and latest is None:
+    window = ctx.criteria.move_in_window()
+    if window is None:
         return None
     available = ctx.listing.available_from
     if available is None:
         return RuleStatus.UNKNOWN, "availability date unknown"
+    earliest, latest = window
     # A place free before the window opens is still free during it.
-    if latest is not None and available > latest:
+    if available > latest:
         return RuleStatus.FAIL, f"available from {available}, after latest move-in {latest}"
+    if available < earliest:
+        return RuleStatus.PASS, f"available from {available}, before the move-in window opens"
     return RuleStatus.PASS, f"available from {available}, within the move-in window"
 
 
 def _lease(ctx: _Context) -> Verdict | None:
-    want_min, want_max = ctx.criteria.lease_min_months, ctx.criteria.lease_max_months
+    want_min, want_max = ctx.criteria.lease_months_range()
     if want_min is None and want_max is None:
         return None
     has_min, has_max = ctx.listing.min_lease_months, ctx.listing.max_lease_months

@@ -219,10 +219,17 @@ def context_for(
             max_lease_months=listing.max_lease_months,
         ),
         contact_name=listing.contact.name,
-        move_in_date=criteria.my_move_in_date if criteria else None,
-        lease_months=criteria.my_lease_months if criteria else None,
+        move_in_date=criteria.move_in if criteria else None,
+        lease_months=_stay_months(criteria),
         signature=signature,
     )
+
+
+def _stay_months(criteria: Criteria | None) -> int | None:
+    """The planned stay in whole months, from the target move-in to move-out."""
+    if criteria is None or criteria.move_in is None or criteria.move_out is None:
+        return None
+    return max(round((criteria.move_out - criteria.move_in).days / 30.4375), 1)
 
 
 SAMPLE_LISTING = NormalizedListing(

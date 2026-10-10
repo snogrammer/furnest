@@ -127,7 +127,7 @@ def test_review_mode_drafts_and_waits(
 ) -> None:
     property_id = make_property()
     CriteriaStore(session_factory).save(
-        Criteria(my_move_in_date=date(2027, 1, 15), my_lease_months=6), created_by="test"
+        Criteria(move_in=date(2027, 1, 15), move_out=date(2027, 7, 15)), created_by="test"
     )
     SqlEmailTemplateStore(session_factory).set_signature("Sam Example")
 

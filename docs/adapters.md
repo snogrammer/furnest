@@ -155,7 +155,7 @@ means changing `ACTOR` and the mapping in `sources/adapters/zillow/parse.py`.
 1. Criteria become the actor's input: `operation: rent`, `search_locations`,
    `furnished: true`, `space` (`entirePlace` when rooms are denied or not allowed,
    `roomForRent` when only rooms are allowed), minimum beds (when above 0) and baths
-   (rounded down), and `moveInDate` from the latest move-in date when it's in the
+   (rounded down), and `moveInDate` from the target move-in date when it's in the
    future. Details are fetched. `maxItems` is `max_results`. **Price isn't sent:**
    the actor documents its rent price filter as "per week" while its own rent
    example uses monthly figures, and a wrong guess would silently drop matches, so
@@ -254,9 +254,10 @@ another means changing `ACTOR` and the mapping in `sources/adapters/airbnb/parse
 
 ### How a run works
 
-1. Criteria become a **stay window**: check-in on the earliest move-in date (today if
-   it's unset or past), check-out `lease_min_months` (default 1) calendar months
-   later, clamped to the end of a short month. A month is never under 28 nights,
+1. Criteria become a **stay window**: check-in on the target move-in date (today if
+   it's unset or past), check-out on the target move-out date (one calendar month
+   after check-in if it's unset or not after check-in, clamped to the end of a
+   short month). A month is never under 28 nights,
    which is what makes it a monthly-stay search: hosts who don't take stays that long
    drop out, and quotes carry the monthly discount. Everything returned is free for
    the whole window.

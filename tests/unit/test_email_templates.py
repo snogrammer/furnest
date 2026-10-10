@@ -41,7 +41,7 @@ def context() -> InquiryContext:
 
 
 def test_context_for_maps_listing_facts_and_plans() -> None:
-    criteria = Criteria(my_move_in_date=date(2027, 3, 1), my_lease_months=4)
+    criteria = Criteria(move_in=date(2027, 3, 1), move_out=date(2027, 7, 1))
     ctx = context_for(
         listing(
             price=Price(amount=Money.from_major(1850)),
@@ -86,7 +86,7 @@ def test_context_for_leaves_unknowns_empty() -> None:
 def test_sample_context_prefers_the_criteria_plans() -> None:
     assert sample_context(None, "").move_in_date == SAMPLE_MOVE_IN
     assert sample_context(None, "").lease_months == SAMPLE_LEASE_MONTHS
-    criteria = Criteria(my_move_in_date=date(2027, 5, 2), my_lease_months=9)
+    criteria = Criteria(move_in=date(2027, 5, 2), move_out=date(2028, 2, 2))
     ctx = sample_context(criteria, "")
     assert (ctx.move_in_date, ctx.lease_months) == (date(2027, 5, 2), 9)
 

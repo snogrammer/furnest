@@ -77,13 +77,15 @@
   </fieldset>
 
   <fieldset>
-    <legend>Dates and lease</legend>
+    <legend>Dates</legend>
+    <p class="muted">Move-in is checked against listings' availability; the gap to move-out sets the lease lengths that fit. Both are quoted in inquiry emails.</p>
     <div class="grid">
-      {{ m.input(state, errors, "move_in_earliest", "Move in from", "date") }}
-      {{ m.input(state, errors, "move_in_latest", "Move in by", "date") }}
-      {{ m.input(state, errors, "lease_min_months", "Lease at least (months)", "number", None, 'min="1" step="1"') }}
-      {{ m.input(state, errors, "lease_max_months", "Lease at most (months)", "number", None, 'min="1" step="1"') }}
+      {{ m.input(state, errors, "move_in", "Move-in", "date", "When you want to move in.") }}
+      {{ m.input(state, errors, "move_in_flex_days", "Move-in, give or take (days)", "number", "How many days either side still works. Default 7.", 'min="0" max="365" step="1"') }}
+      {{ m.input(state, errors, "move_out", "Move-out", "date", "When you expect to leave. Must be after move-in.") }}
+      {{ m.input(state, errors, "move_out_flex_days", "Move-out, give or take (days)", "number", "How many days either side still works. Default 90 (3+ months).", 'min="0" max="365" step="1"') }}
     </div>
+    <p id="dates-summary" class="muted" aria-live="polite"></p>
   </fieldset>
 
   <fieldset>
@@ -123,14 +125,6 @@
   <fieldset>
     <legend>Missing data</legend>
     {{ m.checkboxes(state, errors, "unknown_fails", "Reject a listing when it doesn't say", choices.rule_options) }}
-  </fieldset>
-
-  <fieldset>
-    <legend>About me (quoted in inquiry emails)</legend>
-    <div class="grid">
-      {{ m.input(state, errors, "my_move_in_date", "My move-in date", "date") }}
-      {{ m.input(state, errors, "my_lease_months", "My lease length (months)", "number", None, 'min="1" step="1"') }}
-    </div>
   </fieldset>
 
   <div class="actions">

@@ -58,7 +58,7 @@ def test_window_is_a_month_from_today_by_default() -> None:
 def test_window_is_never_under_thirty_nights() -> None:
     window = blueground_window(Criteria(), today=date(2027, 2, 1))
     assert window == StayWindow(date(2027, 2, 1), date(2027, 3, 3))
-    criteria = Criteria(move_in_earliest=date(2026, 12, 1), lease_min_months=3)
+    criteria = Criteria(move_in=date(2026, 12, 1), move_out=date(2027, 3, 1))
     assert blueground_window(criteria, today=TODAY) == StayWindow(
         date(2026, 12, 1), date(2027, 3, 1)
     )
@@ -241,7 +241,7 @@ def test_registered_and_off_by_default() -> None:
 
 def test_search_asks_for_the_stay_and_maps_the_page() -> None:
     fake = FakeBlueground()
-    listings = adapter(fake).search(Criteria(move_in_earliest=date(2026, 11, 1)))
+    listings = adapter(fake).search(Criteria(move_in=date(2026, 11, 1)))
 
     assert [listing.source_id for listing in listings] == [
         "chi-1397",

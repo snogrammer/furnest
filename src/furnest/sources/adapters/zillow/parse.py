@@ -129,8 +129,8 @@ def build_input(
     if criteria.min_baths is not None and criteria.min_baths >= 1:
         # The actor takes whole baths; rounding down only widens the search.
         run_input["minBaths"] = math.floor(criteria.min_baths)
-    if criteria.move_in_latest is not None and criteria.move_in_latest >= today:
-        run_input["moveInDate"] = criteria.move_in_latest.isoformat()
+    if criteria.move_in is not None and criteria.move_in >= today:
+        run_input["moveInDate"] = criteria.move_in.isoformat()
     return run_input
 
 

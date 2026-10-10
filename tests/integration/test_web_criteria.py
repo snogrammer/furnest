@@ -66,12 +66,11 @@ def test_editor_renders_every_section(authed_client: TestClient) -> None:
         "Location",
         "Price (monthly)",
         "Property",
-        "Dates and lease",
+        "Dates",
         "Amenities",
         "Keywords",
         "Scoring",
         "Missing data",
-        "About me",
     ):
         assert f"<legend>{legend}" in page.text
     assert "Not saved yet" in page.text

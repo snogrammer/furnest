@@ -12,8 +12,10 @@ reports only real changes. All prices are monthly amounts.
 
 from __future__ import annotations
 
+import calendar
+import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from enum import StrEnum
 from typing import Annotated, Self
 
@@ -31,6 +33,38 @@ from furnest.domain.geo import DistanceUnit
 from furnest.domain.money import Money
 from furnest.domain.owner_type import OwnerType
 from furnest.domain.property_type import PropertyType
+
+MAX_FLEX_DAYS = 365
+_DAYS_PER_MONTH = 30.4375
+_LEGACY_DATE_FIELDS = frozenset(
+    {
+        "move_in_earliest",
+        "move_in_latest",
+        "lease_min_months",
+        "lease_max_months",
+        "my_move_in_date",
+        "my_lease_months",
+    }
+)
+
+
+def _legacy_date(value: object) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _add_months(day: date, months: int) -> date:
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return day.replace(
+        year=year, month=month, day=min(day.day, calendar.monthrange(year, month)[1])
+    )
 
 
 def _sorted_unique_lower(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -107,11 +141,12 @@ class Criteria(BaseModel):
     min_sqft: int | None = Field(default=None, gt=0)
     furnished_required: bool = True
 
-    # The listing must be available somewhere in this window.
-    move_in_earliest: date | None = None
-    move_in_latest: date | None = None
-    lease_min_months: int | None = Field(default=None, ge=1)
-    lease_max_months: int | None = Field(default=None, ge=1)
+    # When the searcher wants to move in and out, and how many days either can slip.
+    # The move-in window gates matching and is quoted in inquiry emails (#181).
+    move_in: date | None = None
+    move_in_flex_days: int = Field(default=7, ge=0, le=MAX_FLEX_DAYS)
+    move_out: date | None = None
+    move_out_flex_days: int = Field(default=90, ge=0, le=MAX_FLEX_DAYS)
 
     must_have_amenities: TagList = ()
     # Tag → weight, for scoring (#17).
@@ -129,9 +164,32 @@ class Criteria(BaseModel):
     # flagged in the match reasons.
     unknown_fails: RuleList = ()
 
-    # The searcher's own plans, quoted in inquiry emails (P6).
-    my_move_in_date: date | None = None
-    my_lease_months: int | None = Field(default=None, ge=1)
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_dates(cls, data: object) -> object:
+        """Map criteria stored before #181 (earliest/latest, lease months, my_*)."""
+        if not isinstance(data, dict) or not (_LEGACY_DATE_FIELDS & data.keys()):
+            return data
+        data = dict(data)
+        earliest = _legacy_date(data.pop("move_in_earliest", None))
+        latest = _legacy_date(data.pop("move_in_latest", None))
+        lease_min = data.pop("lease_min_months", None)
+        data.pop("lease_max_months", None)
+        data.pop("my_move_in_date", None)
+        data.pop("my_lease_months", None)
+        target = latest or earliest
+        if target is not None and "move_in" not in data:
+            data["move_in"] = target
+            if earliest is not None and latest is not None and earliest < latest:
+                data.setdefault("move_in_flex_days", min((latest - earliest).days, MAX_FLEX_DAYS))
+        if (
+            target is not None
+            and "move_out" not in data
+            and isinstance(lease_min, int)
+            and lease_min >= 1
+        ):
+            data["move_out"] = _add_months(target, lease_min)
+        return data
 
     @model_validator(mode="before")
     @classmethod
@@ -157,23 +215,43 @@ class Criteria(BaseModel):
                 raise ValueError("price_min must not exceed price_max")
         if types := set(self.property_types_allow) & set(self.property_types_deny):
             raise ValueError(f"property types both allowed and denied: {sorted(types)}")
-        if (
-            self.move_in_earliest is not None
-            and self.move_in_latest is not None
-            and self.move_in_earliest > self.move_in_latest
-        ):
-            raise ValueError("move_in_earliest must not be after move_in_latest")
-        if (
-            self.lease_min_months is not None
-            and self.lease_max_months is not None
-            and self.lease_min_months > self.lease_max_months
-        ):
-            raise ValueError("lease_min_months must not exceed lease_max_months")
+        if self.move_in and self.move_out and self.move_out <= self.move_in:
+            raise ValueError("move_out must be after move_in")
         if overlap := set(self.must_have_amenities) & set(self.nice_to_have_amenities):
             raise ValueError(f"amenities both required and nice-to-have: {sorted(overlap)}")
         if overlap := set(self.keywords_allow) & set(self.keywords_deny):
             raise ValueError(f"keywords both allowed and denied: {sorted(overlap)}")
         return self
+
+    def move_in_window(self) -> tuple[date, date] | None:
+        """Earliest and latest acceptable move-in, or None when no target is set."""
+        if self.move_in is None:
+            return None
+        flex = timedelta(days=self.move_in_flex_days)
+        return self.move_in - flex, self.move_in + flex
+
+    def move_out_window(self) -> tuple[date, date] | None:
+        """Earliest and latest acceptable move-out, or None when no target is set."""
+        if self.move_out is None:
+            return None
+        flex = timedelta(days=self.move_out_flex_days)
+        return self.move_out - flex, self.move_out + flex
+
+    def lease_months_range(self) -> tuple[int | None, int | None]:
+        """Whole months of the shortest and longest stay the two windows allow.
+
+        The shortest rounds down and the longest up, so a lease is only ruled out when
+        it can't fit any stay. Both are None unless a move-in and a move-out are set.
+        """
+        in_window, out_window = self.move_in_window(), self.move_out_window()
+        if in_window is None or out_window is None:
+            return None, None
+        shortest = max((out_window[0] - in_window[1]).days, 0)
+        longest = max((out_window[1] - in_window[0]).days, 0)
+        return (
+            int(shortest // _DAYS_PER_MONTH) or None,
+            math.ceil(longest / _DAYS_PER_MONTH) or None,
+        )
 
 
 @dataclass(frozen=True, slots=True)
