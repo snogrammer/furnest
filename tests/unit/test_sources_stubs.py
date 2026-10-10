@@ -13,10 +13,10 @@ from furnest.sources import (
     discover,
     resolve_config,
 )
-from furnest.sources.adapters.stubs import ApartmentsCom, HotPads, Zumper
+from furnest.sources.adapters.stubs import HotPads, Zumper
 from furnest.sources.config import NOT_BUILT_REASON
 
-STUBS: list[type[StubAdapter]] = [ApartmentsCom, HotPads, Zumper]
+STUBS: list[type[StubAdapter]] = [HotPads, Zumper]
 
 
 class NeedsEverything(StubAdapter):

@@ -1,0 +1,412 @@
+[
+  {
+    "id": "abc1234",
+    "propertyName": "Example Towers",
+    "url": "https://www.apartments.com/example-towers-exampleville-xx/abc1234/",
+    "lastUpdated": "2 weeks ago",
+    "location": {
+      "fullAddress": "100 Example St, Exampleville, XX 00001",
+      "state": "XX",
+      "city": "Exampleville",
+      "neighborhood": "Midtown",
+      "postalCode": "00001",
+      "streetAddress": "100 Example St"
+    },
+    "coordinates": {
+      "latitude": 40.0,
+      "longitude": -100.0
+    },
+    "rent": {
+      "min": 2800,
+      "max": 4050
+    },
+    "beds": "1 bd - 2 bd",
+    "baths": "1 ba",
+    "sqft": "690 - 1,100 sq ft",
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Great",
+        "text": "Jane Example loved it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Lease Options",
+            "values": [
+              {
+                "key": "12 - 24 mo",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "Built in 1964",
+                "value": ""
+              },
+              {
+                "key": "Furnished Units Available",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Pet Policies",
+        "policies": [
+          {
+            "header": "Dogs Allowed",
+            "values": [
+              {
+                "key": "Weight limit",
+                "value": "40 lb"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Welcome to Example Towers. Professionally managed by Example Properties.\n\nPlease inquire about incentives.",
+    "amenities": [
+      {
+        "title": "Community Amenities",
+        "value": [
+          "Laundry Facilities",
+          "Furnished Units Available",
+          "Fitness Center"
+        ]
+      },
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Air Conditioning",
+          "Dishwasher",
+          "Furnished"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0100",
+      "name": "Example Properties"
+    },
+    "score": {
+      "walkScore": 94,
+      "transitScore": 98
+    },
+    "photos": [
+      "https://images1.apartments.com/i2/000001/102/image.jpg",
+      "https://images1.apartments.com/i2/000002/102/image.jpg"
+    ],
+    "floorPlans": [
+      "https://images1.apartments.com/i2/floor-plan1.jpg"
+    ]
+  },
+  {
+    "id": "def5678",
+    "propertyName": "Lakeside Studios",
+    "url": "https://www.apartments.com/lakeside-studios-exampleville-xx/def5678/",
+    "lastUpdated": "2 weeks ago",
+    "location": {
+      "fullAddress": "100 Example St, Exampleville, XX 00001",
+      "state": "XX",
+      "city": "Exampleville",
+      "neighborhood": "Midtown",
+      "postalCode": "00001",
+      "streetAddress": "100 Example St"
+    },
+    "coordinates": {
+      "latitude": 40.0,
+      "longitude": -100.0
+    },
+    "rent": {
+      "min": 1500,
+      "max": 1500
+    },
+    "beds": "Studio",
+    "baths": "1 ba",
+    "sqft": "450 sq ft",
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Great",
+        "text": "Jane Example loved it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "fees": [],
+    "description": "Cozy studio, private owner. Furnished.",
+    "amenities": [
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Furnished"
+        ]
+      }
+    ],
+    "contact": {
+      "name": "Pat Example"
+    },
+    "score": {
+      "walkScore": 94,
+      "transitScore": 98
+    },
+    "photos": [
+      "https://images1.apartments.com/i2/000001/102/image.jpg",
+      "https://images1.apartments.com/i2/000002/102/image.jpg"
+    ],
+    "floorPlans": [
+      "https://images1.apartments.com/i2/floor-plan1.jpg"
+    ]
+  },
+  {
+    "id": "ghi9012",
+    "propertyName": "Unfurnished Place",
+    "url": "https://www.apartments.com/unfurnished-place-exampleville-xx/ghi9012/",
+    "lastUpdated": "2 weeks ago",
+    "location": {
+      "fullAddress": "100 Example St, Exampleville, XX 00001",
+      "state": "XX",
+      "city": "Exampleville",
+      "neighborhood": "Midtown",
+      "postalCode": "00001",
+      "streetAddress": "100 Example St"
+    },
+    "coordinates": {
+      "latitude": 40.0,
+      "longitude": -100.0
+    },
+    "rent": {
+      "min": 2800,
+      "max": 4050
+    },
+    "beds": "1 bd - 2 bd",
+    "baths": "1 ba",
+    "sqft": "690 - 1,100 sq ft",
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Great",
+        "text": "Jane Example loved it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "16 units/2 stories",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Unfurnished apartments.",
+    "amenities": [
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Dishwasher"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0100",
+      "name": "Example Properties"
+    },
+    "score": {
+      "walkScore": 94,
+      "transitScore": 98
+    },
+    "photos": [
+      "https://images1.apartments.com/i2/000001/102/image.jpg",
+      "https://images1.apartments.com/i2/000002/102/image.jpg"
+    ],
+    "floorPlans": [
+      "https://images1.apartments.com/i2/floor-plan1.jpg"
+    ]
+  },
+  {
+    "id": null,
+    "propertyName": "No id",
+    "url": "https://www.apartments.com/example-towers-exampleville-xx/abc1234/",
+    "lastUpdated": "2 weeks ago",
+    "location": {
+      "fullAddress": "100 Example St, Exampleville, XX 00001",
+      "state": "XX",
+      "city": "Exampleville",
+      "neighborhood": "Midtown",
+      "postalCode": "00001",
+      "streetAddress": "100 Example St"
+    },
+    "coordinates": {
+      "latitude": 40.0,
+      "longitude": -100.0
+    },
+    "rent": {
+      "min": 2800,
+      "max": 4050
+    },
+    "beds": "1 bd - 2 bd",
+    "baths": "1 ba",
+    "sqft": "690 - 1,100 sq ft",
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Great",
+        "text": "Jane Example loved it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Lease Options",
+            "values": [
+              {
+                "key": "12 - 24 mo",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "Built in 1964",
+                "value": ""
+              },
+              {
+                "key": "Furnished Units Available",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Pet Policies",
+        "policies": [
+          {
+            "header": "Dogs Allowed",
+            "values": [
+              {
+                "key": "Weight limit",
+                "value": "40 lb"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Welcome to Example Towers. Professionally managed by Example Properties.\n\nPlease inquire about incentives.",
+    "amenities": [
+      {
+        "title": "Community Amenities",
+        "value": [
+          "Laundry Facilities",
+          "Furnished Units Available",
+          "Fitness Center"
+        ]
+      },
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Air Conditioning",
+          "Dishwasher",
+          "Furnished"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0100",
+      "name": "Example Properties"
+    },
+    "score": {
+      "walkScore": 94,
+      "transitScore": 98
+    },
+    "photos": [
+      "https://images1.apartments.com/i2/000001/102/image.jpg",
+      "https://images1.apartments.com/i2/000002/102/image.jpg"
+    ],
+    "floorPlans": [
+      "https://images1.apartments.com/i2/floor-plan1.jpg"
+    ]
+  }
+]

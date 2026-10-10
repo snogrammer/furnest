@@ -35,21 +35,6 @@ class Zumper(StubAdapter):
     site_url = "https://www.zumper.com/"
 
 
-class ApartmentsCom(StubAdapter):
-    """Apartments.com (CoStar): long-term rentals with a furnished amenity filter.
-
-    TODO: Akamai answers 403 to every request, robots.txt and the terms page
-    included, and there is no public API. Route it through a data provider. The
-    most-used Apify actor is ``epctex/apartments-scraper``. Check that its furnished
-    filter maps onto criteria before picking it.
-    """
-
-    name = "apartments_com"
-    display_name = "Apartments.com"
-    capabilities: ClassVar[Capabilities] = _PROVIDER
-    site_url = "https://www.apartments.com/"
-
-
 class HotPads(StubAdapter):
     """HotPads (Zillow Group): rentals, much of them shared with Zillow.
 

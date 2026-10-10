@@ -228,6 +228,105 @@ Zillow's furnished filter relies
 on what listers tick, so some furnished places are missed and the odd unfurnished one
 gets through. Matching's keyword checks on the description still apply.
 
+## Apartments.com (`apartments_com`)
+
+**Access:** the Apify data provider `epctex/apartments-scraper-api`. Needs an Apify API
+token (the one Zillow uses works). **Off by default**, with a terms caveat: CoStar
+enforces Apartments.com's terms against scrapers, which forbid automated collection.
+Whether to use it is the operator's call and risk; the dashboard's search-location
+hint says so, and so does the adapter's docstring. Keep the interval long.
+
+```env
+SOURCES_ADAPTERS={"apartments_com": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 1440, "max_results": 40}}
+```
+
+### Access options considered (October 2026)
+
+| Option | Finding |
+| --- | --- |
+| Official API or feed | None for searching rentals. |
+| Direct HTTP or browser | Akamai answers 403 to every request, robots.txt and the terms page included. Not tried further: getting past it is bot-check bypassing. |
+| Third-party data provider | Apify actors. **Chosen.** |
+
+Actors compared through `https://api.apify.com/v2/acts/<user>~<name>` on 2026-10-10:
+
+- `epctex/apartments-scraper` (about 1,000 users): its README opens with "THIS ACTOR
+  IS NO LONGER WORKING" (new security protections on Apartments.com), and it has been
+  switched to pay-per-usage. Ruled out.
+- `epctex/apartments-scraper-api` (about 390 users): the same author's replacement,
+  pay-per-event, no proxy needed, rebuilt on the day of the research. **Picked.**
+
+Its input has no filters: `startUrls` (Apartments.com listing or property URLs),
+`search` (one string of at most 40 characters, so it can't carry several locations),
+`maxItems`, and paid extras (`includeReviews`, `includeVisuals`,
+`includeInteriorAmenities`, `includeWalkScore`, all off here). Filters go in the
+URL, as on the site. `minimalMaxTotalChargeUsd` is $0.02.
+
+### How a run works
+
+1. Each `search_locations` entry ("Springfield, IL" or a ZIP code) becomes a start
+   URL `https://www.apartments.com/springfield-il/`, with the criteria's minimum beds
+   and price range as the site's path segment (`min-2-bedrooms-1000-to-2000`,
+   `under-2000`, `over-900`). Prices are rounded down. The site has no move-in date
+   filter, so matching applies the date. `maxItems` is `max_results`.
+2. `ApifyAdapter` runs the actor exactly as for Zillow.
+3. **Furnished:** the actor can't filter, and the site's amenity filter isn't
+   reliably combinable with the others, so the adapter filters after the fact: an
+   item is kept only if its amenities, its fee/lease lists ("Furnished Units
+   Available") or its description say "furnished" (not "unfurnished"). The rest are
+   dropped without a log line. Items that can't be mapped are logged and skipped.
+
+### Degrading
+
+- No `api_key`: the source is disabled with a reason.
+- No `search_locations`: each run fails with a message saying so.
+- A bad token or a run that ends `FAILED`, `TIMED-OUT` or `ABORTED`: the run fails
+  with the reason and nothing is marked missing.
+- An empty dataset is a successful run with no listings.
+
+### Field mapping
+
+One item is one building (or complex) with a rent range, not one unit.
+
+| Actor field | `NormalizedListing` |
+| --- | --- |
+| `id` | `source_id` |
+| `url` | `url` (must be on apartments.com) |
+| `propertyName`, else `location.streetAddress` | `title` |
+| `description` | `description`, whitespace collapsed |
+| `rent.min` | `price`, monthly USD: the lowest rent of the building |
+| `location.*` | `address`; country `US` |
+| `coordinates` | `lat`, `lng` (both or neither) |
+| `beds`, `baths`, `sqft` | single figures only ("2 bd", "Studio" is 0); a range ("1 bd - 2 bd") is unknown, because the rent isn't tied to a plan |
+| `amenities[].value`, a dog/cat policy under `fees` | `amenities`, lower-cased; "pets allowed" for the policy |
+| `fees` "Lease Options" (`12 - 24 mo`) | `min_lease_months` (12) |
+| `availableFrom` / `availability` | `available_from`, when the actor gives one (the README output has none; "Now" is today) |
+| `photos` | `images` |
+| `contact.phone`, `.name` | `contact`: the leasing office's public phone and name; no phone means platform only |
+| everything except `contact`, `reviews`, `schools`, `transportation`, `poi`, `transitAndPOI`, `neighborhoodDescription`, `virtualTours`, `virtualTourExtended`, `floorPlans`, `photos`, `score`, `scores` | `raw` |
+| "private owner" → individual; "professionally managed", "property management", "management company/group/team" in the description or contact name → property manager; else the title and description | `owner_type` |
+
+Every listing is `furnished` (the filter above) and an apartment, a studio when the
+item has only studios.
+
+### Cost
+
+October 2026 prices: $0.01 per listing page (the first 20 items of it included), then
+$0.0005 an item. One run of 20 items is about $0.01 plus the platform's start fee, so
+a daily run for a month is well under $1. On Apify's Free plan the actor runs in
+demo mode: 5 runs a month, 10 items each. The cost is from the actor's published
+pricing, not a billed run.
+
+### Limitations
+
+`tests/fixtures/apartments_com/dataset_items.json` is written from the actor's
+README, and there is no `dataset_live.json` yet: the work was done without an Apify
+token. The mapping follows the README's output example, and two things should be
+checked on the first live run: that the start-URL filter segment is accepted by the
+site (a wrong one would give an empty dataset; fall back to a bare `/<city>-<st>/`
+URL), and whether items carry an availability date or per-unit data. Trust the live
+capture over the README. The city slug needs "City, ST" with the state abbreviation.
+
 ## Airbnb (`airbnb`)
 
 **Access:** the Apify data provider `tri_angle/airbnb-scraper`, searching a stay of a
@@ -636,6 +735,7 @@ checked against the live runs on 2026-10-07:
 | Zillow | $0.06 ($0.0005 start, $0.0029 a listing) | $1.80 | $0.90 |
 | Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
 | Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
+| Apartments.com | about $0.02 ($0.01 per listing page with the first 20 items, $0.0005 after) | $0.60 | $0.30 |
 
 All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,
 and so do all three at `"interval_minutes": 2880` (about $4). Note that Furnished
@@ -665,6 +765,6 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 | Landing (`landing`) | Built (above) | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth | robots.txt allows `/api/public` and disallows the HTML search pages; the terms forbid spiders on the site, so the API only | Done |
 | Blueground (`blueground`) | Built (above) | Direct HTTP, through `SourceHttpClient` | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Done |
 | Zumper (`zumper`) | Stub | Data provider (Apify, e.g. `memo23/zumper-cheerio`, `benthepythondev/zumper-rental-scraper`) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge" | Medium: compare the actors' furnished filters and output |
-| Apartments.com (`apartments_com`) | Stub | Data provider (Apify, e.g. `epctex/apartments-scraper`, about 1,000 users) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers | Medium: check that the actor's furnished filter maps onto criteria |
+| Apartments.com (`apartments_com`) | Built (above) | Apify data provider (`epctex/apartments-scraper-api`; the older `epctex/apartments-scraper` no longer works) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers, so it stays off by default with a caveat | Done |
 | HotPads (`hotpads`) | Stub | Data provider (Apify, e.g. `benthepythondev/hotpads-rental-scraper`) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Medium. Much of its inventory is Zillow's, so measure what it adds after dedup first |
 | Kopa | Shut down (2026), not stubbed | — | — | The site is a farewell notice and robots.txt is `Disallow: /` | — |
