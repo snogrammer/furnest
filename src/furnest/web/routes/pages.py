@@ -51,6 +51,7 @@ from starlette.responses import Response
 
 from furnest.config import INQUIRY_MODE, InquiryMode, RuntimeSettings
 from furnest.db.base import utcnow
+from furnest.db.criteria_store import CriteriaStore
 from furnest.db.email_store import SqlEmailStore, StoredEmail
 from furnest.db.models import EmailDirection, Property
 from furnest.db.property_store import (
@@ -72,6 +73,7 @@ from furnest.email.templates import MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH
 from furnest.notify.embeds import INQUIRABLE
 from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
+from furnest.web.criteria_summary import summarize_criteria
 from furnest.web.csrf import require_csrf
 from furnest.web.enrichment_views import load_enrichment, price_chart, top_severity
 from furnest.web.html import render_markdown
@@ -168,6 +170,8 @@ def _render_dashboard(
         # The form sends every field; push the short, canonical URL instead.
         response.headers["HX-Push-Url"] = filters.url(page=dashboard.page)
         return response
+    active = CriteriaStore(make_session_factory(request.app.state.engine)).active()
+    context["criteria_summary"] = summarize_criteria(active.criteria) if active else None
     return templates.TemplateResponse(request, "index.html", context, status_code=status_code)
 
 

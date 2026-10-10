@@ -1433,3 +1433,40 @@ a.button {
   border: 1px solid currentColor;
   color: inherit;
 }
+
+/* Criteria page: summary line, empty state, the Advanced fold and error list. */
+.criteria-summary {
+  margin: 0 0 var(--space);
+}
+
+.criteria-form .empty-state {
+  font-style: italic;
+}
+
+.criteria-form details.advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space);
+}
+
+.criteria-form details.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.criteria-form details.advanced[open] > summary {
+  margin-bottom: var(--space);
+}
+
+.criteria-form details.advanced > fieldset {
+  margin-bottom: var(--space);
+}
+
+.criteria-form .form-error ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+#form-alert {
+  scroll-margin-top: var(--space);
+}

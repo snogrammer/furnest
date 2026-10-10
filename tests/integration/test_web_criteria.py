@@ -3,7 +3,7 @@
 import threading
 import time
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -84,6 +84,43 @@ def test_editor_renders_every_section(authed_client: TestClient) -> None:
     assert 'name="nice-0-tag"' in page.text
     assert 'aria-current="page"' in page.text
     assert "https://" not in page.text
+
+
+def test_sections_are_ordered_by_importance(authed_client: TestClient) -> None:
+    text = authed_client.get("/criteria").text
+    order = [
+        text.index(f"<legend>{name}")
+        for name in ("Location", "Dates", "Price (monthly)", "Property", "Amenities")
+    ]
+    assert order == sorted(order)
+    advanced = text.index('<details class="advanced"')
+    assert order[-1] < advanced
+    for name in ("Keywords", "Scoring", "Missing data"):
+        assert advanced < text.index(f"<legend>{name}")
+    assert "No areas yet" in text
+
+
+def test_summary_reads_the_active_version(
+    authed_client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    CriteriaStore(session_factory).save(
+        Criteria(
+            min_beds=1,
+            price_min=Money(amount_minor=150000),
+            price_max=Money(amount_minor=250000),
+            move_in=date(2026, 11, 8),
+            move_out=date(2027, 5, 15),
+        ),
+        created_by="test",
+    )
+    summary = (
+        "Furnished, 1+ bed, $1,500\u2013$2,500/mo, move in around 8 Nov ± 7 days, "
+        "out around 15 May ± 90 days"
+    )
+    assert summary in authed_client.get("/criteria").text
+    assert summary in authed_client.get("/").text
+    page = authed_client.get("/criteria?saved=1").text
+    assert 'Saved as version 1. <a href="/criteria/history">' in page
 
 
 def test_saving_creates_versions(

@@ -2,6 +2,7 @@
 {% block title %}Dashboard · furnest{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
+{% if criteria_summary %}<p class="criteria-summary muted">Searching for: {{ criteria_summary }}. <a href="/criteria">Change criteria</a></p>{% endif %}
 <form id="filters" class="filters" method="get" action="/" role="search"
   hx-get="/" hx-target="#results" hx-push-url="true" hx-trigger="submit, change" hx-sync="this:replace">
   {% include "dashboard/_status_input.html" %}

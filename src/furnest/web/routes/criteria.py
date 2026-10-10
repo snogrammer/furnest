@@ -42,6 +42,7 @@ from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.web.auth import require_auth
 from furnest.web.criteria_form import FormState, look_up_row, parse_form, state_from_criteria
 from furnest.web.criteria_hints import build_hints
+from furnest.web.criteria_summary import summarize_criteria
 from furnest.web.csrf import require_csrf
 from furnest.web.templating import templates
 from furnest.worker import queue
@@ -60,6 +61,11 @@ CHOICES: dict[str, Any] = {
     "units": [unit.value for unit in DistanceUnit],
 }
 
+
+# Fields inside the "Advanced" details, which opens by itself when one has an error.
+ADVANCED_FIELDS = frozenset(
+    {"keywords_allow", "keywords_deny", "price_fit_weight", "extra_beds_weight", "unknown_fails"}
+)
 
 PLACE_SUGGESTIONS = 10
 
@@ -80,6 +86,7 @@ def _render_editor(
     errors: dict[str, str] | None = None,
     flash: str | None = None,
     flash_error: bool = False,
+    saved_version: int | None = None,
     status_code: int = 200,
 ) -> Response:
     active = store.active()
@@ -90,8 +97,11 @@ def _render_editor(
         "errors": errors or {},
         "flash": flash,
         "flash_error": flash_error,
+        "saved_version": saved_version,
         "active": active,
+        "summary": summarize_criteria(active.criteria) if active else None,
         "choices": CHOICES,
+        "advanced_fields": ADVANCED_FIELDS,
         "hints": build_hints(make_session_factory(request.app.state.engine), state),
     }
     template = "criteria/_form.html" if _is_htmx(request) else "criteria/edit.html"
@@ -104,12 +114,8 @@ def edit(
     saved: Annotated[int | None, Query()] = None,
     rerun: Annotated[int | None, Query()] = None,
 ) -> Response:
-    flash = None
-    if saved is not None:
-        flash = f"Saved as version {saved}."
-    elif rerun is not None:
-        flash = f"Re-run queued (job #{rerun})."
-    return _render_editor(request, _store(request), flash=flash)
+    flash = f"Re-run queued (job #{rerun})." if rerun is not None else None
+    return _render_editor(request, _store(request), flash=flash, saved_version=saved)
 
 
 @router.post("", response_class=HTMLResponse)
@@ -136,7 +142,7 @@ async def save(request: Request) -> Response:
         )
     record = store.save(parsed.criteria, created_by="dashboard")
     if _is_htmx(request):
-        return _render_editor(request, store, flash=f"Saved as version {record.version}.")
+        return _render_editor(request, store, saved_version=record.version)
     return RedirectResponse(f"/criteria?saved={record.version}", status_code=303)
 
 

@@ -1,25 +1,31 @@
 {% import "criteria/_macros.html" as m %}
 <form id="criteria-form" class="criteria-form" method="post" action="/criteria"
-  hx-post="/criteria" hx-target="this" hx-swap="outerHTML">
+  hx-post="/criteria" hx-target="this" hx-swap="outerHTML show:#form-alert:top">
   {{ csrf_field(request) }}
   {# Enter in any field saves: the first submit button is the form's default, and the
      area rows' "Look up" buttons come before the real one. #}
   <button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">Save criteria</button>
+  {% if summary %}<p class="criteria-summary"><strong>Currently searching for:</strong> {{ summary }}.</p>{% endif %}
   <p class="muted">
     {% if active %}Editing version {{ active.version }} (active). Saving creates a new version.
     {% else %}Not saved yet. Saving creates version 1.{% endif %}
   </p>
-  {% if flash %}<p class="{{ 'form-error' if flash_error else 'flash' }}" role="status">{{ flash }}</p>{% endif %}
+  {% if saved_version %}<p class="flash" role="status" id="form-alert">Saved as version {{ saved_version }}. <a href="/criteria/history">See version history</a>.</p>{% endif %}
+  {% if flash %}<p class="{{ 'form-error' if flash_error else 'flash' }}" role="status" id="form-alert">{{ flash }}</p>{% endif %}
   {% if errors %}
-  <div class="form-error" role="alert">
+  <div class="form-error" role="alert" id="form-alert">
     <p>Not saved. Fix the highlighted fields.</p>
     {% if errors.get("__all__") %}<p>{{ errors["__all__"] }}</p>{% endif %}
+    <ul>
+      {% for name, message in errors.items() if name != "__all__" %}<li><a href="#{{ name }}">{{ message }}</a></li>{% endfor %}
+    </ul>
   </div>
   {% endif %}
 
   <fieldset>
     <legend>Location</legend>
-    <p class="muted">A listing qualifies if it is in any area, ZIP code or neighborhood.</p>
+    <p class="muted">Where to look. A listing qualifies if it is in any area, ZIP code or neighborhood below. Type a city and state (like "Springfield, IL") and pick it from the list; a radius of 50 miles is a good start.</p>
+    {% if not state.areas %}<p class="muted empty-state">No areas yet. Type a city and state in the row below, or list ZIP codes or neighborhoods instead.</p>{% endif %}
     <div id="area-rows" class="rows">
       {% for row in state.areas %}
         {% with index=loop.index0, add_next=False %}{% include "criteria/_area_row.html" %}{% endwith %}
@@ -29,8 +35,8 @@
     {{ m.add_button("area", "Add area", state.areas|length + 1) }}
     {{ m.error(errors, "areas") }}
     <div class="grid">
-      {{ m.textarea(state, errors, "zip_codes", "ZIP codes", "One per line or comma-separated.") }}
-      {{ m.textarea(state, errors, "neighborhoods", "Neighborhoods", "One per line or comma-separated.") }}
+      {{ m.textarea(state, errors, "zip_codes", "ZIP codes", "Exact ZIP codes to include, one per line or comma-separated.") }}
+      {{ m.textarea(state, errors, "neighborhoods", "Neighborhoods", "Names as they appear in listings, one per line or comma-separated.") }}
     </div>
     {% for hint in hints.areas %}
     <div class="place-hints" id="hints-{{ hint.index }}">
@@ -54,31 +60,8 @@
   </fieldset>
 
   <fieldset>
-    <legend>Price (monthly)</legend>
-    <div class="grid">
-      {{ m.input(state, errors, "price_min", "Minimum", attrs='inputmode="decimal"') }}
-      {{ m.input(state, errors, "price_max", "Maximum", attrs='inputmode="decimal"') }}
-      {{ m.input(state, errors, "currency", "Currency", attrs='maxlength="3" autocapitalize="characters"') }}
-    </div>
-  </fieldset>
-
-  <fieldset>
-    <legend>Property</legend>
-    {{ m.checkboxes(state, errors, "property_types_allow", "Allowed types (none ticked means any)", choices.property_type_options) }}
-    {{ m.checkboxes(state, errors, "property_types_deny", "Denied types", choices.property_type_options) }}
-    {{ m.checkboxes(state, errors, "owner_types_deny", "Denied owner types", choices.owner_type_options) }}
-    <p class="muted">Who lists a place is read from the source and the listing's wording, and you can correct it on each property. A listing whose owner type can't be told counts as missing data (see the last section).</p>
-    <div class="grid">
-      {{ m.input(state, errors, "min_beds", "Minimum beds", "number", "0 means a studio is fine.", 'min="0" step="1"') }}
-      {{ m.input(state, errors, "min_baths", "Minimum baths", "number", None, 'min="0" step="0.5"') }}
-      {{ m.input(state, errors, "min_sqft", "Minimum sqft", "number", None, 'min="1" step="1"') }}
-    </div>
-    <label class="check"><input type="checkbox" name="furnished_required"{% if state.is_checked("furnished_required", "on") %} checked{% endif %}> Furnished required</label>
-  </fieldset>
-
-  <fieldset>
     <legend>Dates</legend>
-    <p class="muted">Move-in is checked against listings' availability; the gap to move-out sets the lease lengths that fit. Both are quoted in inquiry emails.</p>
+    <p class="muted">When you want to live there. Move-in is checked against listings' availability; the gap to move-out sets the lease lengths that fit. Both are quoted in inquiry emails.</p>
     <div class="grid">
       {{ m.input(state, errors, "move_in", "Move-in", "date", "When you want to move in.") }}
       {{ m.input(state, errors, "move_in_flex_days", "Move-in, give or take (days)", "number", "How many days either side still works. Default 7.", 'min="0" max="365" step="1"') }}
@@ -89,10 +72,38 @@
   </fieldset>
 
   <fieldset>
+    <legend>Price (monthly)</legend>
+    <p class="muted">Monthly rent you would pay. Leave a box empty for no limit.</p>
+    <div class="grid">
+      {{ m.input(state, errors, "price_min", "Minimum", hint="Listings cheaper than this are skipped.", attrs='inputmode="decimal"') }}
+      {{ m.input(state, errors, "price_max", "Maximum", hint="Listings dearer than this are skipped.", attrs='inputmode="decimal"') }}
+      {{ m.input(state, errors, "currency", "Currency", hint="Three-letter code, like USD.", attrs='maxlength="3" autocapitalize="characters"') }}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Property</legend>
+    <p class="muted">Size and kind of place. Everything here is optional.</p>
+    {{ m.checkboxes(state, errors, "property_types_allow", "Allowed types (none ticked means any)", choices.property_type_options) }}
+    {{ m.checkboxes(state, errors, "property_types_deny", "Denied types", choices.property_type_options) }}
+    {{ m.checkboxes(state, errors, "owner_types_deny", "Denied owner types", choices.owner_type_options) }}
+    <p class="muted">Who lists a place is read from the source and the listing's wording, and you can correct it on each property. A listing whose owner type can't be told counts as missing data (see "Missing data" under Advanced).</p>
+    <div class="grid">
+      {{ m.input(state, errors, "min_beds", "Minimum beds", "number", "0 means a studio is fine.", 'min="0" step="1"') }}
+      {{ m.input(state, errors, "min_baths", "Minimum baths", "number", "Half baths count, e.g. 1.5.", 'min="0" step="0.5"') }}
+      {{ m.input(state, errors, "min_sqft", "Minimum sqft", "number", "Interior floor area in square feet.", 'min="1" step="1"') }}
+    </div>
+    <label class="check"><input type="checkbox" name="furnished_required"{% if state.is_checked("furnished_required", "on") %} checked{% endif %}> Furnished required</label>
+    <small class="muted">Skip listings that are not furnished. Ticked by default.</small>
+  </fieldset>
+
+  <fieldset>
     <legend>Amenities</legend>
-    {{ m.checkboxes(state, errors, "must_have_amenities", "Must have", choices.amenities) }}
+    <p class="muted">Features a place needs, and features that would be a bonus.</p>
+    {{ m.checkboxes(state, errors, "must_have_amenities", "Must have (listings without these are rejected)", choices.amenities) }}
     <fieldset class="checks">
       <legend>Nice to have (weighted in the score)</legend>
+      <p class="muted">Each one raises a listing's score by its weight; a bigger number matters more.</p>
       <div id="amenity-rows" class="rows">
         {% for row in state.nice %}
           {% with index=loop.index0, add_next=False %}{% include "criteria/_amenity_row.html" %}{% endwith %}
@@ -104,18 +115,20 @@
     </fieldset>
   </fieldset>
 
+  <details class="advanced"{% if errors and (errors.keys() | select("in", advanced_fields) | list) %} open{% endif %}>
+    <summary>Advanced: keywords, scoring and missing data</summary>
   <fieldset>
     <legend>Keywords</legend>
     <p class="muted">Matched against the title and description, ignoring case.</p>
     <div class="grid">
-      {{ m.textarea(state, errors, "keywords_allow", "Must mention one of") }}
-      {{ m.textarea(state, errors, "keywords_deny", "Must not mention") }}
+      {{ m.textarea(state, errors, "keywords_allow", "Must mention one of", "One per line or comma-separated. Empty means no requirement.") }}
+      {{ m.textarea(state, errors, "keywords_deny", "Must not mention", "Listings containing any of these words are rejected.") }}
     </div>
   </fieldset>
 
   <fieldset>
     <legend>Scoring</legend>
-    <p class="muted">Optional extras, weighted like the nice-to-have amenities.</p>
+    <p class="muted">Optional extras that raise the score, weighted like the nice-to-have amenities. A bigger number matters more; leave empty to ignore.</p>
     <div class="grid">
       {{ m.input(state, errors, "price_fit_weight", "Lower price weight", hint="Needs a maximum price.", attrs='inputmode="decimal"') }}
       {{ m.input(state, errors, "extra_beds_weight", "Extra beds weight", hint="Needs minimum beds.", attrs='inputmode="decimal"') }}
@@ -124,8 +137,11 @@
 
   <fieldset>
     <legend>Missing data</legend>
-    {{ m.checkboxes(state, errors, "unknown_fails", "Reject a listing when it doesn't say", choices.rule_options) }}
+    <p class="muted">Some listings leave things out, such as the price or whether they are furnished. By default a listing is still shown when a detail is missing, and flagged. Tick a rule to reject listings that do not say.</p>
+    {{ m.checkboxes(state, errors, "unknown_fails", "Reject a listing when it doesn't say its…", choices.rule_options) }}
   </fieldset>
+
+  </details>
 
   <div class="actions">
     <button type="submit">Save criteria</button>
