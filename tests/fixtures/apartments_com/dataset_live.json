@@ -1,0 +1,759 @@
+[
+  {
+    "inputSource": "https://www.apartments.com/denver-co/",
+    "id": "apt0001",
+    "propertyName": "Example Heights",
+    "url": "https://www.apartments.com/example-heights-denver-co/apt0001/",
+    "propertyWebsite": "https://example.com/example-heights",
+    "lastUpdated": "6 hours ago",
+    "location": {
+      "fullAddress": "123 Example St, Denver, CO 00001",
+      "state": "CO",
+      "city": "Denver",
+      "neighborhood": "West Colfax",
+      "postalCode": "00001",
+      "streetAddress": "123 Example St"
+    },
+    "coordinates": {
+      "latitude": 39.74,
+      "longitude": -104.99
+    },
+    "rating": 5,
+    "baseRent": {
+      "min": 1674,
+      "max": 3399
+    },
+    "totalRent": {
+      "min": 1715,
+      "max": 3440
+    },
+    "beds": "Studio - 3 bd",
+    "baths": "1 - 2 ba",
+    "sqft": "509 - 11,351,147 sq ft",
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Lease Options",
+            "values": [
+              {
+                "key": "3 - 16 Month Leases",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "Built in 2021",
+                "value": ""
+              },
+              {
+                "key": "292 units/7 stories",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Fees",
+        "policies": [
+          {
+            "header": "Other Fees",
+            "values": [
+              {
+                "key": "Administrative Fee",
+                "value": "$275"
+              },
+              {
+                "key": "Application Fee Per Applicant",
+                "value": "$70"
+              }
+            ]
+          },
+          {
+            "header": "Parking",
+            "values": [
+              {
+                "key": "Garage",
+                "value": ""
+              },
+              {
+                "key": "Garage",
+                "value": ""
+              },
+              {
+                "key": "Garage",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Pet Policies",
+        "policies": [
+          {
+            "header": "Cats Allowed",
+            "values": [
+              {
+                "key": "Pet Limit",
+                "value": "3"
+              }
+            ]
+          },
+          {
+            "header": "Dogs Allowed",
+            "values": [
+              {
+                "key": "Pet Limit",
+                "value": "3"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Welcome to Example Heights. Example description of the community.",
+    "amenities": [
+      {
+        "title": "Community Amenities",
+        "value": [
+          "Recycling",
+          "Car Charging Station",
+          "Conference Rooms",
+          "Elevator",
+          "Lounge",
+          "Fitness Center"
+        ]
+      },
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Air Conditioning",
+          "Washer/Dryer",
+          "Dishwasher",
+          "Microwave",
+          "Refrigerator",
+          "Stainless Steel Appliances",
+          "Furnished"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0101",
+      "logo": "https://images1.apartments.com/i2/example-image-99/110/image.jpg",
+      "name": "Example Residential"
+    },
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Example",
+        "text": "Jane Example liked it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "models": [
+      {
+        "modelId": "apt0001m1",
+        "modelName": "Plan A",
+        "totalPrice": "$1,728",
+        "basePrice": "$1,687",
+        "image": "https://images1.apartments.com/i2/example-image-01/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-01/117/image.jpg",
+        "details": [
+          "Studio",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "1 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "540 - 543"
+      },
+      {
+        "modelId": "apt0001m2",
+        "modelName": "Plan B",
+        "totalPrice": "$1,835",
+        "basePrice": "$1,794",
+        "image": "https://images1.apartments.com/i2/example-image-02/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-02/117/image.jpg",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "1 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "828 - 836"
+      }
+    ],
+    "rentals": [
+      {
+        "modelId": "apt0001m1",
+        "modelName": "Plan A",
+        "unitNumber": "001",
+        "details": [
+          "Studio",
+          "1 Bath"
+        ],
+        "key": "apt0001u1",
+        "beds": 0,
+        "baths": 1,
+        "basePrice": 1687,
+        "totalPrice": 1728,
+        "squareFeet": 543,
+        "availableDate": "2026-10-10T00:00:00-04:00",
+        "availability": "Now",
+        "unitCount": 1,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-03/105/image.jpg"
+      },
+      {
+        "modelId": "apt0001m1",
+        "modelName": "Plan A",
+        "unitNumber": "002",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "key": "apt0001u2",
+        "beds": 1,
+        "baths": 1,
+        "basePrice": 1794,
+        "totalPrice": 1835,
+        "squareFeet": 828,
+        "availableDate": "2026-10-10T00:00:00-04:00",
+        "availability": "Now",
+        "unitCount": 1,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-04/105/image.jpg"
+      },
+      {
+        "modelId": "apt0001m1",
+        "modelName": "Plan A",
+        "unitNumber": "003",
+        "details": [
+          "3 Beds",
+          "2 Baths"
+        ],
+        "key": "apt0001u3",
+        "beds": 3,
+        "baths": 2,
+        "basePrice": 3399,
+        "totalPrice": 3440,
+        "squareFeet": 1340,
+        "availableDate": "2026-10-15T00:00:00-04:00",
+        "availability": "10/15/26",
+        "unitCount": 1,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-05/105/image.jpg"
+      }
+    ]
+  },
+  {
+    "inputSource": "https://www.apartments.com/denver-co/",
+    "id": "apt0002",
+    "propertyName": "Example Commons",
+    "url": "https://www.apartments.com/example-commons-denver-co/apt0002/",
+    "propertyWebsite": "https://example.com/example-commons",
+    "lastUpdated": "5 days ago",
+    "location": {
+      "fullAddress": "123 Example St, Denver, CO 00001",
+      "state": "CO",
+      "city": "Denver",
+      "neighborhood": "Englewood",
+      "postalCode": "00001",
+      "streetAddress": "123 Example St"
+    },
+    "coordinates": {
+      "latitude": 39.74,
+      "longitude": -104.99
+    },
+    "rating": 5,
+    "baseRent": {
+      "min": 1498,
+      "max": 2964
+    },
+    "totalRent": {
+      "min": 1498,
+      "max": 2964
+    },
+    "beds": "Studio - 2 bd",
+    "baths": "1 - 2 ba",
+    "sqft": "439 - 1,156 sq ft",
+    "specials": {
+      "label": "Rent Specials",
+      "title": "Rent Specials",
+      "description": "Example move-in special."
+    },
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Lease Options",
+            "values": [
+              {
+                "key": "6 - 15 Month Leases",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "Built in 2023",
+                "value": ""
+              },
+              {
+                "key": "146 units/5 stories",
+                "value": ""
+              },
+              {
+                "key": "Furnished Units Available",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Fees",
+        "policies": [
+          {
+            "header": "Other Fees",
+            "values": [
+              {
+                "key": "Administrative Fee",
+                "value": "$200"
+              },
+              {
+                "key": "Application Fee Per Applicant",
+                "value": "$35"
+              },
+              {
+                "key": "Cat Fee",
+                "value": "$300"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Pet Policies",
+        "policies": [
+          {
+            "header": "Cats Allowed",
+            "values": [
+              {
+                "key": "Deposit",
+                "value": "$$0"
+              },
+              {
+                "key": "Rent",
+                "value": "$25"
+              },
+              {
+                "key": "One time Fee",
+                "value": "$300"
+              }
+            ]
+          },
+          {
+            "header": "Dogs Allowed",
+            "values": [
+              {
+                "key": "Deposit",
+                "value": "$$0"
+              },
+              {
+                "key": "Rent",
+                "value": "$25"
+              },
+              {
+                "key": "One time Fee",
+                "value": "$300"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Welcome to Example Commons. Example description of the community.",
+    "amenities": [
+      {
+        "title": "Community Amenities",
+        "value": [
+          "24 Hour Access",
+          "Controlled Access",
+          "Property Manager on Site",
+          "Wheelchair Accessible",
+          "Package Service",
+          "Trash Pickup - Door to Door"
+        ]
+      },
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Air Conditioning",
+          "Storage Space",
+          "Washer/Dryer",
+          "Heating",
+          "Ceiling Fans",
+          "High Speed Internet Access"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0102",
+      "logo": "https://images1.apartments.com/i2/example-image-99/110/image.jpg",
+      "name": "Example Residential"
+    },
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Example",
+        "text": "Jane Example liked it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "models": [
+      {
+        "modelId": "apt0002m1",
+        "modelName": "Plan A",
+        "totalPrice": "$1,617 - 1,922",
+        "basePrice": "$1,617 - 1,922",
+        "image": "https://images1.apartments.com/i2/example-image-06/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-06/117/image.jpg",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "0 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "671"
+      },
+      {
+        "modelId": "apt0002m2",
+        "modelName": "Plan B",
+        "totalPrice": "$1,630 - 1,943",
+        "basePrice": "$1,630 - 1,943",
+        "image": "https://images1.apartments.com/i2/example-image-07/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-07/117/image.jpg",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "0 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "746"
+      },
+      {
+        "modelId": "apt0002m3",
+        "modelName": "Plan C",
+        "totalPrice": "$1,760 - 2,083",
+        "basePrice": "$1,760 - 2,083",
+        "image": "https://images1.apartments.com/i2/example-image-08/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-08/117/image.jpg",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "0 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "803"
+      }
+    ],
+    "rentals": []
+  },
+  {
+    "inputSource": "https://www.apartments.com/denver-co/",
+    "id": "apt0003",
+    "propertyName": "Example Gardens",
+    "url": "https://www.apartments.com/example-gardens-denver-co/apt0003/",
+    "propertyWebsite": "https://example.com/example-gardens",
+    "lastUpdated": "1 day ago",
+    "location": {
+      "fullAddress": "123 Example St, Denver, CO 00001",
+      "state": "CO",
+      "city": "Denver",
+      "neighborhood": "Cherry Creek",
+      "postalCode": "00001",
+      "streetAddress": "123 Example St"
+    },
+    "coordinates": {
+      "latitude": 39.74,
+      "longitude": -104.99
+    },
+    "rating": 5,
+    "baseRent": {
+      "min": 1795,
+      "max": 2995
+    },
+    "totalRent": {
+      "min": 1910,
+      "max": 3110
+    },
+    "beds": "1 bd - 3 bd",
+    "baths": "1 - 2 ba",
+    "sqft": "611 - 1,375 sq ft",
+    "specials": {
+      "label": "Rent Specials",
+      "title": "Rent Specials",
+      "description": "Example move-in special."
+    },
+    "fees": [
+      {
+        "title": "Details",
+        "policies": [
+          {
+            "header": "Lease Options",
+            "values": [
+              {
+                "key": "Call Office for Lease Terms",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "header": "Property Information",
+            "values": [
+              {
+                "key": "Built in 2013",
+                "value": ""
+              },
+              {
+                "key": "191 units/5 stories",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Fees",
+        "policies": [
+          {
+            "header": "Other Fees",
+            "values": [
+              {
+                "key": "Administrative Fee",
+                "value": "$100"
+              }
+            ]
+          },
+          {
+            "header": "Parking",
+            "values": [
+              {
+                "key": "Surface Lot",
+                "value": ""
+              },
+              {
+                "key": "Covered",
+                "value": ""
+              },
+              {
+                "key": "Garage",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Pet Policies",
+        "policies": [
+          {
+            "header": "Cats Allowed",
+            "values": [
+              {
+                "key": "Restrictions",
+                "value": "None"
+              }
+            ]
+          },
+          {
+            "header": "Dogs Allowed",
+            "values": [
+              {
+                "key": "Restrictions",
+                "value": "None"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "description": "Welcome to Example Gardens. Example description of the community.",
+    "amenities": [
+      {
+        "title": "Community Amenities",
+        "value": [
+          "24 Hour Access",
+          "Property Manager on Site",
+          "Package Service",
+          "Car Charging Station",
+          "Maintenance on site",
+          "Business Center"
+        ]
+      },
+      {
+        "title": "Interior Amenities",
+        "value": [
+          "Air Conditioning",
+          "Cable Ready",
+          "Washer/Dryer",
+          "Ceiling Fans",
+          "High Speed Internet Access",
+          "Wi-Fi"
+        ]
+      }
+    ],
+    "contact": {
+      "phone": "(555) 010-0103",
+      "logo": "https://images1.apartments.com/i2/example-image-99/110/image.jpg",
+      "name": "Example Residential"
+    },
+    "reviews": [
+      {
+        "key": "r1",
+        "title": "Example",
+        "text": "Jane Example liked it",
+        "rating": 5
+      }
+    ],
+    "schools": {
+      "public": [
+        {
+          "name": "Example School"
+        }
+      ]
+    },
+    "transportation": [
+      {
+        "name": "Example Station",
+        "walk": "6 min",
+        "drive": "1 min",
+        "distance": "0.2 mi"
+      }
+    ],
+    "models": [
+      {
+        "modelId": "apt0003m1",
+        "modelName": "Plan A",
+        "totalPrice": "$1,910",
+        "basePrice": "$1,795",
+        "image": "https://images1.apartments.com/i2/example-image-09/105/image.jpg",
+        "imageLarge": "https://images1.apartments.com/i2/example-image-09/117/image.jpg",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "leaseOptions": "",
+        "availability": "3 Available units",
+        "availabilityInfo": "Now",
+        "squareFeet": "778"
+      }
+    ],
+    "rentals": [
+      {
+        "modelId": "apt0003m1",
+        "modelName": "Plan A",
+        "unitNumber": "001",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "key": "apt0003u1",
+        "beds": 1,
+        "baths": 1,
+        "basePrice": 1795,
+        "totalPrice": 1910,
+        "squareFeet": 778,
+        "availableDate": "2026-09-11T00:00:00-04:00",
+        "availability": "Now",
+        "unitCount": 3,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-10/105/image.jpg"
+      },
+      {
+        "modelId": "apt0003m1",
+        "modelName": "Plan A",
+        "unitNumber": "002",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "key": "apt0003u2",
+        "beds": 1,
+        "baths": 1,
+        "basePrice": 1795,
+        "totalPrice": 1910,
+        "squareFeet": 778,
+        "availableDate": "2026-09-14T00:00:00-04:00",
+        "availability": "Now",
+        "unitCount": 3,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-11/105/image.jpg"
+      },
+      {
+        "modelId": "apt0003m1",
+        "modelName": "Plan A",
+        "unitNumber": "003",
+        "details": [
+          "1 Bed",
+          "1 Bath"
+        ],
+        "key": "apt0003u3",
+        "beds": 1,
+        "baths": 1,
+        "basePrice": 1795,
+        "totalPrice": 1910,
+        "squareFeet": 778,
+        "availableDate": "2026-09-26T00:00:00-04:00",
+        "availability": "Now",
+        "unitCount": 3,
+        "isNew": false,
+        "image": "https://images1.apartments.com/i2/example-image-12/105/image.jpg"
+      }
+    ]
+  }
+]

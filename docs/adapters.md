@@ -270,11 +270,36 @@ URL, as on the site. `minimalMaxTotalChargeUsd` is $0.02.
    `under-2000`, `over-900`). Prices are rounded down. The site has no move-in date
    filter, so matching applies the date. `maxItems` is `max_results`.
 2. `ApifyAdapter` runs the actor exactly as for Zillow.
-3. **Furnished:** the actor can't filter, and the site's amenity filter isn't
-   reliably combinable with the others, so the adapter filters after the fact: an
-   item is kept only if its amenities, its fee/lease lists ("Furnished Units
-   Available") or its description say "furnished" (not "unfurnished"). The rest are
-   dropped without a log line. Items that can't be mapped are logged and skipped.
+3. **Furnished:** the actor can't filter, so the adapter filters after the fact: a
+   building is kept only if its amenities ("Furnished" under Interior Amenities), its
+   fee and lease lists ("Furnished Units Available" under Property Information) or its
+   description say "furnished" (not "unfurnished"). The rest are dropped without a
+   log line. Units carry no furnished flag of their own, so every available unit of a
+   kept building becomes a listing. Items that can't be mapped are logged and skipped.
+
+### Live runs (#194)
+
+On 2026-10-10, seven runs on Denver with `maxItems` 10–15 (the Free plan caps a run at
+10 items), $0.05 in all:
+
+| Start URL | Items | Furnished | Notes |
+| --- | --- | --- | --- |
+| `/denver-co/` | 10 | 0 | billed $0.0145 (one list page, 10 items) |
+| `/denver-co/min-1-bedrooms-1000-to-2500/` | 10 | 0 | accepted; 8 of the 10 buildings are the baseline's, and every building's rent range reaches into the price band |
+| `/denver-co/min-1-bedrooms-1000-to-2500-furnished/` | 10 | 1 | 9 of the 10 are the baseline's; the one new building is the only furnished one |
+| `/denver-co/furnished/` (the site's own furnished page) | 0 | – | the actor takes it for a property page (billed as a detail query) |
+| `/denver-co/min-1-bedrooms-1000-to-2500/furnished/` | 0 | – | the same |
+| `/denver-co/furnished/1/`, `/denver-co/furnished/min-1-…/` | – | – | demo mode, see below |
+
+So the beds and price segment stays. No URL form brings furnished buildings to the
+front: 1 building in 12 said "furnished", which is why the keyword filter stays, and
+why a run should ask for more items than for other sources. A furnished start URL the
+actor accepts is still worth finding (#201).
+
+**Demo mode.** On Apify's Free plan the actor gives 5 real runs a month. After that,
+every run "succeeds" with `{"demo": true}` placeholder items and a status message
+asking for a paid plan. The adapter fails such a run with that reason, so it isn't
+mistaken for an empty search.
 
 ### Degrading
 
@@ -282,50 +307,56 @@ URL, as on the site. `minimalMaxTotalChargeUsd` is $0.02.
 - No `search_locations`: each run fails with a message saying so.
 - A bad token or a run that ends `FAILED`, `TIMED-OUT` or `ABORTED`: the run fails
   with the reason and nothing is marked missing.
+- A demo-mode dataset (Free plan, over 5 runs a month): the run fails with the reason.
 - An empty dataset is a successful run with no listings.
 
 ### Field mapping
 
-One item is one building (or complex) with a rent range, not one unit.
+One item is one building. Its available units are in `rentals` (2 to 150 per
+building live), its floor plans in `models`. Each unit of a furnished building is a
+listing, with the building filling in the rest. A building with no `rentals` is one
+listing at its rent range.
 
-| Actor field | `NormalizedListing` |
+| Actor field (unit, else building) | `NormalizedListing` |
 | --- | --- |
-| `id` | `source_id` |
-| `url` | `url` (must be on apartments.com) |
-| `propertyName`, else `location.streetAddress` | `title` |
+| `id`, unit `key` | `source_id`: `<id>-<key>`, or `<id>` for a building without units |
+| `url` | `url` (must be on apartments.com; units link to their building) |
+| `propertyName` (else `location.streetAddress`), unit `unitNumber` | `title`, e.g. "Example Heights, unit 001" |
 | `description` | `description`, whitespace collapsed |
-| `rent.min` | `price`, monthly USD: the lowest rent of the building |
+| unit `basePrice`; building `baseRent.min`/`.max` | `price`, monthly USD (`totalPrice`, with required monthly fees, stays in `raw`) |
 | `location.*` | `address`; country `US` |
 | `coordinates` | `lat`, `lng` (both or neither) |
-| `beds`, `baths`, `sqft` | single figures only ("2 bd", "Studio" is 0); a range ("1 bd - 2 bd") is unknown, because the rent isn't tied to a plan |
-| `amenities[].value`, a dog/cat policy under `fees` | `amenities`, lower-cased; "pets allowed" for the policy |
-| `fees` "Lease Options" (`12 - 24 mo`) | `min_lease_months` (12) |
-| `availableFrom` / `availability` | `available_from`, when the actor gives one (the README output has none; "Now" is today) |
-| `photos` | `images` |
+| unit `beds`, `baths`, `squareFeet` | `beds`, `baths`, `sqft` (beds 0 is a studio) |
+| building `beds`, `baths`, `sqft` text | single figures only ("2 bd", "Studio" is 0); a range is unknown |
+| unit `availableDate` (else `availability`, "Now" or `MM/DD/YY`) | `available_from`; a past date (units free "Now") is today |
+| `amenities[].value`; a dog, cat or "other pets" policy under `fees` | `amenities`, lower-cased; "pets allowed" for the policy |
+| `fees` "Lease Options" (`3 - 16 Month Leases`) | `min_lease_months` (3); "Call Office for Lease Terms" is unknown |
+| unit `image`, else `models[].imageLarge` | `images`: floor plan pictures. The actor returns no photos unless `includeVisuals` (a paid extra, $0.0002 a building) is on, which isn't tried yet |
 | `contact.phone`, `.name` | `contact`: the leasing office's public phone and name; no phone means platform only |
-| everything except `contact`, `reviews`, `schools`, `transportation`, `poi`, `transitAndPOI`, `neighborhoodDescription`, `virtualTours`, `virtualTourExtended`, `floorPlans`, `photos`, `score`, `scores` | `raw` |
+| everything except `contact`, `reviews`, `schools`, `transportation`, `transitAndPOI`, `models`, `rentals` and other bulky blocks; plus the unit under `unit` | `raw` |
 | "private owner" → individual; "professionally managed", "property management", "management company/group/team" in the description or contact name → property manager; else the title and description | `owner_type` |
 
-Every listing is `furnished` (the filter above) and an apartment, a studio when the
-item has only studios.
+Every listing is `furnished` (the filter above).
 
 ### Cost
 
-October 2026 prices: $0.01 per listing page (the first 20 items of it included), then
-$0.0005 an item. One run of 20 items is about $0.01 plus the platform's start fee, so
-a daily run for a month is well under $1. On Apify's Free plan the actor runs in
-demo mode: 5 runs a month, 10 items each. The cost is from the actor's published
-pricing, not a billed run.
+October 2026 prices: $0.01 per listing page, $0.0005 an item (the live runs were
+billed for every item, although the pricing says the first 20 of a page are
+included), $0.005 for a property page. A 10-item run was billed $0.0145, so a run of
+20 is about $0.02 and a daily run for a month about $0.60, but only on a paid plan.
+On the Free plan, 5 runs a month return data.
 
 ### Limitations
 
-`tests/fixtures/apartments_com/dataset_items.json` is written from the actor's
-README, and there is no `dataset_live.json` yet: the work was done without an Apify
-token. The mapping follows the README's output example, and two things should be
-checked on the first live run: that the start-URL filter segment is accepted by the
-site (a wrong one would give an empty dataset; fall back to a bare `/<city>-<st>/`
-URL), and whether items carry an availability date or per-unit data. Trust the live
-capture over the README. The city slug needs "City, ST" with the state abbreviation.
+- Few furnished buildings: 1 in 12 in Denver, so most of each run is dropped. Raise
+  `max_results` (items cost $0.0005).
+- "Furnished Units Available" doesn't say which units, so every available unit of
+  such a building is listed as furnished. Check with the leasing office.
+- Images are floor plans, so photo dedup against other sources finds little.
+- `tests/fixtures/apartments_com/dataset_live.json` is trimmed from the live runs. No
+  live building in it says "furnished", so two are marked furnished by hand, using the
+  two signals the one furnished live building showed (see the fixtures README).
+- The city slug needs "City, ST" with the state abbreviation.
 
 ## Zumper (`zumper`)
 
@@ -841,7 +872,7 @@ checked against the live runs on 2026-10-07:
 | Zillow | $0.06 ($0.0005 start, $0.0029 a listing) | $1.80 | $0.90 |
 | Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
 | Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
-| Apartments.com | about $0.02 ($0.01 per listing page with the first 20 items, $0.0005 after) | $0.60 | $0.30 |
+| Apartments.com | about $0.02 ($0.01 a listing page, $0.0005 an item; a 10-item run was billed $0.0145). Free plan: 5 runs a month, then demo mode | $0.60 | $0.30 |
 | Zumper | about $0.055 ($0.005 start, $0.0025 a row; 15-row runs were billed $0.03–$0.04 in all) | $1.65 | $0.83 |
 
 All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,

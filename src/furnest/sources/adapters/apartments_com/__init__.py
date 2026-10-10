@@ -11,10 +11,15 @@ maps the items with :mod:`.parse`. ``docs/adapters.md`` has the research.
 automated collection. Using the source is the operator's decision and risk, so it is
 off by default. Keep the interval long.
 
-The actor has no furnished filter, so the adapter keeps only the items that say they
-are furnished (amenities, lease and fee lists, or description). It takes
-Apartments.com URLs: each search location becomes ``/<city>-<st>/``, with the
-criteria's minimum beds and price range in the site's filter segment.
+The actor has no furnished filter, so the adapter keeps only the buildings that say
+they are furnished (amenities, lease and fee lists, or description), and makes a
+listing of each of their available units. It takes Apartments.com URLs: each search
+location becomes ``/<city>-<st>/``, with the criteria's minimum beds and price range
+in the site's filter segment.
+
+**Apify's Free plan** runs this actor in demo mode after 5 runs a month: the dataset
+holds ``{"demo": true}`` placeholders instead of buildings. A run that returns them
+fails with a message saying so, rather than looking like a search with no results.
 
 Configure it on the dashboard's Sources page (the Apify token under Credentials,
 the rest in its settings), or in ``SOURCES_ADAPTERS``::
@@ -46,6 +51,7 @@ from furnest.sources.adapters.apartments_com.parse import (
     parse_item,
 )
 from furnest.sources.apify import ApifyAdapter
+from furnest.sources.errors import SourceError
 
 log = get_logger(__name__)
 
@@ -70,11 +76,18 @@ class ApartmentsCom(ApifyAdapter):
     def parse_items(
         self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
     ) -> list[NormalizedListing]:
+        if any(item.get("demo") is True for item in items):
+            msg = (
+                f"{ACTOR} ran in demo mode and returned placeholders, not listings: "
+                "Apify's Free plan allows it 5 runs a month. Use a paid Apify plan, or "
+                "wait for the monthly reset"
+            )
+            raise SourceError(msg, url=SITE)
         today = self._today()
         listings: list[NormalizedListing] = []
         for item in items:
             try:
-                listings.append(parse_item(item, today=today))
+                listings.extend(parse_item(item, today=today))
             except NotFurnishedError:
                 continue
             except (ValueError, ValidationError) as exc:
