@@ -19,22 +19,6 @@ from furnest.sources.stub import StubAdapter
 _PROVIDER = Capabilities(has_api=True, requires_api_key=True)
 
 
-class Zumper(StubAdapter):
-    """Zumper: long-term rentals with a furnished filter.
-
-    TODO: every page, including robots.txt, is behind a JavaScript "Client Challenge",
-    so it would go through a data provider (Apify actors such as
-    ``memo23/zumper-cheerio``). Zumper's API only takes listings in, for partners.
-    Compare the actors' furnished filters and output first (see
-    ``docs/adapters.md``, Data providers).
-    """
-
-    name = "zumper"
-    display_name = "Zumper"
-    capabilities: ClassVar[Capabilities] = _PROVIDER
-    site_url = "https://www.zumper.com/"
-
-
 class HotPads(StubAdapter):
     """HotPads (Zillow Group): rentals, much of them shared with Zillow.
 

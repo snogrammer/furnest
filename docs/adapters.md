@@ -327,6 +327,87 @@ site (a wrong one would give an empty dataset; fall back to a bare `/<city>-<st>
 URL), and whether items carry an availability date or per-unit data. Trust the live
 capture over the README. The city slug needs "City, ST" with the state abbreviation.
 
+## Zumper (`zumper`)
+
+**Access:** the Apify data provider `memo23/zumper-cheerio`. Needs an Apify API token
+(the one Zillow uses works). Off by default until the token and a city are set. Every
+Zumper page, robots.txt included, sits behind a JavaScript "Client Challenge", and
+Zumper's API only takes partner listings in, so per the source-access policy (#24,
+#111) it goes through a data provider.
+
+```env
+SOURCES_ADAPTERS={"zumper": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 1440, "max_results": 40}}
+```
+
+### Actors compared (2026-10-10, through `https://api.apify.com/v2/acts/<user>~<name>`)
+
+| | `memo23/zumper-cheerio` | `benthepythondev/zumper-rental-scraper` |
+| --- | --- | --- |
+| Users / 30-day runs | 29 / 52 (rated 1/5 by one review) | 47 / 496 |
+| Input | `startUrls` (Zumper URLs), `maxItems`, optional email enrichment | `location` slug, `propertyType`, `minPrice`/`maxPrice`, `minBeds`/`maxBeds`, `maxListings` |
+| Furnished filter | None | None (only "Airbnb-friendly") |
+| Output | One full detail row per listing (~80 fields): description, lease terms, photos, amenities, agent and brokerage | Building-level rows: rent and bed ranges, availability, amenities, phone, brokerage, photo IDs; no description |
+| Price | $0.005 start + $0.0025 a row (+ $0.001 a row for email enrichment, off) | $0.015 a row + $0.01 a row with a phone |
+
+**Picked `memo23/zumper-cheerio`:** neither can filter on furnished, so the deciding
+factors were the full descriptions (needed to tell furnished from not), lease terms and
+photos, at about a sixth of the price. Its drawback: it has no price or bed inputs.
+`benthepythondev`'s are the better fit for those, but its rows carry no description
+to check for "furnished" in.
+
+### How a run works
+
+1. Each `search_locations` entry ("Springfield, IL") becomes the start URL
+   `https://www.zumper.com/apartments-for-rent/springfield-il`; `maxItems` is
+   `max_results`. Price, beds and the move-in date aren't sent: the URL filters the
+   actor honours aren't documented well enough to send blind, so matching applies them.
+2. `ApifyAdapter` runs the actor exactly as for Zillow.
+3. **Furnished:** the adapter keeps an item only if its title or description says
+   "furnished" (not "unfurnished"). The rest are dropped without a log line. Items that
+   can't be mapped are logged and skipped.
+
+### Field mapping
+
+| Actor field | `NormalizedListing` |
+| --- | --- |
+| `listing_id` | `source_id` |
+| `url` | `url` (the listing path when missing) |
+| `title`, `description` | `title`, `description` |
+| `min_price`, `currency_code` | `price`, per month |
+| `address`, `city`, `state`, `zipcode` | `address` |
+| `lat`, `lng` | `lat`, `lng` |
+| `bedrooms`, `bathrooms` + `half_bathrooms`, `square_feet` | `beds`, `baths`, `sqft` |
+| `property_type` | `property_type`: 13 (Zumper's apartment id) is an apartment, a studio at 0 beds; other ids are `other` until their meaning is confirmed |
+| `lease_terms` | `min_lease_months`, when a term names months |
+| `available_on` (or similar; a date or unix time) | `available_from` |
+| `media[].media_id` | `images`: `https://img.zumpercdn.com/<id>/1280x960` |
+| `phone` | `contact`; none means platform only |
+| `brokerage_name`, `agent_name` | `owner_type` hint: a name that reads as a management company is a property manager, any other named agent or brokerage is an agent, none is unknown. The names stay out of `raw`, as do contact fields, units, nearby listings, ratings, schools and reviews |
+
+Amenities are Zumper's numeric ids and aren't mapped yet, so amenity matching relies
+on the description.
+
+### Cost
+
+October 2026 prices: $0.005 per run plus $0.0025 a listing, so a run of 20 is about
+$0.055 plus Apify compute and residential proxy usage (not measured). Daily for a month
+is under $2 for the actor events. The cost is from published pricing, not a billed run.
+
+### PadMapper
+
+Zumper owns PadMapper and they share inventory, so the same unit can appear on both.
+PadMapper isn't added as a source; dedup (same address, price and size across sources)
+folds duplicates if it is ever built.
+
+### Limitations
+
+`tests/fixtures/zumper/dataset_items.json` is written from the actor's README, and
+there is no `dataset_live.json` yet: the work was done without an Apify token. Field
+names beyond the README sample (`available_on`, `lease_terms`, `phone`, `url`) are
+best guesses, so check them on the first live run and trust the capture over the
+README. Without server-side filters, a run's `max_results` spends on unfurnished
+listings that are then dropped; raise it if a city yields little.
+
 ## Airbnb (`airbnb`)
 
 **Access:** the Apify data provider `tri_angle/airbnb-scraper`, searching a stay of a
@@ -736,6 +817,7 @@ checked against the live runs on 2026-10-07:
 | Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
 | Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
 | Apartments.com | about $0.02 ($0.01 per listing page with the first 20 items, $0.0005 after) | $0.60 | $0.30 |
+| Zumper | about $0.055 ($0.005 start, $0.0025 a listing), plus compute and proxy | $1.65 | $0.83 |
 
 All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,
 and so do all three at `"interval_minutes": 2880` (about $4). Note that Furnished
@@ -764,7 +846,7 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 | Craigslist (housing, furnished) | Built (above) | Direct HTTP | None (RSS blocked) | robots.txt allows `/search` and `/view`; terms forbid automated access | Done |
 | Landing (`landing`) | Built (above) | Its official API, through `SourceHttpClient` | **Yes:** a public read-only REST API with no auth | robots.txt allows `/api/public` and disallows the HTML search pages; the terms forbid spiders on the site, so the API only | Done |
 | Blueground (`blueground`) | Built (above) | Direct HTTP, through `SourceHttpClient` | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Done |
-| Zumper (`zumper`) | Stub | Data provider (Apify, e.g. `memo23/zumper-cheerio`, `benthepythondev/zumper-rental-scraper`) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge" | Medium: compare the actors' furnished filters and output |
+| Zumper (`zumper`) | Built (above) | Apify data provider (`memo23/zumper-cheerio`; `benthepythondev/zumper-rental-scraper` compared) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge". Shares inventory with PadMapper (not added; dedup) | Done |
 | Apartments.com (`apartments_com`) | Built (above) | Apify data provider (`epctex/apartments-scraper-api`; the older `epctex/apartments-scraper` no longer works) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers, so it stays off by default with a caveat | Done |
 | HotPads (`hotpads`) | Stub | Data provider (Apify, e.g. `benthepythondev/hotpads-rental-scraper`) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Medium. Much of its inventory is Zillow's, so measure what it adds after dedup first |
 | Kopa | Shut down (2026), not stubbed | — | — | The site is a farewell notice and robots.txt is `Disallow: /` | — |
