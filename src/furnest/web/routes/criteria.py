@@ -10,7 +10,9 @@ An area is entered as "City, State" (#179). ``/criteria/places`` fills the name
 input's datalist as the user types, ``/criteria/rows/area/lookup`` re-renders one row
 with the place's coordinates once a name is picked, and a form posted by a row's
 "Look up" button (``lookup=<i>``) is re-rendered resolved but not saved, which is the
-same thing without JavaScript. The
+same thing without JavaScript. Under the ZIP and neighborhood lists, "Add ZIP codes"
+and the neighborhood chips are buttons of the same kind (``add_zips=<i>``,
+``add_neighborhood=<name>``): they fill the lists and re-render without saving (#180). The
 htmx config in ``base.html`` swaps both, so the messages show in place.
 
 Handlers are plain ``def`` so FastAPI runs the blocking SQLite calls in its threadpool.
@@ -39,6 +41,7 @@ from furnest.domain import (
 from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.web.auth import require_auth
 from furnest.web.criteria_form import FormState, look_up_row, parse_form, state_from_criteria
+from furnest.web.criteria_hints import build_hints
 from furnest.web.csrf import require_csrf
 from furnest.web.templating import templates
 from furnest.worker import queue
@@ -89,6 +92,7 @@ def _render_editor(
         "flash_error": flash_error,
         "active": active,
         "choices": CHOICES,
+        "hints": build_hints(make_session_factory(request.app.state.engine), state),
     }
     template = "criteria/_form.html" if _is_htmx(request) else "criteria/edit.html"
     return templates.TemplateResponse(request, template, context, status_code=status_code)
@@ -118,7 +122,7 @@ async def save(request: Request) -> Response:
             store,
             state=parsed.state,
             errors=parsed.errors,
-            flash=None if parsed.errors else "Looked up. Review and save.",
+            flash=None if parsed.errors else parsed.notice or "Looked up. Review and save.",
             status_code=422 if parsed.errors else 200,
         )
     if parsed.criteria is None:

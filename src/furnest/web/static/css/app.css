@@ -1413,3 +1413,23 @@ a.button {
 .price-chart .dot {
   fill: var(--accent);
 }
+
+/* Criteria editor: add-ZIP button, neighborhood chips and match counts (#180). */
+.place-hints {
+  margin-top: 0.5rem;
+}
+.place-hints .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+.place-hints .chip {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+}

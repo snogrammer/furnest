@@ -30,7 +30,7 @@ from furnest.domain.owner_type import (
     owner_type_label,
 )
 from furnest.domain.periods import MONTHLY_FACTOR, RentPeriod, parse_period, to_monthly
-from furnest.domain.places import Place, find_places, resolve_place
+from furnest.domain.places import Place, find_places, neighborhood_names, resolve_place
 from furnest.domain.price import Price, parse_price
 from furnest.domain.property_type import PropertyType, normalize_property_type
 from furnest.domain.status import (
@@ -82,6 +82,7 @@ __all__ = [
     "get_currency",
     "haversine",
     "infer_owner_type",
+    "neighborhood_names",
     "normalize_owner_type",
     "normalize_property_type",
     "normalize_zip",

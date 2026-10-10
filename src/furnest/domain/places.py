@@ -193,3 +193,21 @@ def resolve_place(query: str) -> Place | None:
         return None
     exact = [p.place for p in _index() if p.key == city and state in (None, p.place.state)]
     return exact[0] if len(exact) == 1 else None
+
+
+def neighborhood_names(place: Place) -> tuple[str, ...]:
+    """Other place names the dataset gives the city's ZIP codes: districts, boroughs, suburbs.
+
+    Best effort: these are the postal "acceptable" names (Brooklyn Heights for a
+    Brooklyn ZIP), sorted and without the city's own name. Some are neighbouring towns
+    or abbreviations, which is why the editor only suggests them.
+    """
+    own = _key(_words(place.city))
+    names: dict[str, str] = {}
+    for code in place.zip_codes:
+        for row in zipcodes.matching(code):  # type: ignore[no-untyped-call]
+            for name in row.get("acceptable_cities") or []:
+                key = _key(_words(str(name)))
+                if key and key != own:
+                    names.setdefault(key, _display(str(name)))
+    return tuple(sorted(names.values()))

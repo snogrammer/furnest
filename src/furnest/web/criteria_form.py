@@ -39,8 +39,10 @@ from furnest.domain import (
     Criteria,
     DistanceUnit,
     Money,
+    Place,
     find_places,
     get_currency,
+    neighborhood_names,
     resolve_place,
 )
 
@@ -97,7 +99,9 @@ class ParsedForm:
     state: FormState
     criteria: Criteria | None
     errors: dict[str, str]
+    # True when a button other than Save submitted the form: show it, don't store it.
     lookup: bool = False
+    notice: str = ""
 
 
 def _show(value: object) -> str:
@@ -216,6 +220,62 @@ def lookup_index(form: FormData) -> int | None:
     return int(value) if value.isdigit() else None
 
 
+def merge_lines(existing: str, additions: Iterable[str]) -> tuple[str, int]:
+    """``existing`` (a ZIP or neighborhood list) plus the new entries, one per line.
+
+    Entries already there, ignoring case, are not added twice. Returns the text and how
+    many entries were added.
+    """
+    entries = _split(existing)
+    seen = {e.casefold() for e in entries}
+    added = 0
+    for item in additions:
+        if item.casefold() not in seen:
+            seen.add(item.casefold())
+            entries.append(item)
+            added += 1
+    return "\n".join(entries), added
+
+
+def place_of(row: Mapping[str, str]) -> Place | None:
+    """The city an area row names, once it has been looked up (a typed name is not enough)."""
+    name = row.get("name", "")
+    place = resolve_place(name) if name and row.get("lat") and row.get("lng") else None
+    return place if place is not None and place.label == name else None
+
+
+def suggested_neighborhoods(place: Place, stored: Iterable[str], present: str) -> list[str]:
+    """Dataset and stored-listing names for a city that the neighborhood list lacks."""
+    have = {n.casefold() for n in _split(present)}
+    seen: set[str] = set()
+    names = []
+    for name in (*stored, *neighborhood_names(place)):
+        folded = name.casefold()
+        if folded not in have and folded not in seen:
+            seen.add(folded)
+            names.append(name)
+    return names
+
+
+def _apply_hint_action(form: FormData, state: FormState, errors: dict[str, str]) -> str | None:
+    """Handle the "Add ZIP codes" and neighborhood-chip buttons; the notice, if one fired."""
+    zips_for = _text(form, "add_zips")
+    if zips_for.isdigit():
+        i = int(zips_for)
+        place = resolve_place(_text(form, f"areas-{i}-name"))
+        if place is None:
+            errors[f"areas-{i}-name"] = 'pick a city first, as "City, ST"'
+            return "Pick a city to add its ZIP codes."
+        text, added = merge_lines(state.fields["zip_codes"], place.zip_codes)
+        state.fields["zip_codes"] = text
+        return f"Added {added} ZIP codes for {place.label}. Review and save."
+    hood = _text(form, "add_neighborhood")
+    if hood:
+        state.fields["neighborhoods"], added = merge_lines(state.fields["neighborhoods"], [hood])
+        return f"Added {hood}. Review and save." if added else f"{hood} is already listed."
+    return None
+
+
 def _split(text: str) -> list[str]:
     return [part.strip() for part in _SPLIT.split(text) if part.strip()]
 
@@ -287,7 +347,10 @@ def parse_form(form: FormData) -> ParsedForm:
     lookup = lookup_index(form)
     state = _read_state(form, lookup)
     errors: dict[str, str] = {}
+    notice = _apply_hint_action(form, state, errors)
     data = _to_data(state, errors)
+    lookup_shown = lookup is not None or notice is not None
+    notice = notice or ""
     try:
         criteria = Criteria.model_validate(data)
     except ValidationError as exc:
@@ -297,7 +360,7 @@ def parse_form(form: FormData) -> ParsedForm:
             if key.startswith("areas-") and key.rsplit("-", 1)[0] + "-name" in errors:
                 continue
             errors.setdefault(key, _message(error["msg"]))
-        return ParsedForm(state, None, errors, lookup is not None)
+        return ParsedForm(state, None, errors, lookup_shown, notice)
     if errors:
-        return ParsedForm(state, None, errors, lookup is not None)
-    return ParsedForm(state, criteria, {}, lookup is not None)
+        return ParsedForm(state, None, errors, lookup_shown, notice)
+    return ParsedForm(state, criteria, {}, lookup_shown, notice)

@@ -65,3 +65,14 @@ def test_exact_names_come_before_prefixes() -> None:
 def test_nothing_matches(query: str) -> None:
     assert find_places(query) == []
     assert resolve_place(query) is None
+
+
+def test_neighborhood_names_are_other_names_for_the_citys_zips() -> None:
+    from furnest.domain.places import neighborhood_names
+
+    place = resolve_place("Brooklyn, NY")
+    assert place is not None
+    names = neighborhood_names(place)
+    assert "Brooklyn Heights" in names
+    assert "Brooklyn" not in names
+    assert list(names) == sorted(names)

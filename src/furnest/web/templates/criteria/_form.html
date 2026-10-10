@@ -32,6 +32,25 @@
       {{ m.textarea(state, errors, "zip_codes", "ZIP codes", "One per line or comma-separated.") }}
       {{ m.textarea(state, errors, "neighborhoods", "Neighborhoods", "One per line or comma-separated.") }}
     </div>
+    {% for hint in hints.areas %}
+    <div class="place-hints" id="hints-{{ hint.index }}">
+      {% if hint.new_zips %}
+      <button type="submit" class="secondary" name="add_zips" value="{{ hint.index }}">Add {{ hint.new_zips }} ZIP code{{ "" if hint.new_zips == 1 else "s" }} for {{ hint.place.label }}</button>
+      {% else %}<span class="muted">All {{ hint.place.zip_codes|length }} ZIP codes for {{ hint.place.label }} are listed.</span>{% endif %}
+      {% if hint.neighborhoods %}
+      <div class="chips" role="group" aria-label="Suggested neighborhoods for {{ hint.place.label }}">
+        <span class="muted">Suggested neighborhoods:</span>
+        {% for name in hint.neighborhoods %}<button type="submit" class="chip" name="add_neighborhood" value="{{ name }}">{{ name }}</button>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if hints.counts %}
+    <p class="muted match-counts">Stored listings matching today:
+      {% for name, n in hints.area_counts %}{{ name }}: {{ n }}; {% endfor %}
+      ZIP codes: {{ hints.counts.zip_codes }}; neighborhoods: {{ hints.counts.neighborhoods }}.
+    </p>
+    {% endif %}
   </fieldset>
 
   <fieldset>
