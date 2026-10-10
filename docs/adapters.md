@@ -345,11 +345,11 @@ SOURCES_ADAPTERS={"zumper": {"api_key": "your-apify-token", "search_locations": 
 | --- | --- | --- |
 | Users / 30-day runs | 29 / 52 (rated 1/5 by one review) | 47 / 496 |
 | Input | `startUrls` (Zumper URLs), `maxItems`, optional email enrichment | `location` slug, `propertyType`, `minPrice`/`maxPrice`, `minBeds`/`maxBeds`, `maxListings` |
-| Furnished filter | None | None (only "Airbnb-friendly") |
+| Furnished filter | None as an input, but the `/furnished` start URL works (#196) | None (only "Airbnb-friendly") |
 | Output | One full detail row per listing (~80 fields): description, lease terms, photos, amenities, agent and brokerage | Building-level rows: rent and bed ranges, availability, amenities, phone, brokerage, photo IDs; no description |
 | Price | $0.005 start + $0.0025 a row (+ $0.001 a row for email enrichment, off) | $0.015 a row + $0.01 a row with a phone |
 
-**Picked `memo23/zumper-cheerio`:** neither can filter on furnished, so the deciding
+**Picked `memo23/zumper-cheerio`:** neither has a furnished input, so the deciding
 factors were the full descriptions (needed to tell furnished from not), lease terms and
 photos, at about a sixth of the price. Its drawback: it has no price or bed inputs.
 `benthepythondev`'s are the better fit for those, but its rows carry no description
@@ -357,41 +357,69 @@ to check for "furnished" in.
 
 ### How a run works
 
-1. Each `search_locations` entry ("Springfield, IL") becomes the start URL
-   `https://www.zumper.com/apartments-for-rent/springfield-il`; `maxItems` is
-   `max_results`. Price, beds and the move-in date aren't sent: the URL filters the
-   actor honours aren't documented well enough to send blind, so matching applies them.
+1. Each `search_locations` entry ("Springfield, IL") becomes Zumper's furnished
+   search, `https://www.zumper.com/apartments-for-rent/springfield-il/furnished`;
+   `maxItems` is `max_results`. Price, beds and the move-in date aren't sent: the
+   actor ignores them (see "Server-side filters" below), so matching applies them.
 2. `ApifyAdapter` runs the actor exactly as for Zillow.
-3. **Furnished:** the adapter keeps an item only if its title or description says
-   "furnished" (not "unfurnished"). The rest are dropped without a log line. Items that
-   can't be mapped are logged and skipped.
+3. A row is one Zumper page. Most are **apartment buildings**, whose units sit in
+   `floorplan_listings`; each unit becomes a listing, with the building filling in
+   the address, coordinates, description, photos and minimum stay it lacks. The rest
+   are single listings. So `maxItems` counts pages, and one page can yield 20 listings.
+4. **Furnished:** a unit is kept when its own `amenity_tags` include "Furnished", or its
+   title or description says "furnished" (not "unfurnished"). The furnished search
+   still returns buildings where only some units are furnished, so the building's own
+   tags ("Furnished Units Available") don't count. Other units are dropped without a
+   log line; rows that can't be mapped are logged and skipped.
+
+### Server-side filters (measured 2026-10-10, #196)
+
+Four paid probe runs on Denver, 15 rows each:
+
+| Start URL | Rows furnished (title/description) | Prices returned |
+| --- | --- | --- |
+| `/apartments-for-rent/denver-co` | 1 of 15 | $849–$3,228 |
+| `/apartments-for-rent/denver-co/furnished` | 10 of 15 | $794–$7,200 |
+| `…/denver-co?price-max=2000` | 1 of 15 | the same 15 as the plain search |
+| `…/denver-co?beds=2` | 1 of 15 | the same 15 as the plain search |
+
+The `/furnished` path is honoured; `price-max` and `beds` are ignored. Of the 350
+units in those rows, 128 carry the unit-level "Furnished" tag. The furnished run's
+15 rows mapped to 131 furnished listings; the plain search's to 31.
 
 ### Field mapping
+
+Per unit (a single listing is its own unit); "else the building" means the
+building's field is used when the unit's is empty.
 
 | Actor field | `NormalizedListing` |
 | --- | --- |
 | `listing_id` | `source_id` |
-| `url` | `url` (the listing path when missing) |
-| `title`, `description` | `title`, `description` |
-| `min_price`, `currency_code` | `price`, per month |
-| `address`, `city`, `state`, `zipcode` | `address` |
-| `lat`, `lng` | `lat`, `lng` |
+| `url` | `url`: a unit links to its building's page, a listing to its own |
+| `title` | `title`, prefixed by the building `name` when it doesn't already contain it (unit titles are often floorplan codes like "S02") |
+| `description`, else `short_description`, else the building's | `description` |
+| `price`, else `min_price`; `currency_code` | `price`, per month; `currency_code` 1 (on every live row) is USD |
+| `address`; `listing_location` or the building's `city`, `state`, `zipcode` | `address` |
+| `listing_location`, else the building's `lat`, `lng` | `lat`, `lng` |
 | `bedrooms`, `bathrooms` + `half_bathrooms`, `square_feet` | `beds`, `baths`, `sqft` |
-| `property_type` | `property_type`: 13 (Zumper's apartment id) is an apartment, a studio at 0 beds; other ids are `other` until their meaning is confirmed |
-| `lease_terms` | `min_lease_months`, when a term names months |
-| `available_on` (or similar; a date or unix time) | `available_from` |
-| `media[].media_id` | `images`: `https://img.zumpercdn.com/<id>/1280x960` |
-| `phone` | `contact`; none means platform only |
-| `brokerage_name`, `agent_name` | `owner_type` hint: a name that reads as a management company is a property manager, any other named agent or brokerage is an agent, none is unknown. The names stay out of `raw`, as do contact fields, units, nearby listings, ratings, schools and reviews |
+| `property_type` | `property_type`: 4 (340 of 350 live units in apartment buildings) is an apartment, a studio at 0 beds; 13 was seen once, on a room in a shared house, and stays `other` with the other ids until confirmed |
+| `min_lease_days`, else the building's | `min_lease_months` (days / 30, rounded, at least 1) |
+| `date_available` (`2026/11/01`) | `available_from`; often empty |
+| `media[].media_id`, else the building's | `images`: `https://img.zumpercdn.com/<id>/1280x960` (checked live) |
+| `phone`, else the building's | `contact`; none means platform only |
+| the building's `agent_name`, `brokerage_name`; `listing_agents[]` names | `owner_type` hint: a name that reads as a management company is a property manager, any other named agent or brokerage is an agent, none is unknown. Names, emails, phones, partner links, the photo list and price history stay out of `raw` |
 
-Amenities are Zumper's numeric ids and aren't mapped yet, so amenity matching relies
-on the description.
+`lease_terms` was null on every live row. Amenities beyond the "Furnished" tag aren't
+mapped; amenity matching relies on the description. The numeric `features` ids aren't
+decoded: id 88 is on every unit, and 31 appeared only on furnished units but only from
+one operator.
 
 ### Cost
 
-October 2026 prices: $0.005 per run plus $0.0025 a listing, so a run of 20 is about
-$0.055 plus Apify compute and residential proxy usage (not measured). Daily for a month
-is under $2 for the actor events. The cost is from published pricing, not a billed run.
+October 2026 prices: $0.005 per run plus $0.0025 a row. The four probe runs of 15 rows
+were billed $0.0275–$0.0425 each, actor events and platform usage together. A daily
+run of 20 rows is about $0.055, under $2 a month, and on the furnished search a row is
+worth several listings.
 
 ### PadMapper
 
@@ -401,12 +429,9 @@ folds duplicates if it is ever built.
 
 ### Limitations
 
-`tests/fixtures/zumper/dataset_items.json` is written from the actor's README, and
-there is no `dataset_live.json` yet: the work was done without an Apify token. Field
-names beyond the README sample (`available_on`, `lease_terms`, `phone`, `url`) are
-best guesses, so check them on the first live run and trust the capture over the
-README. Without server-side filters, a run's `max_results` spends on unfurnished
-listings that are then dropped; raise it if a city yields little.
+Units link to their building's page: the actor gives no unit-level URL. Many units
+have no availability date, and buildings from furnished-stay operators list every
+unit at once, so one building can contribute many similar listings.
 
 ## Airbnb (`airbnb`)
 
@@ -817,7 +842,7 @@ checked against the live runs on 2026-10-07:
 | Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
 | Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
 | Apartments.com | about $0.02 ($0.01 per listing page with the first 20 items, $0.0005 after) | $0.60 | $0.30 |
-| Zumper | about $0.055 ($0.005 start, $0.0025 a listing), plus compute and proxy | $1.65 | $0.83 |
+| Zumper | about $0.055 ($0.005 start, $0.0025 a row; 15-row runs were billed $0.03–$0.04 in all) | $1.65 | $0.83 |
 
 All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,
 and so do all three at `"interval_minutes": 2880` (about $4). Note that Furnished

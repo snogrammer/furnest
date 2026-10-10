@@ -1,5 +1,5 @@
 """The Zumper adapter: criteria → actor input, actor items → listings, and a whole
-search against a faked Apify. Runs offline on tests/fixtures/zumper."""
+search against a faked Apify. Runs offline on tests/fixtures/zumper (a trimmed live run)."""
 
 import json
 from datetime import date
@@ -15,7 +15,7 @@ from furnest.domain import Criteria, Money, OwnerType, Price, PropertyType
 from furnest.sources import SourceError, discover, resolve_config
 from furnest.sources.adapters.stubs import HotPads
 from furnest.sources.adapters.zumper import Zumper
-from furnest.sources.adapters.zumper.parse import NotFurnishedError, build_input, parse_item
+from furnest.sources.adapters.zumper.parse import build_input, parse_item
 from furnest.sources.apify import APIFY_API
 
 pytestmark = pytest.mark.unit
@@ -30,108 +30,177 @@ def fixture(name: str) -> Any:  # noqa: ANN401 - arbitrary JSON
 
 
 def items() -> list[dict[str, Any]]:
-    return fixture("dataset_items.json")  # type: ignore[no-any-return]
+    return fixture("dataset_live.json")  # type: ignore[no-any-return]
+
+
+def record(index: int) -> dict[str, Any]:
+    return items()[index]["entity"]["data"]  # type: ignore[no-any-return]
 
 
 # --- parse_item ----------------------------------------------------------------------
 
 
-def test_a_listing_maps_every_documented_field() -> None:
-    listing = parse_item(items()[0], today=TODAY)
+def test_a_building_unit_maps_every_field() -> None:
+    listing = parse_item(items()[1], today=TODAY)[0]
 
-    assert (listing.source, listing.source_id) == ("zumper", "900000001")
-    assert (
-        str(listing.url) == "https://www.zumper.com/apartments/900000001/example-st-exampleville-xx"
+    assert (listing.source, listing.source_id) == ("zumper", "900000003")
+    assert str(listing.url) == (
+        "https://www.zumper.com/apartment-buildings/800000002/example-lofts-denver-co"
     )
-    assert listing.title == "Furnished one-bedroom near Example Park"
-    assert (
-        listing.description
-        == "Fully furnished one-bedroom unit with all utilities included. No pets."
+    assert listing.title == "Example Lofts: S02"
+    assert listing.description == (
+        "Example Lofts offers studios to two bedrooms. Furnished units available."
     )
-    assert listing.price == Price(amount=Money.from_major(2280, "USD"))
+    assert listing.price == Price(amount=Money.from_major(1660, "USD"))
     address = listing.address
     assert (address.line1, address.city, address.region, address.postal_code) == (
-        "100 Example St #1",
-        "Exampleville",
-        "XX",
+        "123 Example St #3",
+        "Denver",
+        "CO",
         "00001",
     )
-    assert (listing.lat, listing.lng) == (40.0, -100.0)
-    assert (listing.beds, listing.baths, listing.sqft) == (1, 1.5, 585)
-    assert listing.property_type is PropertyType.APARTMENT
+    assert (listing.lat, listing.lng) == (39.7, -104.9)
+    assert (listing.beds, listing.baths, listing.sqft) == (0, 1.0, 526)
+    assert listing.property_type is PropertyType.STUDIO
     assert listing.furnished is True
-    assert listing.available_from == date(2026, 11, 1)
-    assert listing.min_lease_months == 12
-    assert [str(i) for i in listing.images] == [
-        "https://img.zumpercdn.com/100000001/1280x960",
-        "https://img.zumpercdn.com/100000002/1280x960",
-    ]
+    assert listing.available_from == date(2026, 10, 10)
+    assert listing.min_lease_months == 6
+    assert [str(i) for i in listing.images] == ["https://img.zumpercdn.com/100000007/1280x960"]
     assert listing.contact.phone == "555-0100"
     assert listing.owner_type is OwnerType.PROPERTY_MANAGER
 
 
+def test_only_the_units_marked_furnished_are_kept() -> None:
+    # Two units carry the "Furnished" tag; the third doesn't, though the building's
+    # description mentions furnished units.
+    assert [listing.source_id for listing in parse_item(items()[1], today=TODAY)] == [
+        "900000003",
+        "900000004",
+    ]
+
+
+def test_a_title_saying_furnished_is_enough() -> None:
+    first, second = parse_item(items()[0], today=TODAY)
+
+    assert record(0)["floorplan_listings"][0]["amenity_tags"] is None
+    assert first.title == "Example Stays at 123 Example St: Example Stays Furnished Apartment 1"
+    assert (first.price, second.price) == (
+        Price(amount=Money.from_major(1830, "USD")),
+        Price(amount=Money.from_major(2404, "USD")),
+    )
+    assert first.min_lease_months == 1  # the building's 30-day minimum
+    assert first.description.startswith("Example Stays is a fully furnished")
+    assert first.property_type is PropertyType.APARTMENT
+
+
+def test_a_unit_without_photos_shows_the_building() -> None:
+    building = record(1)
+    units = [{**u, "media": []} for u in building["floorplan_listings"]]
+
+    listing = parse_item({**building, "floorplan_listings": units}, today=TODAY)[0]
+
+    assert [str(i) for i in listing.images] == [
+        "https://img.zumpercdn.com/100000010/1280x960",
+        "https://img.zumpercdn.com/100000011/1280x960",
+    ]
+
+
+def test_an_unfurnished_building_has_no_listings() -> None:
+    assert parse_item(items()[2], today=TODAY) == []
+
+
+def test_a_single_listing() -> None:
+    (listing,) = parse_item(items()[3], today=TODAY)
+
+    assert listing.source_id == "900000008"
+    assert str(listing.url) == "https://www.zumper.com/listings/900000008p/1-bedroom-denver-co"
+    assert listing.title == "Large, Furnished Master Bedroom in Shared House"
+    assert listing.address.city == "Denver"
+    assert (listing.lat, listing.lng) == (39.7, -104.9)
+    assert listing.property_type is PropertyType.OTHER  # Zumper's id 13 is unconfirmed
+    assert listing.available_from == date(2026, 11, 1)
+    assert listing.min_lease_months == 6
+    assert len(listing.images) == 3
+    assert listing.owner_type is OwnerType.PROPERTY_MANAGER  # "Example Rentals"
+
+
 def test_people_and_bulky_blocks_stay_out_of_raw() -> None:
-    raw = parse_item(items()[0], today=TODAY).raw
-    dumped = json.dumps(raw)
-
-    for leaked in ("Example Management", "555-0100", "leasing@example.com", "provider_url"):
-        assert leaked not in dumped
-    assert raw["feed_name"] == "example"
-    assert "media" not in raw
-
-
-def test_the_activelistings_variant_with_unknowns() -> None:
-    listing = parse_item(items()[1], today=TODAY)
-
-    assert listing.source_id == "900000002"
-    assert str(listing.url) == "https://www.zumper.com/apartments/900000002"
-    assert listing.property_type is PropertyType.STUDIO
-    assert listing.baths == 1.0
-    assert (listing.lat, listing.lng) == (None, None)
-    assert (listing.available_from, listing.min_lease_months, listing.images) == (None, None, ())
-    assert listing.contact.platform_only is True
-    assert listing.owner_type is OwnerType.AGENT
+    for item in items():
+        for listing in parse_item(item, today=TODAY):
+            dumped = json.dumps(listing.raw)
+            for leaked in ("Jane Example", "Example Property Management", "555-01", "@example"):
+                assert leaked not in dumped
+            for key in ("media", "provider_url", "listing_agents", "phone"):
+                assert key not in listing.raw
+    assert parse_item(items()[1], today=TODAY)[0].raw["building_id"] == 800000002
 
 
 def test_odd_values_are_ignored_not_fatal() -> None:
-    listing = parse_item(items()[4], today=TODAY)
+    unit = {
+        **record(3),
+        "price": 0,
+        "min_price": None,
+        "currency_code": 7,
+        "date_available": "soon",
+        "min_lease_days": 0,
+        "media": "none",
+        "listing_location": None,
+        "listing_agents": None,
+        "phone": None,
+    }
 
-    assert listing.price is None  # 0 is not a rent
-    assert listing.available_from == date(2026, 11, 1)  # a unix time
-    assert listing.min_lease_months is None
+    (listing,) = parse_item({"activeListings": [unit]}, today=TODAY)
+
+    assert listing.price is None
+    assert (listing.available_from, listing.min_lease_months, listing.images) == (None, None, ())
+    assert (listing.lat, listing.lng) == (None, None)
+    assert listing.contact.platform_only is True
     assert listing.owner_type is OwnerType.UNKNOWN
 
 
-def test_unfurnished_is_skipped() -> None:
-    with pytest.raises(NotFurnishedError):
-        parse_item(items()[2], today=TODAY)
+@pytest.mark.parametrize(("code", "expected"), [("usd", "USD"), ("XYZ", None), (None, "USD")])
+def test_currency_codes(code: object, expected: str | None) -> None:
+    (listing,) = parse_item({**record(3), "currency_code": code}, today=TODAY)
+    assert (listing.price and listing.price.amount.currency) == expected
 
 
-def test_an_item_without_an_id_is_rejected() -> None:
-    with pytest.raises(ValueError, match="no listing_id"):
-        parse_item(items()[3], today=TODAY)
+def test_units_without_an_id_are_skipped() -> None:
+    building = record(1)
+    units = [{**u, "listing_id": None} for u in building["floorplan_listings"]]
+
+    assert parse_item({**building, "floorplan_listings": units}, today=TODAY) == []
 
 
-@pytest.mark.parametrize("when", ["now", "Available Now", "2026-12-01T00:00:00Z"])
-def test_availability_strings(when: str) -> None:
-    item = {**items()[2], "title": "Furnished", "description": "", "available_on": when}
+def test_an_item_without_an_id_or_units_is_rejected() -> None:
+    with pytest.raises(ValueError, match="no listing_id or units"):
+        parse_item({"entity": {"data": {"building_id": 1}}}, today=TODAY)
 
-    expected = date(2026, 12, 1) if when.startswith("2026") else TODAY
-    assert parse_item(item, today=TODAY).available_from == expected
+
+@pytest.mark.parametrize(
+    ("when", "expected"),
+    [
+        ("now", TODAY),
+        ("2026/12/01", date(2026, 12, 1)),
+        ("2026-12-01T00:00:00Z", date(2026, 12, 1)),
+    ],
+)
+def test_availability_strings(when: str, expected: date) -> None:
+    (listing,) = parse_item({**record(3), "date_available": when}, today=TODAY)
+    assert listing.available_from == expected
 
 
 # --- build_input ---------------------------------------------------------------------
 
 
-def test_input_has_one_url_per_location() -> None:
+def test_input_has_one_furnished_url_per_location() -> None:
     run_input = build_input(
         Criteria(min_beds=2), locations=("A City, ZZ", " , ", "Other, YY"), max_results=7
     )
 
     assert run_input == {
         "startUrls": [
-            "https://www.zumper.com/apartments-for-rent/a-city-zz",
-            "https://www.zumper.com/apartments-for-rent/other-yy",
+            "https://www.zumper.com/apartments-for-rent/a-city-zz/furnished",
+            "https://www.zumper.com/apartments-for-rent/other-yy/furnished",
         ],
         "maxItems": 7,
     }
@@ -175,11 +244,19 @@ def test_search_returns_furnished_listings_and_skips_the_rest() -> None:
 
     listings = adapter(apify).search(Criteria())
 
-    assert [listing.source_id for listing in listings] == ["900000001", "900000002", "900000005"]
+    assert [listing.source_id for listing in listings] == [
+        "900000001",
+        "900000002",
+        "900000003",
+        "900000004",
+        "900000008",
+    ]
     start = apify.requests[0]
     assert str(start.url).startswith(f"{APIFY_API}/acts/memo23~zumper-cheerio/runs")
     body = json.loads(start.content)
-    assert body["startUrls"] == ["https://www.zumper.com/apartments-for-rent/exampleville-xx"]
+    assert body["startUrls"] == [
+        "https://www.zumper.com/apartments-for-rent/exampleville-xx/furnished"
+    ]
     assert body["maxItems"] == 100
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)
 

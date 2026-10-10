@@ -1,0 +1,1021 @@
+[
+  {
+    "entity": {
+      "data": {
+        "__typename": "Building",
+        "building_id": 800000001,
+        "name": "Example Stays at 123 Example St",
+        "description": "Example Stays is a fully furnished apartment network for monthly and longer stays.",
+        "short_description": null,
+        "media": [
+          {
+            "media_id": 100000005,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          },
+          {
+            "media_id": 100000006,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          }
+        ],
+        "amenities": [],
+        "lat": 39.7,
+        "lng": -104.9,
+        "street": "Example St",
+        "house": "123",
+        "zipcode": "00001",
+        "state": "CO",
+        "country": "USA",
+        "city": "Denver",
+        "formatted_address": "123 Example St, Denver, CO 00001, USA",
+        "feed_name": "example_feed",
+        "lease_terms": null,
+        "lease_type": 10,
+        "phone": "555-0100",
+        "agent_name": "Example Stays Furnished Apartments",
+        "brokerage_name": null,
+        "min_lease_days": 30,
+        "max_lease_days": null,
+        "features": [
+          88,
+          19,
+          14,
+          31,
+          78,
+          92,
+          40
+        ],
+        "amenity_tags": [
+          "Utilities Included"
+        ],
+        "url": "/apartment-buildings/800000001/123-example-st-denver-co",
+        "min_price": 1830,
+        "address": "123 Example St",
+        "homepage": "https://partner.example/",
+        "agents": [
+          {
+            "user_id": 1,
+            "long_name": "Example Stays Furnished Apartments",
+            "email": "1@example.com",
+            "phone": "555-0100"
+          }
+        ],
+        "floorplan_listings": [
+          {
+            "listing_id": 900000001,
+            "title": "Example Stays Furnished Apartment 1",
+            "description": "",
+            "short_description": null,
+            "min_price": 1830,
+            "max_price": 1830,
+            "price": 1830,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 664,
+            "amenity_tags": null,
+            "building_amenity_tags": [
+              "Utilities Included"
+            ],
+            "features": [
+              88,
+              19,
+              14,
+              31,
+              78,
+              92,
+              40
+            ],
+            "lease_terms": null,
+            "lease_type": 10,
+            "date_available": null,
+            "min_lease_days": 30,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 6,
+            "listing_type": 1,
+            "pets": [
+              2,
+              1
+            ],
+            "building_id": 800000001,
+            "building_name": "Example Stays at 123 Example St",
+            "media": [
+              {
+                "media_id": 100000001,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              },
+              {
+                "media_id": 100000002,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #1",
+            "url": "/apartment-buildings/800000001/123-example-st-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "1",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          },
+          {
+            "listing_id": 900000002,
+            "title": "Example Stays Furnished Apartment 2",
+            "description": "",
+            "short_description": null,
+            "min_price": 2404,
+            "max_price": 2404,
+            "price": 2404,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 785,
+            "amenity_tags": [
+              "Furnished",
+              "Utilities Included"
+            ],
+            "building_amenity_tags": [
+              "Utilities Included"
+            ],
+            "features": [
+              88,
+              19,
+              14,
+              31,
+              78,
+              92,
+              40
+            ],
+            "lease_terms": null,
+            "lease_type": 10,
+            "date_available": null,
+            "min_lease_days": 30,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 1,
+            "listing_type": 1,
+            "pets": [
+              2,
+              1
+            ],
+            "building_id": 800000001,
+            "building_name": "Example Stays at 123 Example St",
+            "media": [
+              {
+                "media_id": 100000003,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              },
+              {
+                "media_id": 100000004,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #2",
+            "url": "/apartment-buildings/800000001/123-example-st-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "2",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          }
+        ]
+      },
+      "meta": {}
+    },
+    "activeListings": [],
+    "units": {
+      "data": null,
+      "meta": {}
+    }
+  },
+  {
+    "entity": {
+      "data": {
+        "__typename": "Building",
+        "building_id": 800000002,
+        "name": "Example Lofts",
+        "description": "Example Lofts offers studios to two bedrooms. Furnished units available.",
+        "short_description": null,
+        "media": [
+          {
+            "media_id": 100000010,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          },
+          {
+            "media_id": 100000011,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          }
+        ],
+        "amenities": [],
+        "lat": 39.7,
+        "lng": -104.9,
+        "street": "Example St",
+        "house": "123",
+        "zipcode": "00001",
+        "state": "CO",
+        "country": "USA",
+        "city": "Denver",
+        "formatted_address": "123 Example St, Denver, CO 00001, USA",
+        "feed_name": "example_feed",
+        "lease_terms": null,
+        "lease_type": 1,
+        "phone": "555-0100",
+        "agent_name": "Example Property Management",
+        "brokerage_name": null,
+        "min_lease_days": 180,
+        "max_lease_days": 450,
+        "features": [
+          37,
+          93,
+          20,
+          3,
+          17,
+          88,
+          57,
+          94
+        ],
+        "amenity_tags": [
+          "Fitness Center",
+          "Package Service",
+          "Residents Lounge",
+          "Garage Parking",
+          "Swimming Pool",
+          "Storage",
+          "Roof Deck",
+          "Electric Car Charging Station",
+          "Club Quality Fitness Center",
+          "Ski Lockers",
+          "Private Terrace Just Above Street Level"
+        ],
+        "url": "/apartment-buildings/800000002/example-lofts-denver-co",
+        "min_price": 1660,
+        "address": "123 Example St",
+        "homepage": "https://partner.example/",
+        "agents": [
+          {
+            "user_id": 1,
+            "long_name": "Example Property Management",
+            "email": "1@example.com",
+            "phone": "555-0100"
+          }
+        ],
+        "floorplan_listings": [
+          {
+            "listing_id": 900000003,
+            "title": "S02",
+            "description": "",
+            "short_description": null,
+            "min_price": 1660,
+            "max_price": 2108,
+            "price": 1660,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 0,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 526,
+            "amenity_tags": [
+              "Smart Home Technology Package",
+              "Oversized Window with Upgraded Acoustic",
+              "French Door Refrigerators",
+              "Fixed or Moveable Kitchen Island",
+              "Dry Bar with Bottle Storage",
+              "Roller Shades",
+              "Window Coverings",
+              "Luxury Vinyl Tile Flooring",
+              "Honeywell Learning Thermostat",
+              "Shower with Built-In Quartz Bench and Frameless Glass Door or Oversized Tub",
+              "Built-In Mudroom with Cubbies and Key Drop",
+              "Pantry and Linen Closet",
+              "Furnished",
+              "Floating Bathroom Vanity"
+            ],
+            "building_amenity_tags": [
+              "Fitness Center",
+              "Package Service",
+              "Residents Lounge",
+              "Garage Parking",
+              "Swimming Pool",
+              "Storage",
+              "Roof Deck",
+              "Electric Car Charging Station",
+              "Club Quality Fitness Center",
+              "Ski Lockers",
+              "Private Terrace Just Above Street Level"
+            ],
+            "features": [
+              37,
+              93,
+              77,
+              20,
+              3,
+              17,
+              88,
+              57,
+              94
+            ],
+            "lease_terms": null,
+            "lease_type": 1,
+            "date_available": "2026/10/10",
+            "min_lease_days": 180,
+            "max_lease_days": 450,
+            "feed_name": "example_feed",
+            "listing_status": 1,
+            "listing_type": 1,
+            "pets": [
+              3,
+              1,
+              2
+            ],
+            "building_id": 800000002,
+            "building_name": "Example Lofts",
+            "media": [
+              {
+                "media_id": 100000007,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #3",
+            "url": "/apartment-buildings/800000002/example-lofts-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "3",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          },
+          {
+            "listing_id": 900000004,
+            "title": "A07",
+            "description": "",
+            "short_description": null,
+            "min_price": 2263,
+            "max_price": 2263,
+            "price": 2263,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 779,
+            "amenity_tags": [
+              "Ceiling Fan",
+              "High Ceilings",
+              "Furnished",
+              "In-Unit Laundry"
+            ],
+            "building_amenity_tags": [
+              "Fitness Center",
+              "Package Service",
+              "Residents Lounge",
+              "Garage Parking",
+              "Swimming Pool",
+              "Storage",
+              "Roof Deck",
+              "Electric Car Charging Station",
+              "Club Quality Fitness Center",
+              "Ski Lockers",
+              "Private Terrace Just Above Street Level"
+            ],
+            "features": [
+              37,
+              93,
+              20,
+              3,
+              17,
+              88,
+              57,
+              94
+            ],
+            "lease_terms": null,
+            "lease_type": 1,
+            "date_available": "2021/09/01",
+            "min_lease_days": null,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 6,
+            "listing_type": 1,
+            "pets": [
+              3,
+              1,
+              2
+            ],
+            "building_id": 800000002,
+            "building_name": "Example Lofts",
+            "media": [
+              {
+                "media_id": 100000008,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #4",
+            "url": "/apartment-buildings/800000002/example-lofts-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "4",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          },
+          {
+            "listing_id": 900000005,
+            "title": "A04",
+            "description": "",
+            "short_description": null,
+            "min_price": 1899,
+            "max_price": 1899,
+            "price": 1899,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 652,
+            "amenity_tags": null,
+            "building_amenity_tags": [
+              "Fitness Center",
+              "Package Service",
+              "Residents Lounge",
+              "Garage Parking",
+              "Swimming Pool",
+              "Storage",
+              "Roof Deck",
+              "Electric Car Charging Station",
+              "Club Quality Fitness Center",
+              "Ski Lockers",
+              "Private Terrace Just Above Street Level"
+            ],
+            "features": [
+              37,
+              93,
+              20,
+              3,
+              17,
+              88,
+              57,
+              94
+            ],
+            "lease_terms": null,
+            "lease_type": 1,
+            "date_available": "2020/12/12",
+            "min_lease_days": null,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 6,
+            "listing_type": 1,
+            "pets": [
+              3,
+              1,
+              2
+            ],
+            "building_id": 800000002,
+            "building_name": "Example Lofts",
+            "media": [
+              {
+                "media_id": 100000009,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #5",
+            "url": "/apartment-buildings/800000002/example-lofts-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "5",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          }
+        ]
+      },
+      "meta": {}
+    },
+    "activeListings": [],
+    "units": {
+      "data": null,
+      "meta": {}
+    }
+  },
+  {
+    "entity": {
+      "data": {
+        "__typename": "Building",
+        "building_id": 800000003,
+        "name": "Example Commons",
+        "description": "Example Commons: garden-style homes with a pool and fitness center.",
+        "short_description": null,
+        "media": [
+          {
+            "media_id": 100000014,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          },
+          {
+            "media_id": 100000015,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          }
+        ],
+        "amenities": [],
+        "lat": 39.7,
+        "lng": -104.9,
+        "street": "Example St",
+        "house": "123",
+        "zipcode": "00001",
+        "state": "CO",
+        "country": "USA",
+        "city": "Denver",
+        "formatted_address": "123 Example St, Denver, CO 00001, USA",
+        "feed_name": "example_feed",
+        "lease_terms": null,
+        "lease_type": 1,
+        "phone": "555-0100",
+        "agent_name": null,
+        "brokerage_name": null,
+        "min_lease_days": null,
+        "max_lease_days": null,
+        "features": [
+          38,
+          19,
+          61,
+          70,
+          92,
+          23,
+          29,
+          86,
+          20,
+          95,
+          56,
+          78,
+          88,
+          87,
+          69,
+          94
+        ],
+        "amenity_tags": [
+          "On-Site Management",
+          "Fitness Center",
+          "Package Service",
+          "Residents Lounge",
+          "Garage Parking",
+          "Swimming Pool",
+          "Business Center",
+          "Clubhouse",
+          "High-Speed Internet",
+          "Free Weights",
+          "Spa",
+          "On-Site Maintenance"
+        ],
+        "url": "/apartment-buildings/800000003/example-commons-denver-co",
+        "min_price": 1388,
+        "address": "123 Example St",
+        "homepage": "https://partner.example/",
+        "agents": [
+          {
+            "user_id": 1,
+            "long_name": "Jane Example",
+            "email": "1@example.com",
+            "phone": "555-0100"
+          }
+        ],
+        "floorplan_listings": [
+          {
+            "listing_id": 900000006,
+            "title": "Aura",
+            "description": "",
+            "short_description": null,
+            "min_price": 1388,
+            "max_price": 1775,
+            "price": 1388,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 698,
+            "amenity_tags": [
+              "Air Conditioning",
+              "Dishwasher",
+              "Balcony",
+              "Central Heat",
+              "Walk-in Closet",
+              "In-Unit Laundry",
+              "Garbage Disposal",
+              "Heating",
+              "Cable",
+              "Climate Control",
+              "Private Balcony",
+              "Private Patio",
+              "View",
+              "Full Size Washer/Dryer in Unit"
+            ],
+            "building_amenity_tags": [
+              "On-Site Management",
+              "Fitness Center",
+              "Package Service",
+              "Residents Lounge",
+              "Garage Parking",
+              "Swimming Pool",
+              "Business Center",
+              "Clubhouse",
+              "High-Speed Internet",
+              "Free Weights",
+              "Spa",
+              "On-Site Maintenance"
+            ],
+            "features": [
+              38,
+              19,
+              61,
+              70,
+              92,
+              23,
+              29,
+              86,
+              20,
+              95,
+              77,
+              56,
+              78,
+              88,
+              87,
+              69,
+              94,
+              10
+            ],
+            "lease_terms": null,
+            "lease_type": 1,
+            "date_available": null,
+            "min_lease_days": null,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 1,
+            "listing_type": 1,
+            "pets": [
+              3,
+              1,
+              2
+            ],
+            "building_id": 800000003,
+            "building_name": "Example Commons",
+            "media": [
+              {
+                "media_id": 100000012,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #6",
+            "url": "/apartment-buildings/800000003/example-commons-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "6",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          },
+          {
+            "listing_id": 900000007,
+            "title": "Natura",
+            "description": "",
+            "short_description": null,
+            "min_price": 1527,
+            "max_price": 1836,
+            "price": 1527,
+            "property_type": 4,
+            "currency_code": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "half_bathrooms": 0,
+            "square_feet": 785,
+            "amenity_tags": [
+              "Air Conditioning",
+              "Dishwasher",
+              "Balcony",
+              "Central Heat",
+              "Walk-in Closet",
+              "In-Unit Laundry",
+              "Garbage Disposal",
+              "Heating",
+              "Cable",
+              "Climate Control",
+              "Private Balcony",
+              "Private Patio",
+              "View",
+              "Full Size Washer/Dryer in Unit"
+            ],
+            "building_amenity_tags": [
+              "On-Site Management",
+              "Fitness Center",
+              "Package Service",
+              "Residents Lounge",
+              "Garage Parking",
+              "Swimming Pool",
+              "Business Center",
+              "Clubhouse",
+              "High-Speed Internet",
+              "Free Weights",
+              "Spa",
+              "On-Site Maintenance"
+            ],
+            "features": [
+              38,
+              19,
+              61,
+              70,
+              92,
+              23,
+              29,
+              86,
+              20,
+              95,
+              77,
+              56,
+              78,
+              88,
+              87,
+              69,
+              94
+            ],
+            "lease_terms": null,
+            "lease_type": 1,
+            "date_available": null,
+            "min_lease_days": null,
+            "max_lease_days": null,
+            "feed_name": "example_feed",
+            "listing_status": 1,
+            "listing_type": 1,
+            "pets": [
+              3,
+              1,
+              2
+            ],
+            "building_id": 800000003,
+            "building_name": "Example Commons",
+            "media": [
+              {
+                "media_id": 100000013,
+                "media_type": 1,
+                "width": 1280,
+                "height": 960
+              }
+            ],
+            "phone": "555-0100",
+            "address": "123 Example St #7",
+            "url": "/apartment-buildings/800000003/example-commons-denver-co",
+            "provider_url": "https://partner.example/unit",
+            "listing_location": {
+              "street": "Example St",
+              "house": "123",
+              "unit": "7",
+              "zipcode": "00001",
+              "city": "Denver",
+              "state": "CO",
+              "lat": 39.7,
+              "lng": -104.9,
+              "formatted_address": "123 Example St, Denver, CO 00001, USA",
+              "country": "USA",
+              "tz": "America/Denver"
+            },
+            "listing_agents": []
+          }
+        ]
+      },
+      "meta": {}
+    },
+    "activeListings": [],
+    "units": {
+      "data": null,
+      "meta": {}
+    }
+  },
+  {
+    "entity": {
+      "data": {
+        "__typename": "Listing",
+        "listing_id": 900000008,
+        "title": "Large, Furnished Master Bedroom in Shared House",
+        "description": "Large furnished bedroom in a shared house. Utilities included, month-to-month after six months.",
+        "short_description": null,
+        "min_price": 900,
+        "max_price": 900,
+        "price": 900,
+        "property_type": 13,
+        "currency_code": 1,
+        "bedrooms": 1,
+        "bathrooms": 1,
+        "half_bathrooms": 0,
+        "square_feet": null,
+        "amenity_tags": [
+          "Microwave",
+          "Onsite Laundry",
+          "Fireplace",
+          "Dishwasher",
+          "Lawn",
+          "Laminate",
+          "Security Cameras",
+          "Forced Air",
+          "In-Unit Laundry",
+          "Furnished",
+          "Refrigerator",
+          "Range/Oven",
+          "Wired For Internet",
+          "Freezer",
+          "Fenced Yard",
+          "Garbage Disposal",
+          "Hardwood Floor",
+          "Linoleum Vinyl",
+          "Dryer",
+          "Outdoor Space",
+          "Off-Street Parking",
+          "Driveway"
+        ],
+        "building_amenity_tags": [
+          "Microwave",
+          "Onsite Laundry",
+          "Fireplace",
+          "Outdoor Space",
+          "Dishwasher",
+          "Lawn",
+          "Laminate",
+          "Security Cameras",
+          "Forced Air",
+          "Furnished",
+          "Refrigerator",
+          "Range/Oven",
+          "Wired For Internet",
+          "Freezer",
+          "Fenced Yard",
+          "Garbage Disposal",
+          "Hardwood Floor",
+          "Linoleum Vinyl",
+          "Dryer",
+          "Garage Parking",
+          "Storage",
+          "Off-Street Parking",
+          "Driveway"
+        ],
+        "features": [
+          17,
+          88
+        ],
+        "lease_terms": null,
+        "lease_type": 1,
+        "date_available": "2026/11/01",
+        "min_lease_days": 180,
+        "max_lease_days": null,
+        "feed_name": "example_feed",
+        "listing_status": 1,
+        "listing_type": 1,
+        "pets": [
+          3,
+          1,
+          2
+        ],
+        "building_id": null,
+        "building_name": null,
+        "media": [
+          {
+            "media_id": 100000016,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          },
+          {
+            "media_id": 100000017,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          },
+          {
+            "media_id": 100000018,
+            "media_type": 1,
+            "width": 1280,
+            "height": 960
+          }
+        ],
+        "phone": "555-0101",
+        "address": "123 Example St",
+        "url": "/listings/900000008p/1-bedroom-denver-co",
+        "provider_url": null,
+        "listing_location": {
+          "street": "Example St",
+          "house": "123",
+          "unit": null,
+          "zipcode": "00001",
+          "city": "Denver",
+          "state": "CO",
+          "lat": 39.7,
+          "lng": -104.9,
+          "formatted_address": "123 Example St, Denver, CO 00001, USA",
+          "country": "USA",
+          "tz": "America/Denver"
+        },
+        "listing_agents": [
+          {
+            "user_id": 2,
+            "long_name": "Jane Example",
+            "company_name": "Example Rentals",
+            "email": "2@example.com",
+            "phone": "555-0101"
+          }
+        ]
+      },
+      "meta": {}
+    },
+    "activeListings": [],
+    "units": {
+      "data": null,
+      "meta": {}
+    }
+  }
+]
