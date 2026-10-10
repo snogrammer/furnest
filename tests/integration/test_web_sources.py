@@ -11,11 +11,12 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import AdapterOverrides, Settings, SourceOverrides, SourcesSettings
+from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import RunCounts, SqlListingStore
 from furnest.db.models import Job, JobStatus, SourceRunStatus
 from furnest.db.session import session_scope
 from furnest.db.source_store import SqlSourceStore
-from furnest.domain import Criteria, NormalizedListing
+from furnest.domain import Area, Criteria, NormalizedListing
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources import Capabilities, Credential, SourceAdapter, StubAdapter
 from furnest.sources.registry import SourceRegistry
@@ -500,3 +501,71 @@ def test_settings_refuse_a_stub_and_an_unknown_source(client: TestClient, csrf: 
     assert post(client, csrf, "/sources/stubby/settings/reset").status_code == 409
     assert post(client, csrf, "/sources/nope/settings", max_results="3").status_code == 404
     assert post(client, csrf, "/sources/nope/settings/reset").status_code == 404
+
+
+# --- criteria cities as default search locations ----------------------------
+
+
+def save_areas(session_factory: sessionmaker[Session], *names: str) -> None:
+    areas = tuple(Area(name=name, lat=30.27, lng=-97.74, radius=50) for name in names)
+    CriteriaStore(session_factory).save(Criteria(areas=areas), created_by="test")
+
+
+def test_criteria_cities_are_offered_when_locations_are_empty(
+    client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    save_areas(session_factory, "Austin, TX", "Austin, TX", "Dallas, TX", "Downtown")
+
+    form = settings_form(client.get("/sources").text, "alpha")
+
+    assert "Use criteria cities: Austin, TX; Dallas, TX" in form
+    assert 'action="/sources/alpha/settings/use-criteria-cities"' in form
+
+
+def test_no_offer_without_city_areas_or_with_locations_set(
+    client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    assert "Use criteria cities" not in client.get("/sources").text
+    save_areas(session_factory, "Downtown")
+    assert "Use criteria cities" not in client.get("/sources").text
+    save_areas(session_factory, "Austin, TX")
+    post(client, csrf, "/sources/alpha/settings", search_locations="Waco, TX")
+    assert "Use criteria cities" not in settings_form(client.get("/sources").text, "alpha")
+
+
+def test_no_offer_for_sources_that_take_site_names(
+    client: TestClient, session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Alpha, "search_locations_are_places", False)
+    monkeypatch.setattr(Beta, "search_locations_are_places", True)
+    save_areas(session_factory, "Austin, TX")
+
+    text = client.get("/sources").text
+
+    assert "Use criteria cities" not in settings_form(text, "alpha")
+    assert "Use criteria cities" in settings_form(text, "beta")
+
+
+def test_using_criteria_cities_stores_them_and_keeps_other_settings(
+    client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    save_areas(session_factory, "Austin, TX")
+    post(client, csrf, "/sources/alpha/settings", interval_minutes="30")
+
+    response = post(client, csrf, "/sources/alpha/settings/use-criteria-cities")
+
+    assert response.status_code == 303
+    state = SqlSourceStore(session_factory).get("alpha")
+    assert state is not None
+    assert state.overrides == SourceOverrides(search_locations=("Austin, TX",), interval_minutes=30)
+    assert "Use criteria cities" not in settings_form(client.get("/sources").text, "alpha")
+
+
+def test_using_criteria_cities_is_refused_when_there_are_none(
+    client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    response = post(client, csrf, "/sources/alpha/settings/use-criteria-cities")
+
+    assert response.status_code == 409
+    state = SqlSourceStore(session_factory).get("alpha")
+    assert state is None or state.overrides.search_locations is None

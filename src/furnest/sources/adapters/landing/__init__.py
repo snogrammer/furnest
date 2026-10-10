@@ -132,6 +132,7 @@ class Landing(SourceAdapter):
     name: ClassVar[str] = "landing"
     display_name: ClassVar[str] = "Landing"
     capabilities: ClassVar[Capabilities] = Capabilities(has_api=True)
+    search_locations_are_places: ClassVar[bool] = False
     search_locations_hint: ClassVar[str] = (
         "Landing market or city slugs, one per line, e.g. austin or round-rock-tx."
     )

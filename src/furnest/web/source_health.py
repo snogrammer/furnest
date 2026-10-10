@@ -17,9 +17,11 @@ from enum import StrEnum
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import SourceOverrides, SourcesSettings
+from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SourceRunState, SqlListingStore
 from furnest.db.session import session_scope
 from furnest.db.source_store import SourceState, SqlSourceStore
+from furnest.domain import Criteria
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources.base import AdapterConfig, Blocker, Credential
 from furnest.sources.config import resolve_config
@@ -70,6 +72,9 @@ class SourceRow:
     failed_runs: int
     credential: Credential | None = None
     search_locations_hint: str = ""
+    # The active criteria's cities, when this source takes place names and has no
+    # locations yet: what the settings form offers as a one-click fill.
+    criteria_cities: tuple[str, ...] = ()
     implemented: bool = True
     pending_job_id: int | None = None
     runs: list[SourceRunState] = field(default_factory=list)
@@ -122,6 +127,12 @@ class SourceRow:
         return Health.OK
 
 
+def criteria_cities(criteria: Criteria) -> tuple[str, ...]:
+    """The areas named "City, State", in order and without repeats."""
+    names = (area.name for area in criteria.areas if "," in area.name)
+    return tuple(dict.fromkeys(names))
+
+
 def build_row(
     name: str,
     registry: SourceRegistry,
@@ -149,6 +160,8 @@ def build_rows(
     credentials = store.stored(registry.credential_keys()).credentials
     listings = SqlListingStore(session_factory)
     failed = listings.failure_counts()
+    active = CriteriaStore(session_factory).active()
+    cities = () if active is None else criteria_cities(active.criteria)
     rows = []
     for name in registry.names():
         adapter = registry.get(name)
@@ -178,6 +191,11 @@ def build_rows(
                 failed_runs=failed.get(name, 0),
                 credential=adapter.credential,
                 search_locations_hint=adapter.search_locations_hint,
+                criteria_cities=(
+                    cities
+                    if adapter.search_locations_are_places and not config.search_locations
+                    else ()
+                ),
                 implemented=adapter.implemented,
                 pending_job_id=pending_job_id,
                 runs=list(listings.runs(name, limit=RECENT_RUNS)) if with_runs else [],

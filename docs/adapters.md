@@ -20,7 +20,7 @@ there pins the field: the dashboard shows it read-only.
 | `jitter_seconds`, `run_timeout_seconds` | env only | Scheduling (see [ARCHITECTURE.md](ARCHITECTURE.md)). |
 | `requests_per_minute`, `max_retries`, `request_timeout_seconds`, `user_agent`, `proxy_url`, `respect_robots` | env only | The HTTP layer. |
 | `max_results` | settings | The most listings one run asks for, for sources that page or bill per result. |
-| `search_locations` | settings | Per source only. Place names, for sources that search by city instead of by the criteria's areas. For Craigslist, site names (`sfbay`). |
+| `search_locations` | settings | Per source only. Place names, for sources that search by city instead of by the criteria's areas. For Craigslist, site names (`sfbay`). Never filled in silently: an empty list fails the run. When it is empty and the active criteria have areas named "City, State", the Sources page offers a "Use criteria cities" button for sources that take place names (not Craigslist, Landing or Blueground). |
 | `api_key` | credentials | Per source only in env; on the dashboard, one token per provider. Adapters whose capabilities say `requires_api_key` stay disabled without one, and the dashboard says which token to add. |
 
 ## Furnished Finder (`furnished_finder`)
@@ -52,7 +52,9 @@ disappears, swapping in another means changing `ACTOR` and the mapping in
 
 ### How a run works
 
-1. Criteria become the actor's input: `search_locations`, then the monthly price range
+1. The actor's input is the source's `search_locations` (never the criteria's areas;
+   the Sources page can fill them in from the criteria's cities, see below), then the
+   criteria's monthly price range
    in USD (whole dollars, rounded outwards), minimum beds and baths (baths rounded
    down), and `entire_unit` when rooms are denied or not allowed (`room` when only
    rooms are allowed). Details are fetched, reviews are not. `maxListings` is
@@ -152,7 +154,8 @@ means changing `ACTOR` and the mapping in `sources/adapters/zillow/parse.py`.
 
 ### How a run works
 
-1. Criteria become the actor's input: `operation: rent`, `search_locations`,
+1. The actor's input is `operation: rent`, the source's `search_locations` (not taken from
+   the criteria's areas), and criteria-derived
    `furnished: true`, `space` (`entirePlace` when rooms are denied or not allowed,
    `roomForRent` when only rooms are allowed), minimum beds (when above 0) and baths
    (rounded down), and `moveInDate` from the target move-in date when it's in the

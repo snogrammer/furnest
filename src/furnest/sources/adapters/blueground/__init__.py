@@ -63,6 +63,7 @@ class Blueground(SourceAdapter):
     name: ClassVar[str] = "blueground"
     display_name: ClassVar[str] = "Blueground"
     capabilities: ClassVar[Capabilities] = Capabilities()
+    search_locations_are_places: ClassVar[bool] = False
     search_locations_hint: ClassVar[str] = (
         "Blueground city slugs as in /furnished-apartments-<city>-usa, one per line, "
         "e.g. chicago or new-york."

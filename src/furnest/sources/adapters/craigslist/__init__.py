@@ -123,6 +123,7 @@ class Craigslist(SourceAdapter):
     name: ClassVar[str] = "craigslist"
     display_name: ClassVar[str] = "Craigslist"
     capabilities: ClassVar[Capabilities] = Capabilities(provides_contact=True)
+    search_locations_are_places: ClassVar[bool] = False
     search_locations_hint: ClassVar[str] = (
         "Craigslist site names, the subdomain of a region's site, one per line, e.g. sfbay."
     )

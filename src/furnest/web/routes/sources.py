@@ -225,6 +225,29 @@ def save_settings(
     return RedirectResponse(f"/sources?saved={name}", status_code=303)
 
 
+@router.post("/{name}/settings/use-criteria-cities", response_class=HTMLResponse)
+def use_criteria_cities(request: Request, name: str) -> Response:
+    """Fill an empty ``search_locations`` with the criteria's cities. A click, never implicit."""
+    row = _row(request, name)
+    if not row.can_edit:
+        return _render(
+            request, error=f"{name} can't be configured: {row.disabled_reason}", status_code=409
+        )
+    if not row.criteria_cities:
+        return _render(
+            request,
+            error=f"No criteria cities to use for {name}: it already has locations, "
+            "takes site names, or the criteria have no city areas.",
+            status_code=409,
+        )
+    store = SqlSourceStore(_factory(request))
+    store.ensure([name])
+    store.set_overrides(
+        name, row.overrides.model_copy(update={"search_locations": row.criteria_cities})
+    )
+    return RedirectResponse(f"/sources?saved={name}", status_code=303)
+
+
 @router.post("/{name}/settings/reset", response_class=HTMLResponse)
 def reset_settings(request: Request, name: str) -> Response:
     row = _row(request, name)

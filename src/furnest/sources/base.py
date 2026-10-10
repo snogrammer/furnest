@@ -122,6 +122,10 @@ class SourceAdapter(ABC):
     # What ``search_locations`` means for this source, shown next to the dashboard field.
     search_locations_hint: ClassVar[str] = 'Place names, one per line, e.g. "Springfield, IL".'
 
+    # Whether ``search_locations`` are plain place names ("Austin, TX"), which the
+    # criteria's cities can fill in; False for slugs and site names.
+    search_locations_are_places: ClassVar[bool] = True
+
     def __init__(self, config: AdapterConfig) -> None:
         self.config = config
 
