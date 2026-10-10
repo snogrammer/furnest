@@ -22,11 +22,11 @@ _PROVIDER = Capabilities(has_api=True, requires_api_key=True)
 class HotPads(StubAdapter):
     """HotPads (Zillow Group): rentals, much of them shared with Zillow.
 
-    TODO: search pages answer 403 with the same PerimeterX "Press & Hold" check as
-    Zillow. robots.txt allows them, defers to Zillow's terms, and disallows the
-    ``/api/`` backends. A data provider would do it (Apify
-    ``benthepythondev/hotpads-rental-scraper`` and others), but check first how much
-    it adds over the ``zillow`` adapter after dedup.
+    Won't build (#186): search pages answer 403 with the same PerimeterX "Press &
+    Hold" check as Zillow, so it would need a data provider, and a measured run
+    added only 7% net-new furnished listings over the ``zillow`` adapter after
+    dedup, below the 20% bar. ``docs/adapters.md`` ("HotPads: measured, not built")
+    has the numbers and when to re-measure.
     """
 
     name = "hotpads"

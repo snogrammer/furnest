@@ -848,5 +848,39 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 | Blueground (`blueground`) | Built (above) | Direct HTTP, through `SourceHttpClient` | None public | City pages (`/furnished-apartments-<city>-usa`) answer 200 with no bot check, and robots.txt allows them (it disallows `/book`, `/users`, `/payments` and similar). The terms forbid automated scanning, so it stays off by default with a caveat, like Craigslist | Done |
 | Zumper (`zumper`) | Built (above) | Apify data provider (`memo23/zumper-cheerio`; `benthepythondev/zumper-rental-scraper` compared) | Partner listing feeds only (listings in, not search) | Every page, including robots.txt and the terms, is behind a JavaScript "Client Challenge". Shares inventory with PadMapper (not added; dedup) | Done |
 | Apartments.com (`apartments_com`) | Built (above) | Apify data provider (`epctex/apartments-scraper-api`; the older `epctex/apartments-scraper` no longer works) | None | Akamai answers 403 to every request, robots.txt and the terms page included. CoStar is known to enforce its terms against scrapers, so it stays off by default with a caveat | Done |
-| HotPads (`hotpads`) | Stub | Data provider (Apify, e.g. `benthepythondev/hotpads-rental-scraper`) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Medium. Much of its inventory is Zillow's, so measure what it adds after dedup first |
+| HotPads (`hotpads`) | Stub, won't build (#186) | Data provider (Apify, `tangerine_loom/Hotpads-Scraper` measured) | None | 403 with the same PerimeterX check as Zillow. robots.txt allows search pages, disallows `/api/` and `?lat=`/`?lon=` searches, and defers to Zillow's terms | Measured: 7% net-new over Zillow after dedup, below the 20% bar (see below) |
 | Kopa | Shut down (2026), not stubbed | — | — | The site is a farewell notice and robots.txt is `Disallow: /` | — |
+
+### HotPads: measured, not built (#186)
+
+HotPads is Zillow Group, and its photos are served from Zillow's own image CDN. Before
+building an adapter, #186 measured what it would add over the `zillow` adapter: build
+it only if at least 20% of a HotPads run is net-new after dedup.
+
+On 2026-10-10, for one large US city:
+
+- HotPads, through `tangerine_loom/Hotpads-Scraper` in detail mode on the site's
+  furnished search page (`/<city>-<st>/furnished-apartments-for-rent`; a
+  `?amenities=furnished` query is ignored): 76 listings before the run stopped.
+- Zillow, through the same actor and input as the `zillow` adapter, furnished on: one
+  run of 100 with details, and one of up to 1,000 without details, which returned
+  the whole furnished inventory (523).
+- Scoring: every pair through `dedup.grouping.score_pair` with the default
+  thresholds. HotPads buildings are split per bedroom group, the way the Zillow
+  parser splits them, and the first five photos of each pair that survives the
+  vetoes are pHashed.
+
+| Compared against | HotPads matched | Net-new |
+| --- | --- | --- |
+| Zillow, newest 100 | 23 of 76 | 53 (70%) |
+| Zillow, whole furnished inventory | 71 of 76 | **5 (7%)** |
+
+Of the 5, three are other units in buildings Zillow already lists. One is a Zillow
+listing that shares a photo with HotPads but that grouping didn't match. One is not
+on Zillow at all. So HotPads stays a stub. The first row shows that the overlap
+depends on how much of Zillow is fetched: a `zillow` `max_results` below the city's
+furnished inventory leaves more for any second source to add. Raising it is cheaper
+than a second provider. The runs cost about $1 in Apify credit.
+
+Re-measure if HotPads starts carrying inventory Zillow doesn't (another city, or a
+change in Zillow Group's syndication).
