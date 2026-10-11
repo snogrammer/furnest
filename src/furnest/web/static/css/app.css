@@ -755,6 +755,20 @@ button.secondary {
   background: var(--surface);
 }
 
+.property-card .card-photo {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.property-card .card-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
 .property-card header {
   display: flex;
   align-items: flex-start;

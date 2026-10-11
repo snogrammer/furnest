@@ -84,7 +84,7 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -111,6 +111,7 @@ from furnest.db.models import (
     CriteriaVersion,
     JobStatus,
     Listing,
+    ListingImage,
     Note,
     PriceHistory,
     Property,
@@ -240,6 +241,8 @@ class ListingSummary:
     beds: int | None
     baths: float | None
     removed_at: datetime | None
+    # The listing's first photo. Filled in by the dashboard's page query only.
+    photo_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -344,6 +347,24 @@ def _summary(row: Listing) -> ListingSummary:
         baths=row.baths,
         removed_at=row.removed_at,
     )
+
+
+def _first_photos(session: Session, listing_ids: list[int]) -> dict[int, str]:
+    """Each listing's first photo URL, by listing id."""
+    if not listing_ids:
+        return {}
+    first = (
+        select(ListingImage.listing_id, func.min(ListingImage.position).label("position"))
+        .where(ListingImage.listing_id.in_(listing_ids))
+        .group_by(ListingImage.listing_id)
+        .subquery()
+    )
+    statement = select(ListingImage.listing_id, ListingImage.url).join(
+        first,
+        (ListingImage.listing_id == first.c.listing_id)
+        & (ListingImage.position == first.c.position),
+    )
+    return {listing_id: url for listing_id, url in session.execute(statement)}
 
 
 def _visible(now: datetime) -> ColumnElement[bool]:
@@ -1265,11 +1286,16 @@ class SqlPropertyStore:
         )
         with session_scope(self._session_factory) as session:
             total = session.scalar(filtered(select(func.count(Property.id)))) or 0
+            pairs = list(session.execute(statement))
+            photos = _first_photos(session, [item.id for _, item in pairs if item is not None])
             rows = [
                 PropertyRow(
-                    property=_state(prop), listing=None if listing is None else _summary(listing)
+                    property=_state(prop),
+                    listing=None
+                    if listing is None
+                    else replace(_summary(listing), photo_url=photos.get(listing.id)),
                 )
-                for prop, listing in session.execute(statement)
+                for prop, listing in pairs
             ]
             return PropertyPage(rows=rows, total=total)
 

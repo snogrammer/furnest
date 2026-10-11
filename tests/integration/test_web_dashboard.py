@@ -44,6 +44,7 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
         snoozed: bool = False,
         source: str = "test",
         owner: OwnerType = OwnerType.UNKNOWN,
+        images: tuple[str, ...] = (),
     ) -> int:
         n = next(counter)
         at = now - age - timedelta(seconds=n)
@@ -56,6 +57,7 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
                 "price": None if price is None else Price(amount=Money.from_major(price)),
                 "beds": 0,
                 "baths": 1,
+                "images": list(images),
             }
         )
         (listing_id,) = listings.upsert_batch(source, [listing], seen_at=at).new_ids
@@ -277,6 +279,17 @@ def test_unknown_source_falls_back_to_its_name(authed_client: TestClient, seed: 
     seed()
 
     assert "View on test</a>" in get(authed_client)
+
+
+def test_cards_show_the_first_photo(authed_client: TestClient, seed: Seed) -> None:
+    seed("With photos", images=("https://img.example.com/a.jpg", "https://img.example.com/b.jpg"))
+    seed("Without photos")
+
+    html = get(authed_client)
+
+    assert html.count('class="card-photo"') == 1
+    assert 'src="https://img.example.com/a.jpg"' in html
+    assert "b.jpg" not in html
 
 
 def test_full_page_has_no_out_of_band_swap(authed_client: TestClient) -> None:
