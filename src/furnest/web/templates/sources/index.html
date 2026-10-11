@@ -52,6 +52,13 @@
 {% endif %}
 
 <h2>Status</h2>
+{% if rows | selectattr("runnable") | list %}
+<form method="post" action="/sources/run-all" class="source-actions">
+  {{ csrf_field(request) }}
+  <button type="submit">Run all now</button>
+</form>
+<p class="muted">Queues a run for every source that's on, skipping any already queued. Sources billed per run, such as the Apify ones, use up quota.</p>
+{% endif %}
 <div class="table-scroll">
 <table class="sources">
   <thead>

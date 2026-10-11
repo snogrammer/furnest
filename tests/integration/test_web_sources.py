@@ -115,10 +115,16 @@ def test_pages_need_auth(migrated_engine: Engine) -> None:
             401,
             403,
         )
+        assert anonymous.post("/sources/run-all", follow_redirects=False).status_code in (
+            303,
+            401,
+            403,
+        )
 
 
 def test_posts_need_csrf(client: TestClient) -> None:
     assert client.post("/sources/alpha/run").status_code == 403
+    assert client.post("/sources/run-all").status_code == 403
     assert client.post("/sources/alpha/enabled", data={"enabled": "false"}).status_code == 403
 
 
@@ -283,6 +289,61 @@ def test_run_now_refuses_disabled_and_unavailable_sources(
 
 def test_run_now_unknown_source_is_404(client: TestClient, csrf: Csrf) -> None:
     assert post(client, csrf, "/sources/nope/run").status_code == 404
+
+
+# --- run all ----------------------------------------------------------------
+
+
+def test_run_all_queues_one_job_per_runnable_source(
+    client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    assert "Run all now" in client.get("/sources").text
+
+    response = post(client, csrf, "/sources/run-all")
+
+    assert response.status_code == 303
+    queued = jobs(session_factory)
+    # keyed has no token and stubby is a stub, so neither can run.
+    assert sorted(job.payload["source"] for job in queued) == ["alpha", "beta", "pinned"]
+    assert all((job.kind, job.max_attempts) == (RUN_SOURCE, 1) for job in queued)
+    page = client.get(response.headers["location"])
+    assert "Queued runs for 3 sources.</p>" in page.text
+
+
+def test_run_all_skips_sources_already_queued(
+    client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    post(client, csrf, "/sources/alpha/run")
+
+    response = post(client, csrf, "/sources/run-all")
+
+    sources = [job.payload["source"] for job in jobs(session_factory)]
+    assert sorted(sources) == ["alpha", "beta", "pinned"]
+    page = client.get(response.headers["location"])
+    assert "Queued runs for 2 sources. 1 already queued." in page.text
+
+
+def test_run_all_with_nothing_runnable_is_409(
+    migrated_engine: Engine,
+    login: LoginFn,
+    csrf: Csrf,
+    sources: SqlSourceStore,
+    session_factory: sessionmaker[Session],
+) -> None:
+    registry = SourceRegistry()
+    for adapter in (Alpha, Keyed, Stubby):
+        registry.register(adapter)
+    sources.set_enabled("alpha", False)
+    app = create_app(Settings(), engine=migrated_engine, source_registry=registry)
+    with TestClient(app) as client:
+        login(client)
+        assert "Run all now" not in client.get("/sources").text
+
+        response = post(client, csrf, "/sources/run-all")
+
+    assert response.status_code == 409
+    assert "No source can run now" in response.text
+    assert jobs(session_factory) == []
 
 
 # --- the switch ---------------------------------------------------------------

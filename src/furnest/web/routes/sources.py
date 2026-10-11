@@ -17,7 +17,8 @@ whether one is set.
 
 "Run now" queues a ``run_source`` job for the worker (see
 :class:`furnest.pipeline.schedule.RunSourceNow`). A source with one already queued
-or running gets no second job.
+or running gets no second job. "Run all now" does the same for every source that can
+run, skipping those that already have one.
 
 Handlers are plain ``def`` so FastAPI runs the blocking SQLite calls in its threadpool.
 """
@@ -109,6 +110,8 @@ def index(
     toggled: Annotated[str | None, Query(max_length=64)] = None,
     queued: Annotated[int | None, Query()] = None,
     pending: Annotated[int | None, Query()] = None,
+    queued_all: Annotated[int | None, Query()] = None,
+    pending_all: Annotated[int | None, Query()] = None,
     saved: Annotated[str | None, Query(max_length=64)] = None,
     reset: Annotated[str | None, Query(max_length=64)] = None,
     credential: Annotated[str | None, Query(max_length=64)] = None,
@@ -121,6 +124,10 @@ def index(
         flash = f"Run queued (job #{queued})."
     elif pending is not None:
         flash = f"A run is already queued (job #{pending})."
+    elif queued_all is not None:
+        flash = f"Queued runs for {queued_all} source{'' if queued_all == 1 else 's'}."
+        if pending_all:
+            flash += f" {pending_all} already queued."
     elif saved is not None:
         flash = f"Saved the settings for {saved}."
     elif reset is not None:
@@ -295,9 +302,38 @@ def run_now(request: Request, name: str) -> Response:
         reason = row.disabled_reason or "it is turned off"
         return _render(request, error=f"{name} can't run now: {reason}.", status_code=409)
     with session_scope(_factory(request)) as session:
-        existing = queue.pending(session, RUN_SOURCE, source=name)
-        if existing is not None:
-            return RedirectResponse(f"/sources?pending={existing.id}", status_code=303)
-        job = queue.enqueue(session, RUN_SOURCE, {"source": name}, max_attempts=1)
-        job_id = job.id
+        job_id, queued = _queue_run(session, name)
+    if not queued:
+        return RedirectResponse(f"/sources?pending={job_id}", status_code=303)
     return RedirectResponse(f"/sources?queued={job_id}", status_code=303)
+
+
+@router.post("/run-all", response_class=HTMLResponse)
+def run_all(request: Request) -> Response:
+    """Queue a run for every source that can run now."""
+    rows = build_rows(
+        request.app.state.source_registry, request.app.state.settings.sources, _factory(request)
+    )
+    names = [row.name for row in rows if row.runnable]
+    if not names:
+        return _render(request, error="No source can run now: turn one on first.", status_code=409)
+    queued = pending = 0
+    with session_scope(_factory(request)) as session:
+        for name in names:
+            if _queue_run(session, name)[1]:
+                queued += 1
+            else:
+                pending += 1
+    return RedirectResponse(f"/sources?queued_all={queued}&pending_all={pending}", status_code=303)
+
+
+def _queue_run(session: Session, name: str) -> tuple[int, bool]:
+    """Queue a ``run_source`` job for ``name`` unless one is already waiting or running.
+
+    Returns the job's id and whether it was queued just now.
+    """
+    existing = queue.pending(session, RUN_SOURCE, source=name)
+    if existing is not None:
+        return existing.id, False
+    job = queue.enqueue(session, RUN_SOURCE, {"source": name}, max_attempts=1)
+    return job.id, True
