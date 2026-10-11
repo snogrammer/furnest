@@ -11,6 +11,7 @@ import pytest
 from pydantic import SecretStr
 
 from furnest.domain import Criteria, NormalizedListing
+from furnest.domain.criteria import Area
 from furnest.sources import SourceError, SourceHttpClient
 from furnest.sources.apify import APIFY, ApifyAdapter
 from furnest.sources.base import AdapterConfig
@@ -57,7 +58,7 @@ class Example(ProviderAdapter):
     site: ClassVar[str] = "https://example.com"
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
-        return {"places": list(self.config.search_locations), "beds": criteria.min_beds}
+        return {"places": list(self.locations(criteria)), "beds": criteria.min_beds}
 
     def parse_items(
         self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
@@ -145,3 +146,27 @@ def test_apify_adapters_run_on_apify() -> None:
 
 def test_today_defaults_to_the_utc_date(provider: FakeProvider) -> None:
     assert Example(make_config())._today() == datetime.now(UTC).date()
+
+
+def _areas(*names: str) -> Criteria:
+    return Criteria(areas=tuple(Area(name=n, lat=30.27, lng=-97.74, radius=50) for n in names))
+
+
+def test_empty_search_locations_fall_back_to_the_criteria_cities(provider: FakeProvider) -> None:
+    Example(make_config(search_locations=())).search(_areas("Austin, TX", "Downtown"))
+
+    assert provider.calls[0]["input"]["places"] == ["Austin, TX"]
+
+
+def test_configured_search_locations_win_over_the_criteria_cities(
+    provider: FakeProvider,
+) -> None:
+    Example(make_config(search_locations=("Waco, TX",))).search(_areas("Austin, TX"))
+
+    assert provider.calls[0]["input"]["places"] == ["Waco, TX"]
+
+
+def test_criteria_without_city_areas_still_errors(provider: FakeProvider) -> None:
+    with pytest.raises(SourceError, match="no search locations"):
+        Example(make_config(search_locations=())).search(_areas("Downtown"))
+    assert provider.calls == []

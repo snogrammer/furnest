@@ -272,3 +272,9 @@ def diff_criteria(old: Criteria, new: Criteria) -> list[CriteriaChange]:
         for name in Criteria.model_fields
         if before[name] != after[name]
     ]
+
+
+def criteria_cities(criteria: Criteria) -> tuple[str, ...]:
+    """The areas named "City, State", in order and without repeats."""
+    names = (area.name for area in criteria.areas if "," in area.name)
+    return tuple(dict.fromkeys(names))

@@ -34,6 +34,7 @@ from typing import Any, ClassVar, Protocol
 import httpx2
 
 from furnest.domain import Criteria, NormalizedListing
+from furnest.domain.criteria import criteria_cities
 from furnest.sources.base import AdapterConfig, Capabilities, SourceAdapter
 from furnest.sources.errors import SourceError
 from furnest.sources.http import SourceHttpClient
@@ -103,6 +104,10 @@ class ProviderAdapter(SourceAdapter):
         self._sleep = sleep
         self._today = today
 
+    def locations(self, criteria: Criteria) -> tuple[str, ...]:
+        """The places to search: the source's own setting, else the criteria's cities."""
+        return self.config.search_locations or criteria_cities(criteria)
+
     @abstractmethod
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
         """The job's input for ``criteria`` and this adapter's config."""
@@ -126,10 +131,10 @@ class ProviderAdapter(SourceAdapter):
                 'Sources page, or set "api_key" in SOURCES_ADAPTERS'
             )
             raise SourceError(msg, url=self.site)
-        if not config.search_locations:
+        if not self.locations(criteria):
             msg = (
-                f"no search locations for {self.name}: set them on the Sources page "
-                '(e.g. "Springfield, IL"), or "search_locations" in SOURCES_ADAPTERS'
+                f"no search locations for {self.name}: add a city area such as "
+                '"Springfield, IL" to the criteria, or set them on the Sources page'
             )
             raise SourceError(msg, url=self.site)
 

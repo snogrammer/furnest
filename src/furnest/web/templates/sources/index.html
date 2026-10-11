@@ -127,6 +127,9 @@
 <details class="runs" id="settings-{{ row.name }}"{% if editing %} open{% endif %}>
   <summary>{{ row.display_name }}</summary>
   <div class="source-settings">
+    {% if row.criteria_cities and not c.search_locations %}
+    <p class="hint">No locations set here, so runs search the criteria's cities: {{ row.criteria_cities | join("; ") }}. Leave the field empty to keep following the criteria.</p>
+    {% endif %}
     {% if row.criteria_cities and "search_locations" not in c.pinned %}
     <form method="post" action="/sources/{{ row.name }}/settings/use-criteria-cities" class="source-actions">
       {{ csrf_field(request) }}

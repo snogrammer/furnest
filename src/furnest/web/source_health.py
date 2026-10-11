@@ -21,7 +21,7 @@ from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SourceRunState, SqlListingStore
 from furnest.db.session import session_scope
 from furnest.db.source_store import SourceState, SqlSourceStore
-from furnest.domain import Criteria
+from furnest.domain.criteria import criteria_cities
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources.base import AdapterConfig, Blocker, Credential
 from furnest.sources.config import resolve_config
@@ -125,12 +125,6 @@ class SourceRow:
         if self.state.last_run_at is None:
             return Health.NEVER_RUN
         return Health.OK
-
-
-def criteria_cities(criteria: Criteria) -> tuple[str, ...]:
-    """The areas named "City, State", in order and without repeats."""
-    names = (area.name for area in criteria.areas if "," in area.name)
-    return tuple(dict.fromkeys(names))
 
 
 def build_row(

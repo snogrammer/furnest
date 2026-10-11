@@ -48,7 +48,7 @@ class Airbnb(ApifyAdapter):
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
         return build_input(
             criteria,
-            locations=self.config.search_locations,
+            locations=self.locations(criteria),
             max_results=self.config.max_results,
             today=self._today(),
         )
