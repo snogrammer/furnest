@@ -25,11 +25,11 @@ there pins the field: the dashboard shows it read-only.
 
 ## Furnished Finder (`furnished_finder`)
 
-**Access:** the Apify data provider `abotapi/furnishedfinder-scraper`. Needs an Apify
-API token. Off by default.
+**Access:** the Apify data provider `memo23/furnishedfinder-scraper-cheerio`. Needs an
+Apify API token. Off by default.
 
 ```env
-SOURCES_ADAPTERS={"furnished_finder": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 360, "max_results": 50}}
+SOURCES_ADAPTERS={"furnished_finder": {"api_key": "your-apify-token", "search_locations": ["Springfield, IL"], "interval_minutes": 1440, "max_results": 25}}
 ```
 
 ### Access options considered (October 2026)
@@ -41,87 +41,95 @@ SOURCES_ADAPTERS={"furnished_finder": {"api_key": "your-apify-token", "search_lo
 | Browser scraping | A real, interactive browser is shown Cloudflare's "verify you are human" check before any search page. A headless browser would fare no better, and furnest doesn't try to get past bot checks (no captcha solving, no challenge-bypass proxies such as FlareSolverr). |
 | Third-party data provider | Several Apify actors scrape Furnished Finder and return JSON. The provider handles access, and furnest makes an authenticated API call. **Chosen.** |
 
-Among the Apify actors, `abotapi/furnishedfinder-scraper` was picked because its
-output is documented field by field. Each item has a stable id, URL, city/state,
-coordinates, price, details and availability. Its input also takes the filters
-criteria have (city, price range, minimum beds and baths, entire unit vs room), which
-keeps billed runs small. Others were ruled out: one returns no listing id or URL,
-one has a 1-star rating, and the rest have only a couple of users. If this actor
+The adapter first used `abotapi/furnishedfinder-scraper` (#24), whose output was
+documented field by field and whose input took the criteria's filters. From
+2026-10-07 every run of it failed: its geocoder rejected every location, and each
+failure was still billed its $0.08 start. The #216 spike (see "Cheaper providers"
+below) compared three replacements live, and #221 switched to
+`memo23/furnishedfinder-scraper-cheerio`. It's the only one that returns the
+description, amenities, house rules, fees and lease terms that matching and the
+property page use, and it's the same author's actor that backs Zumper. If it
 disappears, swapping in another means changing `ACTOR` and the mapping in
 `sources/adapters/furnished_finder/parse.py`.
 
 ### How a run works
 
-1. The actor's input is the source's `search_locations` (never the criteria's areas;
-   the Sources page can fill them in from the criteria's cities, see below), then the
-   criteria's monthly price range
-   in USD (whole dollars, rounded outwards), minimum beds and baths (baths rounded
-   down), and `entire_unit` when rooms are denied or not allowed (`room` when only
-   rooms are allowed). Details are fetched, reviews are not. `maxListings` is
+1. The actor takes Furnished Finder URLs. Each of the source's `search_locations`
+   (never the criteria's areas; the Sources page can fill them in from the criteria's
+   cities) becomes the city's search page: `Long Beach, CA` →
+   `/housing/us--ca--long-beach`. A slug in that form is used as is. A location
+   without a two-letter state can't become a URL, so it is skipped with a warning, and
+   if none is usable the run fails before anything is billed.
+2. The criteria's monthly price range in USD goes in each URL's query as `min-price`
+   and `max-price` (whole dollars, rounded outwards). Live runs (#221) showed the page
+   honours these: with `max-price=1500` all ten listings were at most $1,500, against
+   $1,650 to $3,995 without it. `property-type-class` is ignored (six of ten were rooms
+   with `entire_unit` asked for), and there's no beds parameter, so property type,
+   beds and the move-in date are left to matching. `moreDetails` is on, because the
+   description, house rules and fees come from the property page. Reviews (they name
+   their authors) and email enrichment ($0.05 per email) are off. `maxItems` is
    `max_results`.
-2. `sources/apify.py` starts the run, long-polls it (one request a minute at most), and
+3. `sources/apify.py` starts the run, long-polls it (one request a minute at most), and
    reads the dataset. Apify's own run timeout is `run_timeout_seconds` less 60s, so
    Apify stops the actor before the worker gives up on the run. A run still going at
    the deadline is aborted. The token is sent as a `Bearer` header and is redacted from
    logs and Sentry. robots.txt isn't consulted, because this is an authenticated API.
-3. Each item is mapped to a `NormalizedListing` (see below). An item that can't be
+4. Each item is mapped to a `NormalizedListing` (see below). An item that can't be
    mapped is logged and skipped.
 
 ### Degrading
 
 - No `api_key`: the source is disabled with a reason, and never scheduled.
-- No `search_locations`: each run fails with a message saying so.
+- No `search_locations`, or none with a two-letter state: each run fails with a
+  message saying so.
 - A bad token (401), a forbidden actor (403, recorded as blocked), or a run that ends
   `FAILED`, `TIMED-OUT` or `ABORTED`: the run fails with the reason and nothing is
   marked missing.
-- The actor's "nothing was scanned" row, `{"error": true}`: the run fails. The actor
-  emits this both for a search with no matches and for one Furnished Finder refused,
-  and treating a refusal as "no listings" would mark every stored listing missing.
-  The cost is that a city with genuinely no matches fails each run. Remove it from
-  `search_locations` if that happens.
+- An empty dataset is a normal result (no listings), as on Zumper. The actor has no
+  "nothing was scanned" row.
 
 ### Field mapping
 
+From live Denver runs on 2026-10-12.
+
 | Actor field | `NormalizedListing` |
 | --- | --- |
-| `id` (else `propertyId_unitId`) | `source_id` |
+| `listingId` (`<id>_<unit>`, else `id`) | `source_id` |
 | `url` (else `https://www.furnishedfinder.com/property/<id>`) | `url` |
-| `name` | `title` |
-| `description`, `spaceDescription`, `neighborhoodDescription` | `description`, in that order |
-| `priceValue` + `priceCurrency` (else `priceFormatted` parsed) | `price`, monthly |
-| `city`, `state` | `address.city`, `address.region`; country `US` |
-| `latitude`, `longitude` | `lat`, `lng` (both or neither) |
+| `name` (else `title`) | `title` |
+| `description`, `neighborhoodOverview` | `description`, in that order |
+| `monthlyRent` (`"1800.00"`) in `rentAmount.currency` (else `rentAmount.amount`, `"$1,800/month"`, parsed) | `price`, monthly |
+| `city`, `state` (`CO` or `Colorado`) | `address.city`, `address.region`; country `US` |
+| `latitude`, `longitude` (approximate) | `lat`, `lng` (both or neither) |
 | `bedroomCount`, `bathroomCount` | `beds` (0 is a studio), `baths` (nearest half) |
 | `squareFootage` | `sqft` (0 means unknown) |
-| `propertyTypeClass` = `room`, else `propertyType` | `property_type` |
-| `amenities`, `laundryType`, `utilitiesIncluded` | `amenities`, as words (`airConditioning` → "air conditioning") for the keyword extractor. `petsLiveOnThisProperty` is dropped, because it describes the landlord's pets. |
-| `isAvailableNow`, `availableOnDate` | `available_from`: today if available now, else the parsed date |
+| `propertyTypeClass` = `room`, else `propertyType` (`Condo`, `House`, `Room - Condo`) | `property_type` |
+| `amenities` (camelCase keys) | `amenities`, as words (`airConditioning` → "air conditioning") for the keyword extractor. `petsLiveOnThisProperty` is dropped, because it describes the landlord's pets. `washeranddryeronpremises` reads as "washer and dryer on-site" (shared). |
+| `houseRulesGraphql[].name` | `amenities`: `petsAllowed` → "pets allowed", `petsNotAllowed` → "no pets", `smokingNotAllowed` → "no smoking" |
+| `laundryType` | `amenities`: `IN_UNIT` → "in-unit laundry", `SHARED` and `In Complex W/D` → "shared laundry", `NONE` → nothing, anything else as written |
+| `utilitiesIncluded` | `amenities`: "utilities included" |
+| `isAvailableNow`, `availableOn` (`MM/DD/YYYY`), `availableOnDate` (`Available: Oct. 13, 2026`) | `available_from`: today if available now, else the first date that parses |
 | `minimumStayDays` | `min_lease_months`, rounded up from 30-day months |
-| `photos` | `images` |
-| everything except `reviews` | `raw`. Reviews carry reviewers' names. |
-| (nothing: the actor has no landlord data) | `owner_type`, from the title and description alone (`furnest.domain.owner_type`) |
+| `photos[].url` | `images` |
+| `landlordCompany` | `owner_type` hint: a name that reads as a management business (`… Apartments`, `… Properties`, `… LLC`) is a property manager. Landlords also put an employer there, so any other name is no hint, and the title and description decide (`furnest.domain.owner_type`). |
+| listing facts: ids, text, type, rooms, rent, `deposit`, `petDeposit`, `cleaningFee`, `applicationFee`, `totalSleeps`, laundry, amenities, house rules, stay, availability, place, rating counts | `raw`. It's a whitelist: items also carry the landlord's name, username, photo, biography, LinkedIn and verifications, and none of that is kept. |
 
 Every listing is `furnished`. `contact` is `platform_only`, because Furnished Finder
 keeps landlord contact details behind its own messaging.
 
 ### Cost
 
-At the prices published in October 2026 (free tier), a run costs about $0.08 to
-start plus about $0.0025 per listing with details. Fifty listings every six hours
-comes to about $0.85 a day, while 100 listings hourly would be about $8 a day.
+$0.005 a run plus $0.002 a listing (with `moreDetails`), at the Starter plan's prices
+in October 2026. The #216 spike run of 20 billed $0.045. A daily run of 25 comes to
+about $0.055, or $1.65 a month.
 
 ### Limitations
 
-The fixtures in `tests/fixtures/furnished_finder/` were written from the actor's
-published schema and example, not captured from a live run. A live capture on
-2026-10-07 (#111) failed three times in a row with "No resolvable locations or URLs
-were provided": the actor's log showed its geocoder rejecting requests ("Switched to
-the backup connection pool after repeated rejections", then "No coordinates for
-location"), for both `"Austin, TX"` and the slug `us--tx--austin`. That is the actor's
-side, not the input, and **each failed run was still billed the $0.08 start**. Try
-again later, check the first successful run against the mapping above, and replace
-the fixtures with its dataset using `scripts/capture_fixture.py`
-([CONTRIBUTING.md](../CONTRIBUTING.md#refreshing-fixtures)).
+- Only places with a two-letter state work, because the actor takes URLs.
+- The coordinates are Furnished Finder's approximate location, not the address. Items
+  carry no street address.
+- Furnished Finder's own filters beyond price aren't usable through the URL, so a
+  search for entire units still bills for the rooms it returns.
 
 ## Zillow (`zillow`)
 
@@ -906,19 +914,18 @@ are October 2026 prices, checked against live runs:
 | Airbnb | none | $0.004 | $0.10 | $3.00 |
 | Zumper | $0.005 | $0.0025 | $0.068 | $2.03 |
 | Apartments.com | about $0.01 a page | $0.0005 | about $0.023 | $0.68 |
-| Furnished Finder | $0.08, billed even when the run fails | $0.0025 | $0.14 | turned off |
+| Furnished Finder | $0.005 | $0.002 (with `moreDetails`) | $0.055 | $1.65 |
 
-With the four working sources on at their defaults, a month comes to about $8,
+With all five sources on at their defaults, a month comes to about $9.50,
 inside Starter's $19. Residential proxy traffic is billed on top ($8 a GB on Starter;
 $0.71 of the Free plan's $5 went on it in October). On the Free plan the same sources
-would need a run every two days (`interval_minutes` 2880, about $4), and
+would need a run every two days (`interval_minutes` 2880, about $5), and
 Apartments.com's actor allows only 5 real runs a month there before it answers in demo
 mode.
 
-**Furnished Finder is turned off** (`broken_reason`, shown on the Sources page). Every
-live run since 2026-10-07 has failed because the actor's geocoder rejects the
-location, and each failure was still billed $0.08. It stays off whatever env or the
-dashboard say until the actor works or another provider replaces it (#216, part 2).
+Furnished Finder was turned off (`broken_reason`) from #219 until #221: every run of
+its old actor failed on the actor's side and was still billed $0.08. It's back on
+`memo23/furnishedfinder-scraper-cheerio`.
 
 **`fetchDetails`.** Zillow keeps `fetchDetails: True`. Its `_details` supply the
 description, the amenity lists and the lease terms that matching and the property page
@@ -962,7 +969,7 @@ a month that isn't worth reworking removal, so it isn't planned.
 | `memo23/furnishedfinder-scraper-cheerio`, `moreDetails` | 20 | $0.045 | $0.00225 | description, amenities, fees and deposit, utilities, square footage, minimum stay, availability, photos, landlord name and company |
 | `jongoose/furnished-finder-scraper` | 20 | $0.020 | $0.0010 | summary fields and amenities; no description |
 | `shahidirfan/furnished-finder-scraper` | 20 | $0.019 | $0.00096 | summary fields and photos; no description or amenities |
-| `abotapi/furnishedfinder-scraper` (current, off) | not run | | $0.08 start + $0.0025 | fails on every location since 2026-10-07 |
+| `abotapi/furnishedfinder-scraper` (replaced in #221) | not run | | $0.08 start + $0.0025 | fails on every location since 2026-10-07 |
 
 All three new actors worked on the first try. `memo23` (already behind Zumper)
 is the only one with what matching and the property page use. Daily runs of 25 come
@@ -982,8 +989,8 @@ of a few dollars a month. Revisit it if Apify prices rise or an actor disappears
 **Apify Starter (chosen 2026-10-12).** $19 of usage a month. Store actors are billed
 at Bronze-tier prices, residential proxy costs $8 a GB, and Apartments.com has no
 demo-mode cap. With the defaults (daily runs of 25), Zillow, Airbnb, Zumper and
-Apartments.com project to about $8 a month. Furnished Finder on `memo23` would add
-about $1.50. That leaves room for more search locations or a shorter interval on
+Apartments.com project to about $8 a month. Furnished Finder on `memo23` (#221) adds
+about $1.65. That leaves room for more search locations or a shorter interval on
 the sources that matter most.
 
 ## Personal-use access policy (#216 part 3)
@@ -1049,7 +1056,7 @@ its docstring holds the TODO. To build one, delete its class from `stubs.py`, ad
 
 | Source | Status | Access method | API | robots.txt / terms | Difficulty |
 | --- | --- | --- | --- | --- | --- |
-| Furnished Finder | Built (above) | Apify data provider | None | Cloudflare Turnstile on every search page | Done |
+| Furnished Finder | Built (above) | Apify data provider (`memo23/furnishedfinder-scraper-cheerio`; `abotapi/furnishedfinder-scraper` until #221) | None | Cloudflare Turnstile on every search page | Done |
 | Zillow (furnished rentals) | Built (above) | Apify data provider | Partner only (MLS, valuations) | PerimeterX "press & hold" check | Done |
 | Airbnb (monthly stays) | Built (above) | Apify data provider | None | robots.txt disallows search; terms forbid scraping | Done |
 | Craigslist (housing, furnished) | Built (above) | Direct HTTP | None (RSS blocked) | robots.txt allows `/search` and `/view`; terms forbid automated access | Done |

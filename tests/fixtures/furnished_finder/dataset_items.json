@@ -1,115 +1,666 @@
 [
   {
-    "id": "10000001_1",
-    "propertyId": "10000001",
-    "unitId": "1",
-    "url": "https://www.furnishedfinder.com/property/10000001_1",
-    "name": "Bright Two-Bedroom House Near the Medical Center",
+    "__typename": "SearchResultItem",
+    "id": "10000001",
+    "listingId": "10000001_1",
+    "url": "https://www.furnishedfinder.com/property/10000001",
+    "name": "Example Building 1210",
+    "title": "Example Building 1210",
+    "description": "One-bedroom apartment in a managed building with a gym and a rooftop deck.",
+    "neighborhoodOverview": "Walkable street with a grocery store nearby.",
+    "propertyType": "Apartment",
+    "propertyTypeClass": "entire_unit",
+    "bedroomCount": 1,
+    "bathroomCount": 1,
+    "squareFootage": 763,
+    "totalSleeps": 2,
+    "monthlyRent": "3257.00",
+    "rentAmount": {
+      "amount": "$3,257/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "cleaningFee": "$150.00",
+    "utilitiesIncluded": true,
+    "laundryType": "IN_UNIT",
+    "amenities": [
+      "washeranddryer",
+      "petsAllowed",
+      "essentialsKitchenwareBathwareLinens",
+      "wifi",
+      "fullKitchen",
+      "kitchenEssentials",
+      "stoveTop",
+      "microwave",
+      "fullSizeFridge",
+      "tv",
+      "heating",
+      "dedicatedWorkspaceForLaptops",
+      "nonSmoking",
+      "smokeDetector",
+      "gym",
+      "airConditioning",
+      "pool",
+      "hotTub"
+    ],
+    "houseRulesGraphql": [
+      {
+        "description": "Allowed",
+        "name": "petsAllowed",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Not Allowed",
+        "name": "smokingNotAllowed",
+        "__typename": "HouseRule"
+      }
+    ],
+    "minimumStayDays": 30,
+    "minimumStayInDays": 30,
+    "isAvailableNow": true,
+    "availableOn": "10/12/2026",
+    "availableOnDate": "Available",
+    "city": "Denver",
+    "state": "Colorado",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000001/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000001/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 0,
+    "totalReviewCount": 0,
+    "reviews": [
+      {
+        "reviewerName": "Jane Example",
+        "comment": "Lovely stay."
+      }
+    ],
+    "landlordCompany": "Example Furnished Apartments",
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home.",
+    "landlordTenure": "2 years",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "phone",
+      "id"
+    ]
+  },
+  {
+    "__typename": "SearchResultItem",
+    "id": "10000002",
+    "listingId": "10000002_1",
+    "url": "https://www.furnishedfinder.com/property/10000002",
+    "name": "Steps to Example Ave! Central Home - 000001",
+    "title": "Steps to Example Ave! Central Home - 000001",
+    "description": "Four-bedroom house with a fenced yard and a garage.",
+    "neighborhoodOverview": "Quiet residential street near a park.",
     "propertyType": "House",
     "propertyTypeClass": "entire_unit",
-    "bedroomCount": 2,
-    "bathroomCount": 1.5,
-    "bathroomType": "Private Bath",
-    "totalSleeps": 4,
-    "laundryType": "In-Unit W/D",
-    "priceFormatted": "$2,450/month",
-    "priceValue": 2450,
-    "priceCurrency": "USD",
-    "latitude": 40.0,
-    "longitude": -100.0,
-    "city": "Exampleville",
-    "state": "XX",
-    "encodedLocationName": "us--xx--exampleville",
-    "isAvailableNow": true,
-    "availableOnDate": "Available",
-    "minimumStayInDays": 30,
-    "minimumStayDays": 30,
+    "bedroomCount": 4,
+    "bathroomCount": 2,
+    "squareFootage": 2100,
+    "totalSleeps": 8,
+    "monthlyRent": "4380.00",
+    "rentAmount": {
+      "amount": "$4,380/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "cleaningFee": "$200.00",
+    "utilitiesIncluded": true,
+    "laundryType": "IN_UNIT",
     "amenities": [
+      "washeranddryer",
+      "stoveTop",
+      "essentialsKitchenwareBathwareLinens",
+      "fullSizeFridge",
+      "kitchen",
+      "cleaningProducts",
+      "carbonMonoxideDetector",
+      "hairDryer",
+      "microwave",
+      "smokeDetector",
+      "kitchenEssentials",
+      "heating",
+      "dedicatedWorkspaceForLaptops",
+      "ironBoard",
       "airConditioning",
       "dishwasher",
       "wifi",
-      "parking",
-      "petsLiveOnThisProperty",
-      "washeranddryer",
-      "nonSmoking"
+      "fireExtinguisher",
+      "nonSmoking",
+      "firstAidKit",
+      "freeParkingOnPremises"
     ],
-    "photos": [
-      "https://staticproperties.furnishedfinder.com/10000001/1/10000001_1_00000001-full.jpg",
-      "https://staticproperties.furnishedfinder.com/10000001/1/10000001_1_00000002-full.jpg",
-      "not-a-url"
-    ],
-    "photoCount": 3,
-    "description": "Quiet two-bedroom house with a king bed and a fenced yard.",
-    "neighborhoodDescription": "Walkable street with a grocery store nearby.",
-    "spaceDescription": "Entire house; the garage is not included.",
-    "squareFootage": 1100,
-    "avgRating": 4.8,
-    "totalReviewCount": 1,
-    "reviews": [
+    "houseRulesGraphql": [
       {
-        "reviewId": "20000001",
-        "reviewerName": "Jane Example",
-        "reviewerImage": null,
-        "starRating": 5,
-        "title": "Great stay",
-        "text": "Clean and comfortable.",
-        "submissionDate": "2026-01-01",
-        "reply": null
+        "description": "Not Allowed",
+        "name": "petsNotAllowed",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Not Allowed",
+        "name": "smokingNotAllowed",
+        "__typename": "HouseRule"
       }
     ],
-    "utilitiesIncluded": true,
-    "houseRules": [{"name": "No smoking", "description": "Smoking is not allowed."}],
-    "fees": [{"type": "Cleaning", "amount": "$100"}],
-    "searchLocation": "Exampleville, XX",
-    "scrapedAt": "2026-10-05T12:00:00.000Z"
+    "minimumStayDays": 30,
+    "minimumStayInDays": 30,
+    "isAvailableNow": false,
+    "availableOn": "10/13/2026",
+    "availableOnDate": "Available: Oct. 13, 2026",
+    "city": "Denver",
+    "state": "CO",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000002/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000002/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 0,
+    "totalReviewCount": 0,
+    "reviews": [],
+    "landlordCompany": "Example",
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home.",
+    "landlordTenure": "1 year, 5 months",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "phone",
+      "id"
+    ]
   },
   {
-    "propertyId": "10000002",
-    "unitId": "3",
-    "name": "Private Room in a Shared House",
-    "propertyType": "Room - House",
+    "__typename": "SearchResultItem",
+    "id": "10000003",
+    "listingId": "10000003_1",
+    "url": "https://www.furnishedfinder.com/property/10000003",
+    "name": "Spacious Townhome with Private Backyard",
+    "title": "Spacious Townhome with Private Backyard",
+    "description": "Two-bedroom townhome with a king bed and a private backyard.",
+    "neighborhoodOverview": "Close to restaurants and the light rail.",
+    "propertyType": "House",
+    "propertyTypeClass": "entire_unit",
+    "bedroomCount": 2,
+    "bathroomCount": 2.5,
+    "squareFootage": 1592,
+    "totalSleeps": 4,
+    "monthlyRent": "4000.00",
+    "rentAmount": {
+      "amount": "$4,000/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "deposit": "$4200.00",
+    "petDeposit": "$300.00",
+    "utilitiesIncluded": false,
+    "laundryType": "IN_UNIT",
+    "amenities": [
+      "washeranddryer",
+      "petsAllowed",
+      "petsLiveOnThisProperty",
+      "diningTable",
+      "fullSizeFridge",
+      "dishwasher",
+      "kitchen",
+      "microwave",
+      "stoveTop",
+      "outdoorGrill",
+      "airConditioning",
+      "fireplace",
+      "roomDarkeningShades",
+      "dresser",
+      "heating",
+      "storage",
+      "carbonMonoxideDetector",
+      "smokeDetector",
+      "gated",
+      "fireExtinguisher",
+      "nonSmoking",
+      "closeToPublicTransportation",
+      "quietEnvironment",
+      "fencedYard",
+      "freeParkingOnPremises",
+      "parking",
+      "coveredParking",
+      "stairsAtEntranceAndOrInsideTheProperty",
+      "kitchenEssentials",
+      "essentialsKitchenwareBathwareLinens",
+      "wifi",
+      "securityAlarm",
+      "dedicatedWorkspaceForLaptops",
+      "smartTV",
+      "exerciseEquipment",
+      "gym"
+    ],
+    "houseRulesGraphql": [
+      {
+        "description": "Allowed",
+        "name": "petsAllowed",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Not Allowed",
+        "name": "smokingNotAllowed",
+        "__typename": "HouseRule"
+      }
+    ],
+    "minimumStayDays": 90,
+    "minimumStayInDays": 90,
+    "isAvailableNow": true,
+    "availableOn": "10/12/2026",
+    "availableOnDate": "Available",
+    "city": "Denver",
+    "state": "CO",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000003/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000003/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 0,
+    "totalReviewCount": 0,
+    "reviews": [],
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordTenure": "11 months",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "id"
+    ],
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home."
+  },
+  {
+    "__typename": "SearchResultItem",
+    "id": "10000004",
+    "listingId": "10000004_1",
+    "url": "https://www.furnishedfinder.com/property/10000004",
+    "name": "Remodeled ranch style home",
+    "title": "Remodeled ranch style home",
+    "description": "Three-bedroom ranch home with a remodeled kitchen.",
+    "propertyType": "House",
+    "propertyTypeClass": "entire_unit",
+    "bedroomCount": 3,
+    "bathroomCount": 3,
+    "squareFootage": 2600,
+    "totalSleeps": 6,
+    "monthlyRent": "5800.00",
+    "rentAmount": {
+      "amount": "$5,800/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "utilitiesIncluded": true,
+    "laundryType": "In Complex W/D",
+    "amenities": [
+      "washeranddryeronpremises",
+      "dishwasher",
+      "fullSizeFridge",
+      "microwave",
+      "stoveTop",
+      "airConditioning",
+      "fireplace",
+      "carbonMonoxideDetector",
+      "securityAlarm",
+      "fireExtinguisher",
+      "dedicatedWorkspaceForLaptops",
+      "hairDryer",
+      "ironBoard",
+      "smartTV",
+      "fencedYard",
+      "quietEnvironment",
+      "exerciseEquipment",
+      "parking"
+    ],
+    "houseRulesGraphql": [
+      {
+        "description": "Not Allowed",
+        "name": "petsNotAllowed",
+        "__typename": "HouseRule"
+      }
+    ],
+    "minimumStayDays": 90,
+    "minimumStayInDays": 90,
+    "isAvailableNow": true,
+    "availableOn": "10/12/2026",
+    "availableOnDate": "Available",
+    "city": "Denver",
+    "state": "Colorado",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000004/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000004/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 0,
+    "totalReviewCount": 0,
+    "reviews": [],
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordTenure": "4 months",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "id"
+    ],
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home."
+  },
+  {
+    "__typename": "SearchResultItem",
+    "id": "10000005",
+    "listingId": "10000005_1",
+    "url": "https://www.furnishedfinder.com/property/10000005",
+    "name": "Share with an absent roommate",
+    "title": "Share with an absent roommate",
+    "description": "Private room in a shared condo; the roommate travels most of the month.",
+    "neighborhoodOverview": "Near the hospital and the university.",
+    "propertyType": "Room - Condo",
     "propertyTypeClass": "room",
     "bedroomCount": 1,
     "bathroomCount": 1,
-    "bathroomType": "Shared Bath",
-    "priceFormatted": "$950/month",
-    "priceValue": null,
-    "priceCurrency": "USD",
-    "city": "Exampleville",
-    "state": "XX",
-    "isAvailableNow": false,
-    "availableOnDate": "Nov 15, 2026",
-    "minimumStayDays": 90,
-    "amenities": ["wifi", "utilitiesIncluded"],
-    "photos": [],
-    "searchLocation": "Exampleville, XX",
-    "scrapedAt": "2026-10-05T12:00:00.000Z"
-  },
-  {
-    "id": "10000003_1",
-    "url": "https://www.furnishedfinder.com/property/10000003_1",
-    "name": "Studio Loft Downtown",
-    "propertyType": "Studio",
-    "propertyTypeClass": "entire_unit",
-    "bedroomCount": 0,
-    "bathroomCount": 1,
-    "priceFormatted": "$1,700/month",
-    "priceValue": 1700,
-    "priceCurrency": "USD",
-    "latitude": 40.01,
-    "longitude": -100.02,
-    "city": "Exampleville",
-    "state": "XX",
-    "isAvailableNow": false,
+    "squareFootage": 1175,
+    "totalSleeps": 1,
+    "monthlyRent": "1300.00",
+    "rentAmount": {
+      "amount": "$1,300/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "cleaningFee": "$50.00",
+    "utilitiesIncluded": true,
+    "laundryType": "IN_UNIT",
+    "amenities": [
+      "washeranddryer",
+      "petsAllowed",
+      "essentialsKitchenwareBathwareLinens",
+      "airConditioning",
+      "heating",
+      "elevator",
+      "quietEnvironment",
+      "storage",
+      "nonSmoking",
+      "starterToiletries",
+      "dedicatedWorkspaceForLaptops",
+      "roomDarkeningShades",
+      "fireplace",
+      "exerciseEquipment",
+      "wifi",
+      "kitchen",
+      "stoveTop",
+      "dishwasher",
+      "fullSizeFridge",
+      "microwave",
+      "kitchenEssentials",
+      "starterKitchenEssentials",
+      "cleaningProducts",
+      "cleaningProductsForBathroom",
+      "pool",
+      "hotTub",
+      "gym",
+      "securityAlarm",
+      "smokeDetector",
+      "carbonMonoxideDetector",
+      "firstAidKit",
+      "fireExtinguisher",
+      "gated",
+      "freeParkingOnPremises",
+      "closeToPublicTransportation",
+      "wheelchairAccessible",
+      "wideHallways",
+      "disabledParkingAvailable",
+      "parking",
+      "diningTable",
+      "dresser",
+      "tv",
+      "smartTV",
+      "housekeeping",
+      "stairsAtEntranceAndOrInsideTheProperty"
+    ],
+    "houseRulesGraphql": [
+      {
+        "description": "2",
+        "name": "maxTotalOccupancy",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "1",
+        "name": "maxVehicles",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Allowed",
+        "name": "petsAllowed",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Not Allowed",
+        "name": "smokingNotAllowed",
+        "__typename": "HouseRule"
+      }
+    ],
+    "minimumStayDays": 30,
+    "minimumStayInDays": 30,
+    "isAvailableNow": true,
+    "availableOn": "10/12/2026",
     "availableOnDate": "Available",
-    "squareFootage": 0,
-    "amenities": [],
-    "searchLocation": "Exampleville, XX",
-    "scrapedAt": "2026-10-05T12:00:00.000Z"
+    "city": "Denver",
+    "state": "Colorado",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000005/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000005/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 3,
+    "totalReviewCount": 4,
+    "reviews": [],
+    "landlordCompany": "Example High School",
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home.",
+    "landlordTenure": "6 years, 6 months",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "phone",
+      "id"
+    ]
   },
   {
-    "name": "Listing with no id",
-    "priceValue": 1200,
-    "searchLocation": "Exampleville, XX"
+    "__typename": "SearchResultItem",
+    "url": "https://www.furnishedfinder.com/property/10000006",
+    "name": "Remodeled ranch style home",
+    "title": "Remodeled ranch style home",
+    "description": "Three-bedroom ranch home with a remodeled kitchen.",
+    "propertyType": "Condo",
+    "propertyTypeClass": "entire_unit",
+    "bedroomCount": 2,
+    "bathroomCount": 2,
+    "squareFootage": 1200,
+    "totalSleeps": 4,
+    "monthlyRent": "1800.00",
+    "rentAmount": {
+      "amount": "$1,800/month",
+      "currency": "USD",
+      "__typename": "Money"
+    },
+    "utilitiesIncluded": true,
+    "laundryType": "IN_UNIT",
+    "amenities": [
+      "washeranddryer",
+      "diningTable",
+      "dishwasher",
+      "essentialsKitchenwareBathwareLinens",
+      "fullSizeFridge",
+      "kitchen",
+      "kitchenEssentials",
+      "microwave",
+      "stoveTop",
+      "airConditioning",
+      "dresser",
+      "fireplace",
+      "roomDarkeningShades",
+      "storage",
+      "wifi",
+      "heating",
+      "carbonMonoxideDetector",
+      "fireExtinguisher",
+      "firstAidKit",
+      "nonSmoking",
+      "smokeDetector",
+      "securityAlarm",
+      "hairDryer",
+      "ironBoard",
+      "smartTV",
+      "tv",
+      "quietEnvironment",
+      "pool",
+      "freeParkingOnPremises",
+      "parking",
+      "cleaningProducts",
+      "cleaningProductsForBathroom",
+      "starterToiletries",
+      "stairsAtEntranceAndOrInsideTheProperty"
+    ],
+    "houseRulesGraphql": [
+      {
+        "description": "Not Allowed",
+        "name": "petsNotAllowed",
+        "__typename": "HouseRule"
+      },
+      {
+        "description": "Not Allowed",
+        "name": "smokingNotAllowed",
+        "__typename": "HouseRule"
+      }
+    ],
+    "minimumStayDays": 60,
+    "minimumStayInDays": 60,
+    "isAvailableNow": true,
+    "availableOn": "10/12/2026",
+    "availableOnDate": "Available",
+    "city": "Denver",
+    "state": "CO",
+    "latitude": 39.74,
+    "longitude": -104.99,
+    "approxLocation": {
+      "latitude": 39.74,
+      "longitude": -104.99,
+      "__typename": "LatLng"
+    },
+    "encodedLocationName": "us--co--denver",
+    "photos": [
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000006/1/00000001.jpg",
+        "isFeatured": true,
+        "__typename": "Image"
+      },
+      {
+        "url": "https://www.furnishedfinder.com/_pserp_/10000006/1/00000002.jpg",
+        "isFeatured": false,
+        "__typename": "Image"
+      }
+    ],
+    "averageRating": 0,
+    "totalReviewCount": 0,
+    "reviews": [],
+    "landlordFirstName": "Jane",
+    "landlordLastName": "E",
+    "landlordName": "Jane E",
+    "landlordUsername": "jane.example",
+    "landlordAboutMe": "Jane Example, a nurse who rents out her home.",
+    "landlordTenure": "10 months",
+    "isLandlord": true,
+    "verifiedContactMethods": [
+      "email",
+      "phone",
+      "id"
+    ]
   }
 ]

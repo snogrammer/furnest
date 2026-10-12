@@ -3,30 +3,26 @@
 Furnished Finder has no public API, and its search and property pages sit behind a
 Cloudflare check: plain HTTP gets a 403, and even a real browser is asked to verify
 it's human. furnest doesn't try to get past that, so this adapter doesn't fetch the
-site. It runs the Apify actor
-``abotapi/furnishedfinder-scraper`` (through :class:`~furnest.sources.apify.ApifyAdapter`),
-which needs an Apify API token, and maps the items with :mod:`.parse`. ``docs/adapters.md`` has the
-research and the trade-offs.
+site. It runs the Apify actor ``memo23/furnishedfinder-scraper-cheerio`` (through
+:class:`~furnest.sources.apify.ApifyAdapter`), which needs an Apify API token, and maps
+the items with :mod:`.parse`. ``docs/adapters.md`` has the research and the trade-offs.
+
+The actor takes Furnished Finder URLs: each search location ("City, ST") becomes the
+city's search page, with the criteria's monthly price range in its query. A location
+without a two-letter state can't become a URL, so it is skipped with a warning, and a
+run with no usable location fails.
 
 Configure it on the dashboard's Sources page (the Apify token under Credentials,
 the rest in its settings), or in ``SOURCES_ADAPTERS``::
 
     {"furnished_finder": {"api_key": "<apify token>",
                           "search_locations": ["Springfield, IL"],
-                          "interval_minutes": 360, "max_results": 50}}
+                          "interval_minutes": 1440, "max_results": 25}}
 
 Without an Apify token it is disabled with a reason on the dashboard. Without
-``search_locations`` each run fails with a message saying so. The actor bills per
-run and per listing, so keep the interval long and ``max_results`` low.
-
-If the actor returns its "nothing was scanned" row (an empty search, or a blocked
-first page), the run fails rather than returning no listings. Otherwise a block would
-read as every listing having disappeared. Items that can't be mapped are logged and
-skipped, so one odd listing doesn't fail the run.
-
-It is turned off for now (``broken_reason``): every live run since 2026-10-07 has
-failed with the actor's geocoder rejecting the location, and each one was still
-billed (#216).
+``search_locations`` each run fails with a message saying so. An empty dataset is a
+normal result. Items that can't be mapped are logged and skipped, so one odd listing
+doesn't fail the run.
 """
 
 from __future__ import annotations
@@ -42,8 +38,8 @@ from furnest.sources.adapters.furnished_finder.parse import (
     ACTOR,
     SITE,
     build_input,
-    is_error_row,
     parse_item,
+    search_url,
 )
 from furnest.sources.apify import ApifyAdapter
 from furnest.sources.errors import SourceError
@@ -56,29 +52,28 @@ class FurnishedFinder(ApifyAdapter):
     display_name: ClassVar[str] = "Furnished Finder"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
-    # $0.08 a run, billed even when it fails, and $0.0025 a listing.
-    start_cost_usd: ClassVar[float] = 0.08
-    result_cost_usd: ClassVar[float] = 0.0025
-    broken_reason: ClassVar[str | None] = (
-        "the actor's geocoder rejects every location, and each failed run is still "
-        "billed $0.08 (#216)"
+    # $0.005 a run and $0.002 a listing (docs/adapters.md, Cost).
+    start_cost_usd: ClassVar[float] = 0.005
+    result_cost_usd: ClassVar[float] = 0.002
+    search_locations_hint: ClassVar[str] = (
+        'City and two-letter state, one per line, e.g. "Springfield, IL".'
     )
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
-        return build_input(
-            criteria, locations=self.locations(criteria), max_results=self.config.max_results
-        )
+        locations = self.locations(criteria)
+        if unusable := [place for place in locations if search_url(place) is None]:
+            log.warning("furnished_finder.location_skipped", locations=unusable)
+            if len(unusable) == len(locations):
+                msg = (
+                    f"no search location names a city and two-letter state "
+                    f'({", ".join(unusable)}): use the form "Springfield, IL"'
+                )
+                raise SourceError(msg, url=SITE)
+        return build_input(criteria, locations=locations, max_results=self.config.max_results)
 
     def parse_items(
         self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
     ) -> list[NormalizedListing]:
-        if empty := [item for item in items if is_error_row(item)]:
-            where = sorted({str(item.get("searchLocation") or "?") for item in empty})
-            msg = (
-                f"the provider scanned nothing for {', '.join(where)}: no matching "
-                "listings, or Furnished Finder refused the search (see the Apify run log)"
-            )
-            raise SourceError(msg, url=SITE)
         today = self._today()
         listings: list[NormalizedListing] = []
         for item in items:
@@ -87,7 +82,7 @@ class FurnishedFinder(ApifyAdapter):
             except (ValueError, ValidationError) as exc:
                 log.warning(
                     "furnished_finder.item_skipped",
-                    source_id=item.get("id"),
+                    source_id=item.get("listingId") or item.get("id"),
                     error=str(exc).splitlines()[0],
                 )
         return listings

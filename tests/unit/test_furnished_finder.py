@@ -26,14 +26,13 @@ from furnest.domain import (
 from furnest.matching.amenities import KeywordAmenityExtractor
 from furnest.sources import SourceError, discover, resolve_config
 from furnest.sources.adapters.furnished_finder import FurnishedFinder
-from furnest.sources.adapters.furnished_finder.parse import build_input, parse_item
+from furnest.sources.adapters.furnished_finder.parse import build_input, parse_item, search_url
 from furnest.sources.apify import APIFY_API
-from furnest.sources.base import Blocker
 
 pytestmark = pytest.mark.unit
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "furnished_finder"
-TODAY = date(2026, 10, 5)
+TODAY = date(2026, 10, 12)
 TOKEN = "apify-test-token"  # noqa: S105 - a fake
 
 
@@ -52,33 +51,32 @@ def usd(amount: int) -> Money:
 # --- parse_item ----------------------------------------------------------------------
 
 
-def test_an_entire_unit_maps_every_documented_field() -> None:
+def test_an_entire_unit_maps_every_field() -> None:
     listing = parse_item(items()[0], today=TODAY)
 
     assert listing.source == "furnished_finder"
     assert listing.source_id == "10000001_1"
-    assert str(listing.url) == "https://www.furnishedfinder.com/property/10000001_1"
-    assert listing.title == "Bright Two-Bedroom House Near the Medical Center"
+    assert str(listing.url) == "https://www.furnishedfinder.com/property/10000001"
+    assert listing.title == "Example Building 1210"
     assert listing.description == (
-        "Quiet two-bedroom house with a king bed and a fenced yard.\n\n"
-        "Entire house; the garage is not included.\n\n"
+        "One-bedroom apartment in a managed building with a gym and a rooftop deck.\n\n"
         "Walkable street with a grocery store nearby."
     )
-    assert listing.price == Price(amount=usd(2450))
+    assert listing.price == Price(amount=usd(3257))
     assert (listing.address.city, listing.address.region, listing.address.country) == (
-        "Exampleville",
-        "XX",
+        "Denver",
+        "Colorado",
         "US",
     )
-    assert (listing.lat, listing.lng) == (40.0, -100.0)
-    assert (listing.beds, listing.baths, listing.sqft) == (2, 1.5, 1100)
-    assert listing.property_type is PropertyType.SINGLE_FAMILY
+    assert (listing.lat, listing.lng) == (39.74, -104.99)
+    assert (listing.beds, listing.baths, listing.sqft) == (1, 1.0, 763)
+    assert listing.property_type is PropertyType.APARTMENT
     assert listing.furnished is True
     assert listing.available_from == TODAY
     assert listing.min_lease_months == 1
     assert [str(url) for url in listing.images] == [
-        "https://staticproperties.furnishedfinder.com/10000001/1/10000001_1_00000001-full.jpg",
-        "https://staticproperties.furnishedfinder.com/10000001/1/10000001_1_00000002-full.jpg",
+        "https://www.furnishedfinder.com/_pserp_/10000001/1/00000001.jpg",
+        "https://www.furnishedfinder.com/_pserp_/10000001/1/00000002.jpg",
     ]
     assert listing.contact.platform_only is True
     assert (listing.contact.name, listing.contact.email, listing.contact.phone) == (
@@ -88,103 +86,120 @@ def test_an_entire_unit_maps_every_documented_field() -> None:
     )
 
 
-def test_amenity_keys_become_words_the_extractor_reads() -> None:
-    listing = parse_item(items()[0], today=TODAY)
+def test_amenities_house_rules_and_laundry_become_words_the_extractor_reads() -> None:
+    first, no_pets, _, in_complex, _ = (parse_item(item, today=TODAY) for item in items()[:5])
 
-    assert listing.amenities == {
-        "air conditioning",
-        "dishwasher",
-        "wifi",
-        "parking",
-        "washer and dryer",
-        "non smoking",
-        "in-unit w/d",
-        "utilities included",
-    }
-    found = KeywordAmenityExtractor().extract(listing)
+    assert {"air conditioning", "washer and dryer", "in-unit laundry", "pets allowed"} <= (
+        first.amenities
+    )
+    assert {"no smoking", "utilities included"} <= first.amenities
+    found = KeywordAmenityExtractor().extract(first)
     for tag in (
         Amenity.AC,
-        Amenity.DISHWASHER,
-        Amenity.WIFI,
         Amenity.IN_UNIT_LAUNDRY,
+        Amenity.PETS_ALLOWED,
         Amenity.SMOKE_FREE,
         Amenity.UTILITIES_INCLUDED,
-        Amenity.KING_BED,
+        Amenity.WIFI,
     ):
         assert tag in found.present, tag
-    # "petsLiveOnThisProperty" is the landlord's pets, so it must not read as pets allowed.
-    assert Amenity.PETS_ALLOWED not in found.present
+
+    assert "no pets" in no_pets.amenities
+    assert Amenity.PETS_ALLOWED in KeywordAmenityExtractor().extract(no_pets).absent
+
+    # "In Complex W/D" and "washer and dryer on premises" are shared, not in-unit.
+    assert {"shared laundry", "washer and dryer on-site"} <= in_complex.amenities
+    found = KeywordAmenityExtractor().extract(in_complex)
+    assert Amenity.SHARED_LAUNDRY in found.present
+    assert Amenity.IN_UNIT_LAUNDRY not in found.present
 
 
-def test_reviews_are_dropped_from_raw() -> None:
+def test_the_landlords_pets_are_not_pets_allowed() -> None:
+    item = {"listingId": "1_1", "name": "Place", "amenities": ["petsLiveOnThisProperty", "wifi"]}
+
+    assert parse_item(item, today=TODAY).amenities == {"wifi"}
+
+
+def test_raw_keeps_listing_facts_and_nothing_about_the_landlord() -> None:
     listing = parse_item(items()[0], today=TODAY)
 
+    assert listing.raw["cleaningFee"] == "$150.00"
+    assert listing.raw["houseRulesGraphql"] == items()[0]["houseRulesGraphql"]
+    assert not any(key.startswith("landlord") for key in listing.raw)
     assert "reviews" not in listing.raw
-    assert "Jane Example" not in json.dumps(listing.raw)
-    assert listing.raw["houseRules"] == [
-        {"name": "No smoking", "description": "Smoking is not allowed."}
-    ]
+    assert "Jane" not in json.dumps(listing.raw)
+    assert "jane.example" not in json.dumps(listing.raw)
 
 
-def test_a_room_with_a_text_price_and_a_future_date() -> None:
+def test_a_house_available_later() -> None:
     listing = parse_item(items()[1], today=TODAY)
 
-    assert listing.source_id == "10000002_3"
-    assert str(listing.url) == "https://www.furnishedfinder.com/property/10000002_3"
-    assert listing.price == Price(amount=usd(950))
-    assert listing.property_type is PropertyType.ROOM
-    assert (listing.lat, listing.lng) == (None, None)
-    assert listing.available_from == date(2026, 11, 15)
-    assert listing.min_lease_months == 3
-    assert listing.images == ()
-    assert listing.amenities == {"wifi", "utilities included"}
+    assert listing.property_type is PropertyType.SINGLE_FAMILY
+    assert listing.available_from == date(2026, 10, 13)
+    assert (listing.beds, listing.baths) == (4, 2.0)
 
 
-def test_a_studio_with_unknowns() -> None:
+def test_fees_and_a_longer_minimum_stay() -> None:
     listing = parse_item(items()[2], today=TODAY)
 
-    assert listing.beds == 0
-    assert listing.property_type is PropertyType.STUDIO
-    assert listing.sqft is None  # 0 means not given
-    assert listing.available_from is None  # "Available" without a date
-    assert listing.min_lease_months is None
-    assert listing.description == ""
+    assert (listing.raw["deposit"], listing.raw["petDeposit"]) == ("$4200.00", "$300.00")
+    assert listing.baths == 2.5
+    assert listing.min_lease_months == 3
+
+
+def test_a_listing_without_a_neighbourhood_overview_or_fees() -> None:
+    listing = parse_item(items()[3], today=TODAY)
+
+    assert listing.description == "Three-bedroom ranch home with a remodeled kitchen."
+    assert {"deposit", "cleaningFee", "petDeposit", "applicationFee"}.isdisjoint(listing.raw)
+
+
+def test_a_room() -> None:
+    listing = parse_item(items()[4], today=TODAY)
+
+    assert listing.property_type is PropertyType.ROOM
+    assert listing.price == Price(amount=usd(1300))
 
 
 def test_an_item_without_an_id_is_rejected() -> None:
     with pytest.raises(ValueError, match="no id"):
-        parse_item(items()[3], today=TODAY)
+        parse_item(items()[5], today=TODAY)
 
 
 @pytest.mark.parametrize(
-    ("text", "expected"),
+    ("item", "expected"),
     [
-        ("2026-12-01", date(2026, 12, 1)),
-        ("12/01/2026", date(2026, 12, 1)),
-        ("Available Dec 1, 2026", date(2026, 12, 1)),
-        ("Available on: December 1, 2026", date(2026, 12, 1)),
-        ("Soon", None),
-        ("", None),
+        ({"availableOn": "12/01/2026"}, date(2026, 12, 1)),
+        ({"availableOnDate": "Available: Dec. 1, 2026"}, date(2026, 12, 1)),
+        ({"availableOnDate": "Available on: December 1, 2026"}, date(2026, 12, 1)),
+        ({"availableOn": "soon", "availableOnDate": "Available Dec 1, 2026"}, date(2026, 12, 1)),
+        ({"isAvailableNow": True, "availableOn": "12/01/2026"}, TODAY),
+        ({"availableOnDate": "Available"}, None),
+        ({}, None),
     ],
 )
-def test_available_dates(text: str, expected: date | None) -> None:
-    item = {"id": "1_1", "name": "Place", "availableOnDate": text}
+def test_available_dates(item: dict[str, Any], expected: date | None) -> None:
+    listing = parse_item({"listingId": "1_1", "name": "Place", **item}, today=TODAY)
 
-    assert parse_item(item, today=TODAY).available_from == expected
+    assert listing.available_from == expected
 
 
 @pytest.mark.parametrize(
     ("item", "price"),
     [
-        ({"priceValue": "1800.50"}, Price(amount=Money.from_major(Decimal("1800.50"), "USD"))),
-        ({"priceValue": 0, "priceFormatted": "$1,200/month"}, Price(amount=usd(1200))),
-        ({"priceValue": True}, None),
-        ({"priceValue": "n/a"}, None),
+        ({"monthlyRent": "1800.50"}, Price(amount=Money.from_major(Decimal("1800.50"), "USD"))),
+        (
+            {"monthlyRent": "0.00", "rentAmount": {"amount": "$1,200/month", "currency": "USD"}},
+            Price(amount=usd(1200)),
+        ),
+        ({"rentAmount": {"amount": "$1,200/month"}}, Price(amount=usd(1200))),
+        ({"monthlyRent": True}, None),
+        ({"monthlyRent": "n/a"}, None),
         ({}, None),
     ],
 )
 def test_prices(item: dict[str, Any], price: Price | None) -> None:
-    assert parse_item({"id": "1_1", "name": "Place", **item}, today=TODAY).price == price
+    assert parse_item({"listingId": "1_1", "name": "Place", **item}, today=TODAY).price == price
 
 
 @pytest.mark.parametrize(
@@ -193,66 +208,87 @@ def test_prices(item: dict[str, Any], price: Price | None) -> None:
         ({"propertyType": "Apartment"}, PropertyType.APARTMENT),
         ({"propertyType": "Entire Unit - Townhouse"}, PropertyType.TOWNHOUSE),
         ({"propertyType": "Hotel"}, PropertyType.OTHER),
-        ({"propertyTypeClass": "room", "propertyType": "Apartment"}, PropertyType.ROOM),
+        ({"propertyTypeClass": "room", "propertyType": "Room - House"}, PropertyType.ROOM),
         ({}, PropertyType.OTHER),
     ],
 )
 def test_property_types(item: dict[str, Any], expected: PropertyType) -> None:
-    assert parse_item({"id": "1_1", "name": "Place", **item}, today=TODAY).property_type is expected
+    listing = parse_item({"listingId": "1_1", "name": "Place", **item}, today=TODAY)
+
+    assert listing.property_type is expected
 
 
-def test_odd_numbers_are_ignored_not_fatal() -> None:
+def test_odd_values_are_ignored_not_fatal() -> None:
     item = {
         "id": 7,
-        "name": "Place",
+        "title": "Place",
         "bedroomCount": -1,
         "bathroomCount": "lots",
         "latitude": 40.0,
         "longitude": None,
         "url": "https://elsewhere.example.com/7",
+        "photos": [{"url": "/relative.jpg"}, "https://img.example.com/a.jpg", None],
+        "houseRulesGraphql": [None, {"name": "maxVehicles"}],
+        "laundryType": "NONE",
     }
 
     listing = parse_item(item, today=TODAY)
 
-    assert listing.source_id == "7"
+    assert (listing.source_id, listing.title) == ("7", "Place")
     assert str(listing.url) == "https://www.furnishedfinder.com/property/7"
     assert (listing.beds, listing.baths, listing.lat, listing.lng) == (None, None, None, None)
+    assert [str(url) for url in listing.images] == ["https://img.example.com/a.jpg"]
+    assert listing.amenities == frozenset()
 
 
 # --- build_input ---------------------------------------------------------------------
 
 
-def test_input_carries_the_filters_the_actor_supports() -> None:
+@pytest.mark.parametrize(
+    ("location", "url"),
+    [
+        ("Denver, CO", "https://www.furnishedfinder.com/housing/us--co--denver"),
+        ("Long Beach, ca", "https://www.furnishedfinder.com/housing/us--ca--long-beach"),
+        ("St. Louis, MO", "https://www.furnishedfinder.com/housing/us--mo--st-louis"),
+        ("us--tx--austin", "https://www.furnishedfinder.com/housing/us--tx--austin"),
+        ("Denver, Colorado", None),
+        ("Denver", None),
+        (", CO", None),
+    ],
+)
+def test_search_urls(location: str, url: str | None) -> None:
+    assert search_url(location) == url
+
+
+def test_input_carries_the_price_range_in_each_url() -> None:
     criteria = Criteria(
         price_min=Money.from_major(Decimal("1200.50"), "USD"),
         price_max=Money.from_major(Decimal("2999.10"), "USD"),
         min_beds=2,
-        min_baths=1.5,
         property_types_deny=(PropertyType.ROOM,),
     )
 
-    run_input = build_input(criteria, locations=("Exampleville, XX",), max_results=50)
+    run_input = build_input(criteria, locations=("Denver, CO", "Nowhere"), max_results=50)
 
     assert run_input == {
-        "mode": "search",
-        "locations": ["Exampleville, XX"],
-        "propertyTypeClass": "entire_unit",
-        "fetchDetails": True,
-        "fetchReviews": False,
-        "maxPages": 0,
-        "maxListings": 50,
-        "minPrice": 1200,
-        "maxPrice": 3000,
-        "minBedrooms": 2,
-        "minBathrooms": 1,
+        "startUrls": [
+            {
+                "url": "https://www.furnishedfinder.com/housing/us--co--denver?min-price=1200&max-price=3000"
+            }
+        ],
+        "maxItems": 50,
+        "moreDetails": True,
+        "includeReviews": False,
+        "enrichEmails": False,
     }
 
 
-def test_input_leaves_out_what_criteria_leave_open() -> None:
-    run_input = build_input(Criteria(), locations=("A", "B"), max_results=10)
+def test_input_without_a_price_range_has_bare_urls() -> None:
+    run_input = build_input(Criteria(), locations=("Denver, CO",), max_results=10)
 
-    assert run_input["propertyTypeClass"] == "any"
-    assert {"minPrice", "maxPrice", "minBedrooms", "minBathrooms"}.isdisjoint(run_input)
+    assert run_input["startUrls"] == [
+        {"url": "https://www.furnishedfinder.com/housing/us--co--denver"}
+    ]
 
 
 def test_non_usd_prices_are_not_sent() -> None:
@@ -261,32 +297,16 @@ def test_non_usd_prices_are_not_sent() -> None:
         price_min=Money.from_major(1000, "EUR"), price_max=Money.from_major(2000, "EUR")
     )
 
-    assert "minPrice" not in build_input(criteria, locations=("A",), max_results=10)
+    run_input = build_input(criteria, locations=("Denver, CO",), max_results=10)
 
-
-@pytest.mark.parametrize(
-    ("allow", "deny", "expected"),
-    [
-        ((PropertyType.ROOM,), (), "room"),
-        ((PropertyType.APARTMENT, PropertyType.STUDIO), (), "entire_unit"),
-        ((PropertyType.APARTMENT, PropertyType.ROOM), (), "any"),
-        ((), (PropertyType.ROOM,), "entire_unit"),
-        ((), (PropertyType.CONDO,), "any"),
-    ],
-)
-def test_property_type_class(
-    allow: tuple[PropertyType, ...], deny: tuple[PropertyType, ...], expected: str
-) -> None:
-    criteria = Criteria(property_types_allow=allow, property_types_deny=deny)
-
-    assert build_input(criteria, locations=("A",), max_results=10)["propertyTypeClass"] == expected
+    assert "?" not in run_input["startUrls"][0]["url"]
 
 
 # --- The adapter ---------------------------------------------------------------------
 
 
 def settings(**overrides: Any) -> SourcesSettings:  # noqa: ANN401
-    entry = {"api_key": SecretStr(TOKEN), "search_locations": ("Exampleville, XX",), **overrides}
+    entry = {"api_key": SecretStr(TOKEN), "search_locations": ("Denver, CO",), **overrides}
     return SourcesSettings(
         requests_per_minute=600, adapters={"furnished_finder": AdapterOverrides(**entry)}
     )
@@ -319,20 +339,31 @@ def adapter(apify: Apify, source_settings: SourcesSettings | None = None) -> Fur
 def test_search_returns_parsed_listings_and_skips_bad_items() -> None:
     apify = Apify(items())
 
-    listings = adapter(apify).search(Criteria(min_beds=1))
+    listings = adapter(apify).search(Criteria(price_max=usd(5000)))
 
-    assert [listing.source_id for listing in listings] == ["10000001_1", "10000002_3", "10000003_1"]
+    assert [listing.source_id for listing in listings] == [
+        "10000001_1",
+        "10000002_1",
+        "10000003_1",
+        "10000004_1",
+        "10000005_1",
+    ]
     assert all(isinstance(listing, NormalizedListing) for listing in listings)
     start = apify.requests[0]
-    assert str(start.url).startswith(f"{APIFY_API}/acts/abotapi~furnishedfinder-scraper/runs")
+    assert str(start.url).startswith(
+        f"{APIFY_API}/acts/memo23~furnishedfinder-scraper-cheerio/runs"
+    )
     body = json.loads(start.content)
-    assert (body["locations"], body["minBedrooms"], body["maxListings"]) == (
-        ["Exampleville, XX"],
-        1,
+    assert (body["startUrls"], body["maxItems"]) == (
+        [{"url": "https://www.furnishedfinder.com/housing/us--co--denver?max-price=5000"}],
         25,
     )
     # The actor gets the run timeout less a margin, so Apify stops first.
     assert start.url.params["timeout"] == "840"
+
+
+def test_an_empty_dataset_is_no_listings() -> None:
+    assert adapter(Apify(fixture("dataset_empty.json"))).search(Criteria()) == []
 
 
 def test_robots_txt_is_not_fetched_for_the_api() -> None:
@@ -343,18 +374,22 @@ def test_robots_txt_is_not_fetched_for_the_api() -> None:
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)
 
 
-def test_the_providers_nothing_scanned_row_fails_the_run() -> None:
-    apify = Apify(fixture("dataset_error_row.json") + items())
-
-    with pytest.raises(SourceError, match="scanned nothing for Exampleville, XX"):
-        adapter(apify).search(Criteria())
-
-
 def test_no_search_locations_fails_with_a_hint() -> None:
     apify = Apify([])
 
     with pytest.raises(SourceError, match="no search locations"):
         adapter(apify, settings(search_locations=None)).search(Criteria())
+
+    assert apify.requests == []
+
+
+def test_locations_without_a_state_fail_before_anything_is_billed() -> None:
+    apify = Apify([])
+
+    with pytest.raises(SourceError, match="two-letter state"):
+        adapter(apify, settings(search_locations=("Denver", "Boulder, Colorado"))).search(
+            Criteria()
+        )
 
     assert apify.requests == []
 
@@ -367,37 +402,41 @@ def test_no_api_key_fails_with_a_hint() -> None:
         FurnishedFinder(config, transport=httpx2.MockTransport(apify)).search(Criteria())
 
 
-def test_discovered_and_turned_off_while_the_actor_is_broken() -> None:
+def test_discovered_and_runs_when_switched_on() -> None:
     registry = discover()
     assert registry.get("furnished_finder") is FurnishedFinder
 
-    # Every run fails on the actor's side and is still billed (#216), so it stays off
-    # even with a key and pinned on.
-    for sources in (SourcesSettings(), settings(enabled=True)):
-        by_name = {source.config.name: source for source in registry.configured(sources)}
-        config = by_name["furnished_finder"].config
-        assert config.enabled is False
-        assert config.blocker is Blocker.BROKEN
-        assert config.disabled_reason is not None
-        assert "geocoder" in config.disabled_reason
+    by_name = {source.config.name: source for source in registry.configured(settings(enabled=True))}
+    config = by_name["furnished_finder"].config
+    assert config.blocker is None
+    assert config.enabled is True
+    assert config.disabled_reason is None
 
 
 # --- Owner type ----------------------------------------------------------------------
 
 
+def test_a_management_company_is_a_property_manager() -> None:
+    assert parse_item(items()[0], today=TODAY).owner_type is OwnerType.PROPERTY_MANAGER
+
+
 @pytest.mark.parametrize(
-    ("description", "expected"),
+    ("company", "description", "expected"),
     [
-        ("A bright furnished unit near the hospital.", OwnerType.UNKNOWN),
-        ("I am the owner and live nearby.", OwnerType.INDIVIDUAL),
-        ("Managed by Example Property Management.", OwnerType.PROPERTY_MANAGER),
+        # Landlords also fill in an employer, so a plain name is no hint.
+        ("Example High School", "A bright furnished room.", OwnerType.UNKNOWN),
+        ("Example", "A bright furnished room.", OwnerType.UNKNOWN),
+        (None, "I am the owner and live nearby.", OwnerType.INDIVIDUAL),
+        (None, "Managed by Example Property Management.", OwnerType.PROPERTY_MANAGER),
+        ("Example Stays LLC", "I am the owner and live nearby.", OwnerType.PROPERTY_MANAGER),
     ],
 )
-def test_owner_type_comes_from_the_text_alone(description: str, expected: OwnerType) -> None:
-    item = {**items()[0], "description": description, "spaceDescription": None}
+def test_owner_type(company: str | None, description: str, expected: OwnerType) -> None:
+    item = {
+        "listingId": "1_1",
+        "name": "Room",
+        "description": description,
+        "landlordCompany": company,
+    }
+
     assert parse_item(item, today=TODAY).owner_type is expected
-
-
-def test_the_documented_items_have_an_unknown_owner_type() -> None:
-    parsed = [parse_item(item, today=TODAY) for item in items()[:3]]
-    assert {listing.owner_type for listing in parsed} == {OwnerType.UNKNOWN}

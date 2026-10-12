@@ -1,27 +1,31 @@
 """Mapping between furnest and the Furnished Finder data provider's JSON.
 
 The adapter gets Furnished Finder listings through the Apify actor
-``abotapi/furnishedfinder-scraper`` (see ``docs/adapters.md`` for why). This module
-is pure: :func:`build_input` turns criteria into the actor's input, and
-:func:`parse_item` turns one dataset item into a :class:`NormalizedListing`.
+``memo23/furnishedfinder-scraper-cheerio`` (see ``docs/adapters.md`` for why, and how it
+compared with the other actors in #216). This module is pure: :func:`build_input`
+turns criteria into the actor's input, and :func:`parse_item` turns one dataset item
+into a :class:`NormalizedListing`.
 
-Criteria the actor can filter on are sent along to keep runs (which are billed per
-listing) small: monthly price range in USD, minimum beds and baths, and entire unit
-vs room. Everything else is left to matching. Locations come from the adapter's
-``search_locations``, because the actor searches by city name, not by area.
+The actor takes Furnished Finder URLs and nothing else. Each search location becomes
+the city's search page, ``/housing/us--<st>--<city>`` (:func:`search_url`). Live runs
+(#221) showed the page honours ``min-price`` and ``max-price`` but ignores
+``property-type-class``, so the monthly price range in USD is sent and the property
+type, beds and the move-in date are left to matching. ``moreDetails`` is on, because
+the description, house rules and fees come from the property page.
 
-Item fields, as the actor documents them, map like this:
+Item fields, as live runs returned them, map like this:
 
 ========================================  ===========================================
 actor field                               NormalizedListing
 ========================================  ===========================================
-``id`` (else ``propertyId_unitId``)       ``source_id``
+``listingId`` (``<id>_<unit>``, else      ``source_id``
+``id``)
 ``url`` (else ``/property/<id>``)         ``url``
-``name``                                  ``title``
-``description``, ``spaceDescription``,    ``description``, in that order, blank lines
-``neighborhoodDescription``               between
-``priceValue`` + ``priceCurrency``        ``price`` per month (else ``priceFormatted``
-                                          parsed)
+``name`` (else ``title``)                 ``title``
+``description``,                          ``description``, a blank line between
+``neighborhoodOverview``
+``monthlyRent`` (``"1800.00"``) +         ``price`` per month (else ``rentAmount``'s
+``rentAmount.currency``                   ``amount`` text parsed)
 ``city``, ``state``                       ``address.city``, ``address.region`` (US)
 ``latitude``, ``longitude``               ``lat``, ``lng``
 ``bedroomCount``, ``bathroomCount``       ``beds``, ``baths`` (to the nearest half)
@@ -29,17 +33,22 @@ actor field                               NormalizedListing
 ``propertyTypeClass`` ``room``, else      ``property_type``
 ``propertyType``
 ``amenities`` (camelCase keys),           ``amenities``, as words ("airConditioning"
-``laundryType``, ``utilitiesIncluded``    → "air conditioning") the keyword extractor
-                                          reads
-``isAvailableNow``, ``availableOnDate``   ``available_from`` (today when available now)
+``houseRulesGraphql``, ``laundryType``,   → "air conditioning", ``petsNotAllowed`` →
+``utilitiesIncluded``                     "no pets") the keyword extractor reads
+``isAvailableNow``, ``availableOn``       ``available_from`` (today when available now)
+(``MM/DD/YYYY``), ``availableOnDate``
 ``minimumStayDays``                       ``min_lease_months``, rounded up from 30-day
                                           months
-``photos``                                ``images``
+``photos[].url``                          ``images``
+``landlordCompany``                       ``owner_type`` hint: a name that reads as a
+                                          property manager, else the text decides
 ========================================  ===========================================
 
 Every listing is ``furnished``, and ``contact.platform_only`` is set: Furnished Finder
-hides landlord contact details behind its own messaging. Reviews are dropped from
-``raw`` because they carry reviewers' names.
+hides landlord contact details behind its own messaging. Items carry the landlord's
+name, username, photo, biography and verifications, so ``raw`` keeps a whitelist of
+listing facts (fees included, which have no field of their own) and nothing about the
+person.
 """
 
 from __future__ import annotations
@@ -49,6 +58,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import urlencode
 
 from furnest.domain import (
     Address,
@@ -56,6 +66,7 @@ from furnest.domain import (
     Criteria,
     Money,
     NormalizedListing,
+    OwnerType,
     Price,
     PropertyType,
     infer_owner_type,
@@ -65,22 +76,94 @@ from furnest.domain import (
 from furnest.sources.adapters._values import half, number, positive, text, whole
 
 SOURCE = "furnished_finder"
-ACTOR = "abotapi/furnishedfinder-scraper"
+ACTOR = "memo23/furnishedfinder-scraper-cheerio"
 SITE = "https://www.furnishedfinder.com"
 _USD = "USD"
+DAYS_PER_MONTH = 30
 
-# Item keys left out of ``raw``: reviews name their authors.
-_RAW_EXCLUDED = frozenset({"reviews"})
+# Listing facts kept in ``raw``. Everything else on an item is either mapped above or
+# about the landlord (names, username, photo, biography, LinkedIn, verifications).
+_RAW_KEPT = frozenset(
+    {
+        "id",
+        "listingId",
+        "url",
+        "name",
+        "title",
+        "description",
+        "neighborhoodOverview",
+        "propertyType",
+        "propertyTypeClass",
+        "bedroomCount",
+        "bathroomCount",
+        "squareFootage",
+        "totalSleeps",
+        "monthlyRent",
+        "rentAmount",
+        "deposit",
+        "petDeposit",
+        "cleaningFee",
+        "applicationFee",
+        "utilitiesIncluded",
+        "laundryType",
+        "amenities",
+        "houseRulesGraphql",
+        "minimumStayDays",
+        "isAvailableNow",
+        "availableOn",
+        "availableOnDate",
+        "city",
+        "state",
+        "latitude",
+        "longitude",
+        "encodedLocationName",
+        "averageRating",
+        "totalReviewCount",
+    }
+)
 # Amenity keys whose words would mislead the keyword extractor, or that don't split.
 _AMENITY_OVERRIDES: dict[str, str | None] = {
     "petsLiveOnThisProperty": None,  # the landlord's pets, not "pets allowed"
     "petsOnProperty": None,
     "washeranddryer": "washer and dryer",
+    "washeranddryeronpremises": "washer and dryer on-site",
 }
+# House rules, as words the extractor reads both ways.
+_HOUSE_RULES: dict[str, str] = {
+    "petsAllowed": "pets allowed",
+    "petsNotAllowed": "no pets",
+    "smokingAllowed": "smoking allowed",
+    "smokingNotAllowed": "no smoking",
+}
+# ``laundryType``, lower-cased: codes, and a phrase the extractor would read as in-unit.
+# Other values ("In-Unit W/D") are already words.
+_LAUNDRY: dict[str, str | None] = {
+    "in_unit": "in-unit laundry",
+    "shared": "shared laundry",
+    "in complex w/d": "shared laundry",
+    "none": None,
+}
+# A ``landlordCompany`` that reads as a management business. The field is free text,
+# and landlords also fill in an employer ("… High School"), so a plain name is no hint.
+_MANAGER_NAME = re.compile(
+    r"\b(?:management|properties|property|apartments|residential|realty|rentals|housing|"
+    r"stays|suites|homes|communities|holdings|llc|inc)\b",
+    re.IGNORECASE,
+)
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
-_DATE_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%B %d %Y")
+_DATE_FORMATS = (
+    "%m/%d/%Y",
+    "%Y-%m-%d",
+    "%b. %d, %Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+    "%b %d %Y",
+    "%B %d %Y",
+)
 _AVAILABLE_PREFIX = re.compile(r"^\s*available(?:\s+(?:on|from))?\s*:?\s*", re.IGNORECASE)
-DAYS_PER_MONTH = 30
+_SLUG = re.compile(r"^us--[a-z]{2}--[a-z0-9]+(?:-[a-z0-9]+)*$")
+_NON_SLUG = re.compile(r"[^a-z0-9]+")
+_STATE = re.compile(r"^[A-Za-z]{2}$")
 
 
 # --- Criteria → actor input -------------------------------------------------------
@@ -89,44 +172,46 @@ DAYS_PER_MONTH = 30
 def build_input(
     criteria: Criteria, *, locations: tuple[str, ...], max_results: int
 ) -> dict[str, Any]:
-    run_input: dict[str, Any] = {
-        "mode": "search",
-        "locations": list(locations),
-        "propertyTypeClass": _type_class(criteria),
-        "fetchDetails": True,
-        "fetchReviews": False,
-        "maxPages": 0,
-        "maxListings": max_results,
+    """The actor's input: one search URL per usable location (see :func:`search_url`)."""
+    query = urlencode(_price_params(criteria))
+    urls = [url for url in map(search_url, locations) if url]
+    return {
+        "startUrls": [{"url": f"{url}?{query}" if query else url} for url in urls],
+        "maxItems": max_results,
+        "moreDetails": True,
+        # Reviews carry reviewers' names, and each email found is billed $0.05.
+        "includeReviews": False,
+        "enrichEmails": False,
     }
+
+
+def search_url(location: str) -> str | None:
+    """``Long Beach, CA`` → ``…/housing/us--ca--long-beach``; a slug passes as is.
+
+    ``None`` when the location has no two-letter state, which the URL needs.
+    """
+    place = location.strip().lower()
+    if _SLUG.match(place):
+        return f"{SITE}/housing/{place}"
+    city, _, state = location.rpartition(",")
+    state = state.strip()
+    city_slug = _NON_SLUG.sub("-", city.lower()).strip("-")
+    if not city_slug or not _STATE.match(state):
+        return None
+    return f"{SITE}/housing/us--{state.lower()}--{city_slug}"
+
+
+def _price_params(criteria: Criteria) -> dict[str, int]:
+    # Whole dollars, rounded outwards so the search is never narrower than the criteria.
+    params: dict[str, int] = {}
     if criteria.price_min is not None and criteria.price_min.currency == _USD:
-        run_input["minPrice"] = math.floor(criteria.price_min.major)
+        params["min-price"] = math.floor(criteria.price_min.major)
     if criteria.price_max is not None and criteria.price_max.currency == _USD:
-        run_input["maxPrice"] = math.ceil(criteria.price_max.major)
-    if criteria.min_beds is not None:
-        run_input["minBedrooms"] = criteria.min_beds
-    if criteria.min_baths is not None:
-        # The actor takes whole baths; rounding down only widens the search.
-        run_input["minBathrooms"] = math.floor(criteria.min_baths)
-    return run_input
-
-
-def _type_class(criteria: Criteria) -> str:
-    allow = set(criteria.property_types_allow)
-    if allow == {PropertyType.ROOM}:
-        return "room"
-    if PropertyType.ROOM in criteria.property_types_deny or (
-        allow and PropertyType.ROOM not in allow
-    ):
-        return "entire_unit"
-    return "any"
+        params["max-price"] = math.ceil(criteria.price_max.major)
+    return params
 
 
 # --- Actor item → NormalizedListing -------------------------------------------------
-
-
-def is_error_row(item: dict[str, Any]) -> bool:
-    """The actor's "nothing was scanned" row: an empty search, or a blocked first page."""
-    return item.get("error") is True
 
 
 def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
@@ -138,7 +223,8 @@ def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
     lat, lng = number(item.get("latitude")), number(item.get("longitude"))
     if lat is None or lng is None:
         lat = lng = None
-    title, description = text(item.get("name")), _description(item)
+    title = text(item.get("name")) or text(item.get("title"))
+    description = _description(item)
     return NormalizedListing(
         source=SOURCE,
         source_id=source_id,
@@ -155,52 +241,49 @@ def parse_item(item: dict[str, Any], *, today: date) -> NormalizedListing:
         baths=half(item.get("bathroomCount")),
         sqft=positive(item.get("squareFootage")),
         property_type=_property_type(item),
-        # The actor carries nothing about the landlord, so only the text can tell.
-        owner_type=infer_owner_type(title, description),
+        owner_type=infer_owner_type(title, description, hint=_owner_type(item)),
         furnished=True,
         amenities=_amenities(item),
         available_from=_available_from(item, today),
         min_lease_months=_lease_months(item),
         images=_photos(item),  # type: ignore[arg-type]
         contact=Contact(platform_only=True),
-        raw={k: v for k, v in item.items() if k not in _RAW_EXCLUDED},
+        raw={k: v for k, v in item.items() if k in _RAW_KEPT},
     )
 
 
 def _source_id(item: dict[str, Any]) -> str:
-    if isinstance(item.get("id"), str | int) and str(item["id"]).strip():
-        return str(item["id"]).strip()
-    property_id, unit_id = item.get("propertyId"), item.get("unitId")
-    if property_id is not None and unit_id is not None:
-        return f"{property_id}_{unit_id}"
+    for key in ("listingId", "id"):
+        value = item.get(key)
+        if isinstance(value, str | int) and not isinstance(value, bool) and str(value).strip():
+            return str(value).strip()
     msg = "item has no id"
     raise ValueError(msg)
 
 
 def _description(item: dict[str, Any]) -> str:
-    parts = (
-        text(item.get(key))
-        for key in ("description", "spaceDescription", "neighborhoodDescription")
-    )
+    parts = (text(item.get(key)) for key in ("description", "neighborhoodOverview"))
     return "\n\n".join(part for part in parts if part)
 
 
 def _price(item: dict[str, Any]) -> Price | None:
-    currency = text(item.get("priceCurrency")).upper() or _USD
-    value = item.get("priceValue")
-    if isinstance(value, int | float | str) and not isinstance(value, bool):
+    rent = item.get("rentAmount")
+    rent = rent if isinstance(rent, dict) else {}
+    currency = text(rent.get("currency")).upper() or _USD
+    found = number(item.get("monthlyRent"))
+    if found is not None and found > 0:
         try:
-            amount = Decimal(str(value))
-        except InvalidOperation:
-            amount = Decimal(0)
-        if amount > 0:
-            return Price(amount=Money.from_major(amount, currency))
-    return parse_price(text(item.get("priceFormatted")) or None, currency=currency)
+            return Price(amount=Money.from_major(Decimal(str(item["monthlyRent"])), currency))
+        except (InvalidOperation, ValueError):
+            pass
+    return parse_price(text(rent.get("amount")) or None, currency=currency)
 
 
 def _photos(item: dict[str, Any]) -> tuple[str, ...]:
-    photos = item.get("photos") or ()
-    return tuple(p for p in photos if isinstance(p, str) and p.startswith("http"))
+    urls = (
+        photo.get("url") if isinstance(photo, dict) else photo for photo in item.get("photos") or ()
+    )
+    return tuple(url for url in urls if isinstance(url, str) and url.startswith("http"))
 
 
 def _property_type(item: dict[str, Any]) -> PropertyType:
@@ -209,11 +292,18 @@ def _property_type(item: dict[str, Any]) -> PropertyType:
     label = text(item.get("propertyType"))
     found = normalize_property_type(label)
     if found is PropertyType.OTHER and " - " in label:
-        # "Room - Apartment", "Entire Unit - House": try each part.
+        # "Room - House", "Entire Unit - Townhouse": try each part.
         for part in label.split(" - "):
             if (found := normalize_property_type(part)) is not PropertyType.OTHER:
                 break
     return found
+
+
+def _owner_type(item: dict[str, Any]) -> OwnerType:
+    """A landlord company that reads as a management business; else no hint (#113)."""
+    if _MANAGER_NAME.search(text(item.get("landlordCompany"))):
+        return OwnerType.PROPERTY_MANAGER
+    return OwnerType.UNKNOWN
 
 
 def _amenities(item: dict[str, Any]) -> frozenset[str]:
@@ -224,8 +314,12 @@ def _amenities(item: dict[str, Any]) -> frozenset[str]:
         label = _AMENITY_OVERRIDES.get(key, _CAMEL_BOUNDARY.sub(" ", key.strip()))
         if label:
             tags.add(label.lower())
-    if laundry := text(item.get("laundryType")):
-        tags.add(laundry.lower())
+    for rule in item.get("houseRulesGraphql") or ():
+        if isinstance(rule, dict) and (words := _HOUSE_RULES.get(text(rule.get("name")))):
+            tags.add(words)
+    laundry = text(item.get("laundryType")).lower()
+    if laundry := _LAUNDRY.get(laundry, laundry) or "":
+        tags.add(laundry)
     if item.get("utilitiesIncluded") is True:
         tags.add("utilities included")
     return frozenset(tags)
@@ -234,12 +328,13 @@ def _amenities(item: dict[str, Any]) -> frozenset[str]:
 def _available_from(item: dict[str, Any], today: date) -> date | None:
     if item.get("isAvailableNow") is True:
         return today
-    when = _AVAILABLE_PREFIX.sub("", text(item.get("availableOnDate")))
-    for fmt in _DATE_FORMATS:
-        try:
-            return datetime.strptime(when, fmt).date()
-        except ValueError:
-            continue
+    for value in (item.get("availableOn"), item.get("availableOnDate")):
+        when = _AVAILABLE_PREFIX.sub("", text(value))
+        for fmt in _DATE_FORMATS:
+            try:
+                return datetime.strptime(when, fmt).date()
+            except ValueError:
+                continue
     return None
 
 
