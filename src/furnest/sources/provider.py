@@ -1,9 +1,10 @@
 """Adapters backed by a data provider: a service that fetches a source and returns JSON.
 
 Some sources can't be fetched directly (Furnished Finder and Zillow sit behind bot
-checks, Airbnb's robots.txt disallows its search). furnest doesn't work around that
+checks, Airbnb's robots.txt disallows its search). furnest doesn't get past bot checks
 itself; a data provider does the fetching, and the adapter makes an authenticated API
-call to it. See ``docs/adapters.md`` ("Data providers and self-hosted alternatives").
+call to it. See ``docs/adapters.md`` ("Data providers and self-hosted alternatives" and
+"Personal-use access policy").
 
 Two pieces:
 

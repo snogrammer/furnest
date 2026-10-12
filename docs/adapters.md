@@ -479,7 +479,7 @@ SOURCES_ADAPTERS={"airbnb": {"api_key": "your-apify-token", "search_locations": 
 | Option | Finding |
 | --- | --- |
 | Official API or feed | None for searching stays. Airbnb's APIs are for approved software partners that manage hosts' listings. |
-| Direct HTTP scraping | `/s/<place>/homes` answers plain HTTP with a 200 and the results as embedded JSON, but `robots.txt` disallows `/s/*/*` (every search page) and `/api/v3/...StaysQuery` for all crawlers, and Airbnb's terms forbid scraping. `SourceHttpClient` respects robots.txt, so this is out. |
+| Direct HTTP scraping | `/s/<place>/homes` answers plain HTTP with a 200 and the results as embedded JSON, but `robots.txt` disallows `/s/*/*` (every search page) and `/api/v3/...StaysQuery` for all crawlers, and Airbnb's terms forbid scraping. `SourceHttpClient` respects robots.txt, so this was out. Re-probed on #216 for a direct adapter behind the robots opt-out (#224), see [Personal-use access policy](#personal-use-access-policy-216-part-3). |
 | Browser scraping | The same pages, so the same robots.txt rules. |
 | Third-party data provider | Many Apify actors scrape Airbnb. The provider handles access, and furnest makes an authenticated API call. **Chosen.** |
 
@@ -828,8 +828,9 @@ looked for free self-hosted tools to use instead.
 
 **The constraint.** These three sources are behind a provider for a reason: Furnished
 Finder shows a Cloudflare Turnstile check, Zillow a PerimeterX "press & hold" check,
-and Airbnb's robots.txt disallows its search. furnest doesn't get past bot checks or
-ignore robots.txt itself (decided on #24). A self-hosted scraper runs on our own
+and Airbnb's robots.txt disallows its search. furnest doesn't get past bot checks
+(decided on #24). On #216 robots.txt became a per-source opt-out, see
+[Personal-use access policy](#personal-use-access-policy-216-part-3). A self-hosted scraper runs on our own
 machine and fetches the sites from it, so it hits the same blocks. What the Apify
 actors charge for is mostly the access itself (their proxies and anti-bot handling),
 and self-hosting doesn't replace that.
@@ -842,9 +843,9 @@ and self-hosting doesn't replace that.
 | [Firecrawl](https://github.com/firecrawl/firecrawl) (self-hosted) | Scrape and crawl API that returns markdown or JSON. | AGPL-3.0 | Docker Compose with a REST API. The hosted service's anti-bot layer isn't part of the self-hosted build. | No, same reason. |
 | [Scrapy](https://scrapy.org) + scrapy-playwright | The standard Python scraping framework. | BSD-3 | A library. | No, same reason. furnest's own `sources/http.py` and `sources/browser.py` already cover this ground. |
 
-**Outcome.** Apify stays the backend for these three sources. Its free plan includes
-$5 of usage a month (it doesn't roll over), and the next section shows how to stay
-inside that. The search left something useful behind: provider-backed adapters no
+**Outcome.** Apify stays the backend for these three sources. The account is on the
+Starter plan ($19 of usage a month since 2026-10-12, #216), and the next section shows
+how to stay inside that. The search left something useful behind: provider-backed adapters no
 longer depend on Apify directly.
 
 **The provider seam.** `sources/provider.py` defines `DataProvider`, a backend with a
@@ -985,11 +986,58 @@ Apartments.com project to about $8 a month. Furnished Finder on `memo23` would a
 about $1.50. That leaves room for more search locations or a shorter interval on
 the sources that matter most.
 
+## Personal-use access policy (#216 part 3)
+
+furnest is a personal, non-commercial tool for finding a place to live, and nothing it
+collects is resold. The #24 and #111 decisions were stricter than that needs for pages
+that are served plainly. They were revisited on 2026-10-12, and these are the rules now.
+
+**Direct HTTP where pages answer plainly.** A source whose pages answer plain HTTP
+from our own host is fetched directly through `SourceHttpClient`, at a polite pace: a
+few requests a minute (`requests_per_minute`, 6 by default), a daily or slower
+cadence, and detail pages cached between runs. This is the Craigslist, Landing and
+Blueground pattern, and it's preferred over a paid provider when it works.
+
+**robots.txt is the operator's choice, per source.** `respect_robots` is on by
+default. Setting it to `false` for one source (`SOURCES_ADAPTERS` today, a switch on
+the Sources page with #223) makes furnest ignore that site's robots.txt and nothing
+else: the rate limit, retries and block detection still apply. It's meant for sites
+that serve their pages plainly but disallow search in robots.txt. The site's terms may
+still forbid it, and the docs for each source say so.
+
+Airbnb is the case in point. One request on 2026-10-12 to
+`/s/Denver--CO/homes` with furnest's own user agent got a 200 with no challenge, and
+20 listings embedded as JSON in the page's `data-deferred-state` script. robots.txt
+still disallows `/s/*/*` for every crawler, so a direct adapter would only run with
+`respect_robots: false`. The `monthly_stay` parameters were ignored (prices came back
+"for 5 nights"), so it has to send check-in and check-out dates, as the Apify adapter
+does. Building it is #224. It would replace the actor's $3 or so a month.
+
+**The user's own browsing.** For sites that block automated access (Zillow, Furnished
+Finder, Zumper, Apartments.com), the user can hand furnest a listing page they're
+already looking at: a "Save to furnest" bookmarklet, or pasting the URL and the page's
+HTML (#225). The page comes from the user's browser. furnest never fetches the
+blocked URL itself.
+
+**Saved-search alert emails.** Zillow, Furnished Finder, Zumper and Apartments.com email
+new matches for a saved search at no cost. Read from a dedicated IMAP folder, they
+become a free, summary-only source (#226). Only what's in the email is used, and the
+linked pages on blocked sites are not fetched.
+
+**Unchanged.** No CAPTCHA solving (CaptchaSonic and CapSolver were declined on #215),
+no getting past Turnstile, PerimeterX or Akamai challenges, no stealth browsers and no
+user-agent or proxy rotation to dodge a block. A 403 or a challenge page still fails the
+run. Personal use doesn't change what these are. Those sites also ban IPs and accounts,
+which would lock the user out of the sites they're using to find a place. Sources behind
+such checks stay on a data provider (Apify), or come in through the user's browsing or
+alert emails.
+
 ## Candidates
 
 Sources that are built, researched, or ruled out. The research for #48 was done on
 2026-10-07 with plain HTTP and a polite user agent, the same way as for the built
-adapters, and furnest doesn't get past bot checks (see Furnished Finder above).
+adapters, and furnest doesn't get past bot checks (see
+[Personal-use access policy](#personal-use-access-policy-216-part-3)).
 
 The researched sources are registered as **stubs** in
 `sources/adapters/stubs.py`. A stub has a `sources` row and a row on `/sources`, but
