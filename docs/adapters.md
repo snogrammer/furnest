@@ -925,6 +925,66 @@ use, and a cheaper Zillow actor is part 2 of #216.
 
 The account's usage is also at `https://console.apify.com/billing`.
 
+### Cheaper providers (#216 part 2, 2026-10-12)
+
+A time-boxed spike, run live on the Starter plan (Bronze-tier prices) against
+Denver, CO. Each run was capped with `maxTotalChargeUsd` 0.50, and the whole spike
+billed $0.32. The costs below are what Apify billed (`usageTotalUsd`), not list
+prices.
+
+**Zillow: keep `igolaizola/zillow-scraper-ppe`.**
+
+| Actor | Run | Billed | Per listing | What it returns |
+| --- | --- | --- | --- | --- |
+| `igolaizola/zillow-scraper-ppe` (current) | 25, furnished filter, `fetchDetails` | $0.0705 | $0.0028 ($0.0009 item + $0.0019 detail) | everything the mapping uses, including `_details` description, `resoFacts` and lease terms |
+| `themineworks/zillow-rental-listings` | 25 | $0.0438 | $0.00175 | address, rent, beds, coordinates, URL; no description, amenities or furnished field |
+| `crawlio/zillow-scraper` | 41 (one page) | $0.0296 | $0.00072 | the same summary fields and photos. Its `details` mode by zpid returned nothing: Zillow answered its session with a 403 |
+| `rigelbytes/zillow-scraper` | not run | | $0.0024 list | takes a zip code only, no furnished filter, no users in 30 days |
+
+None of the cheaper actors has a furnished filter, so they'd bill for every
+unfurnished rental in a city and then drop it, and none returns the description,
+amenities or lease terms that matching uses. `igolaizola`'s search-only output
+(`fetchDetails: false`, $0.0009 a listing) lacks them too, so details stay on.
+
+Of each listing's cost, $0.0019 is the details fee, and a daily run of the 25
+newest re-buys details for listings it has already seen. Denver had 86 furnished,
+entire-place listings new in the past week (`timeOnZillow: "1w"`), about 12 a day.
+A `timeOnZillow` window would bill only new listings, about $1 a month instead of
+$2.19. But listings older than the window would then drop out of every run, and
+missed-run removal (`remove_after_missed_runs`) would mark them removed. At about $1
+a month that isn't worth reworking removal, so it isn't planned.
+
+**Furnished Finder: switch to `memo23/furnishedfinder-scraper-cheerio`** (#221).
+
+| Actor | Run | Billed | Per listing | What it returns |
+| --- | --- | --- | --- | --- |
+| `memo23/furnishedfinder-scraper-cheerio`, `moreDetails` | 20 | $0.045 | $0.00225 | description, amenities, fees and deposit, utilities, square footage, minimum stay, availability, photos, landlord name and company |
+| `jongoose/furnished-finder-scraper` | 20 | $0.020 | $0.0010 | summary fields and amenities; no description |
+| `shahidirfan/furnished-finder-scraper` | 20 | $0.019 | $0.00096 | summary fields and photos; no description or amenities |
+| `abotapi/furnishedfinder-scraper` (current, off) | not run | | $0.08 start + $0.0025 | fails on every location since 2026-10-07 |
+
+All three new actors worked on the first try. `memo23` (already behind Zumper)
+is the only one with what matching and the property page use. Daily runs of 25 come
+to about $1.50 a month.
+
+**Apartments.com on Starter.** A run of 10 returned real listings, with no demo-mode
+placeholders. The Free plan's 5-runs-a-month cap doesn't apply to paid plans.
+
+**Bright Data Web Scraper API (not now).** The pricing page (read 2026-10-12) lists a
+free tier of 5,000 records a month with no credit card, then $1.50 per 1,000 records
+pay-as-you-go. Its Zillow scrapers take listing URLs, a Zillow search URL (which can
+carry the furnished filter) or location filters. They document description and
+photos but no furnished, amenity or lease fields, and full details are a separate
+record per listing. It would mean a sign-up and a second `DataProvider`, for savings
+of a few dollars a month. Revisit it if Apify prices rise or an actor disappears.
+
+**Apify Starter (chosen 2026-10-12).** $19 of usage a month. Store actors are billed
+at Bronze-tier prices, residential proxy costs $8 a GB, and Apartments.com has no
+demo-mode cap. With the defaults (daily runs of 25), Zillow, Airbnb, Zumper and
+Apartments.com project to about $8 a month. Furnished Finder on `memo23` would add
+about $1.50. That leaves room for more search locations or a shorter interval on
+the sources that matter most.
+
 ## Candidates
 
 Sources that are built, researched, or ruled out. The research for #48 was done on
