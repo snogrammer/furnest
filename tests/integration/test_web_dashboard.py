@@ -288,8 +288,24 @@ def test_cards_show_the_first_photo(authed_client: TestClient, seed: Seed) -> No
     html = get(authed_client)
 
     assert html.count('class="card-photo"') == 1
-    assert 'src="https://img.example.com/a.jpg"' in html
+    assert html.count('class="card-photo no-photo"') == 1
+    assert 'src="/photo?src=https%3A%2F%2Fimg.example.com%2Fa.jpg"' in html
     assert "b.jpg" not in html
+
+
+def test_cards_link_photos_directly_when_the_proxy_is_off(
+    authed_client: TestClient, seed: Seed
+) -> None:
+    seed(images=("https://img.example.com/a.jpg",))
+    state = authed_client.app.state  # type: ignore[attr-defined]
+    images = state.settings.images.model_copy(update={"proxy_enabled": False})
+    state.settings = state.settings.model_copy(update={"images": images})
+
+    assert 'src="https://img.example.com/a.jpg"' in get(authed_client)
+
+
+def test_pages_load_the_photo_placeholder_script(authed_client: TestClient) -> None:
+    assert "/static/js/photos.js" in get(authed_client)
 
 
 def test_full_page_has_no_out_of_band_swap(authed_client: TestClient) -> None:

@@ -123,7 +123,8 @@
     {% if d.images %}
     <ul class="gallery">
       {% for url in d.images %}
-      <li><a href="{{ url }}" rel="noopener noreferrer" target="_blank"><img src="{{ url }}" alt="Photo {{ loop.index }}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a></li>
+      {% set src = photo_src(request, url) %}
+      <li><a href="{{ src }}" rel="noopener noreferrer" target="_blank"><img src="{{ src }}" alt="Photo {{ loop.index }}" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a></li>
       {% endfor %}
     </ul>
     {% else %}

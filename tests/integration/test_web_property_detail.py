@@ -121,8 +121,8 @@ def test_page_shows_everything_about_the_property(
     assert "$2,400.00/mo" in html
     assert "1 bd · 1 ba · 650 sqft" in html
     # Gallery: remote photos, no referrer.
-    assert 'src="https://img.example.com/1.jpg"' in html
-    assert 'src="https://img.example.com/2.jpg"' in html
+    assert 'src="/photo?src=https%3A%2F%2Fimg.example.com%2F1.jpg"' in html
+    assert 'src="/photo?src=https%3A%2F%2Fimg.example.com%2F2.jpg"' in html
     assert 'referrerpolicy="no-referrer"' in html
     # Listings with the source link.
     assert 'href="https://example.com/l1"' in html

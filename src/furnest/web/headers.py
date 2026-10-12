@@ -3,9 +3,9 @@
 The CSP allows only same-origin scripts, styles and form targets, and forbids
 framing. That is why htmx is vendored instead of loaded from a CDN, and why
 ``base.html`` tells htmx not to inject inline indicator styles or ``eval`` code.
-Images may also come from any ``https:`` origin, because listing photos live on
-the sources' CDNs (the detail page, #30); pages load them with
-``referrerpolicy="no-referrer"``, and #49 may serve local copies instead. HSTS is
+Images may also come from any ``https:`` origin. Pages normally load listing photos
+through the same-origin ``/photo`` proxy (#212), but with ``IMAGES_PROXY_ENABLED``
+off they hot-link the sources' CDNs, with ``referrerpolicy="no-referrer"``. HSTS is
 the reverse proxy's job, since only it knows whether the site is served over HTTPS;
 ``deploy/Caddyfile.example`` sets it, along with a request body size limit.
 

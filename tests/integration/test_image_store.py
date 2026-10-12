@@ -150,3 +150,12 @@ def test_rewriting_photos_keeps_state_for_urls_still_there(
         kept = session.scalars(select(ListingImage).where(ListingImage.url == A)).one()
         assert kept.position == 1
         assert kept.hashed_at == T0
+
+
+def test_known_is_true_only_for_stored_photo_urls(
+    listings: SqlListingStore, images: SqlImageStore
+) -> None:
+    add(listings, "l1", [A])
+
+    assert images.known(A)
+    assert not images.known(B)

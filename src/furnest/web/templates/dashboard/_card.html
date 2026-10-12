@@ -1,6 +1,6 @@
 {% macro card(row, selectable=false) %}{% set p = row.property %}{% set l = row.listing %}
 <article class="property-card" id="property-{{ p.id }}">
-  {% if l and l.photo_url %}<a class="card-photo" href="/properties/{{ p.id }}" tabindex="-1" aria-hidden="true"><img src="{{ l.photo_url }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a>{% endif %}
+  <a class="card-photo{% if not (l and l.photo_url) %} no-photo{% endif %}" href="/properties/{{ p.id }}" tabindex="-1" aria-hidden="true">{% if l and l.photo_url %}<img src="{{ photo_src(request, l.photo_url) }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">{% endif %}</a>
   <header>
     {% if selectable %}<input type="checkbox" class="select" name="ids" value="{{ p.id }}" form="bulk" aria-label="Select {% if l %}{{ l.title }}{% else %}property #{{ p.id }}{% endif %}">{% endif %}
     <h3><a href="/properties/{{ p.id }}">{% if l %}{{ l.title }}{% else %}Property #{{ p.id }}{% endif %}</a></h3>

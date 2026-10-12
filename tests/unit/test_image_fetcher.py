@@ -211,6 +211,36 @@ def test_rate_limit_is_per_host(fetcher: Callable[..., ImageFetcher], t: FakeTim
     assert t.slept == [pytest.approx(1.0)]
 
 
+def test_fetch_image_returns_the_content_type(fetcher: Callable[..., ImageFetcher]) -> None:
+    images = fetcher(
+        Host(httpx2.Response(200, content=ROOM, headers={"content-type": "image/JPEG; x=1"}))
+    )
+
+    image = images.fetch_image(URL)
+
+    assert image.body == ROOM
+    assert image.content_type == "image/jpeg"
+
+
+def test_rate_and_burst_can_be_overridden(t: FakeTime) -> None:
+    images = ImageFetcher(
+        ImageSettings(requests_per_minute=1),
+        SourcesSettings(respect_robots=False),
+        transport=httpx2.MockTransport(Host(jpeg())),
+        clock=t.clock,
+        sleep=t.sleep,
+        requests_per_minute=120,
+        burst=3,
+    )
+
+    for n in range(3):
+        images.fetch(f"https://a.example.com/{n}.jpg")
+    assert t.slept == []
+
+    images.fetch("https://a.example.com/3.jpg")
+    assert t.slept == [pytest.approx(0.5)]
+
+
 def test_a_slow_drip_stream_hits_the_total_deadline(
     fetcher: Callable[..., ImageFetcher], t: FakeTime
 ) -> None:

@@ -422,6 +422,14 @@ class ImageSettings(_Group):
     timeout_seconds: PositiveInt = 15
     # Per image host, enforced by a token bucket.
     requests_per_minute: PositiveFloat = 30.0
+    # The web app serves listing photos from its own origin (``/photo``), so browser
+    # blockers that drop a source's image CDN don't leave cards blank. Its fetcher has
+    # its own per-host rate and burst: a page of cards asks for many photos at once.
+    proxy_enabled: bool = True
+    proxy_requests_per_minute: PositiveFloat = 120.0
+    proxy_burst: PositiveInt = 20
+    # How long browsers may keep a proxied photo (``Cache-Control: private``).
+    proxy_cache_seconds: PositiveInt = 86_400
 
 
 class GroupingSettings(_Group):

@@ -3,8 +3,9 @@
 ``create_app`` builds a fresh app per call so tests can inject their own settings
 and engine. The lifespan owns the database engine: it creates one from settings
 (unless one was injected), runs migrations first when ``DB_AUTO_MIGRATE`` is set,
-and disposes it on shutdown. Routes reach the engine, settings and the source
-adapter registry (injectable, for tests) through ``request.app.state``.
+and disposes it on shutdown, closing the photo proxy's HTTP client too. Routes
+reach the engine, settings and the source adapter registry (injectable, for tests)
+through ``request.app.state``.
 
 Every route needs auth (``furnest.web.auth``) except health probes, static files,
 ``/favicon.ico`` (browsers fetch it from the root, even on the login page),
@@ -58,6 +59,7 @@ from furnest.web.routes import (
     inquiries,
     metrics,
     pages,
+    photos,
     sources,
 )
 from furnest.web.routes import (
@@ -89,6 +91,9 @@ def create_app(
             authenticator.bind_store(SqlSettingsStore(make_session_factory(app_engine)))
             yield
         finally:
+            fetcher = getattr(app.state, "photo_fetcher", None)
+            if fetcher is not None and hasattr(fetcher, "close"):
+                fetcher.close()
             if owned:
                 app_engine.dispose()
 
@@ -123,6 +128,7 @@ def create_app(
         health.router,
         auth.router,
         pages.router,
+        photos.router,
         criteria.router,
         email_templates.router,
         inquiries.router,

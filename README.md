@@ -152,6 +152,10 @@ Every setting, with its type and default (the table is generated from the code a
 | `IMAGES_MAX_PIXELS` | integer | `40000000` |
 | `IMAGES_TIMEOUT_SECONDS` | integer | `15` |
 | `IMAGES_REQUESTS_PER_MINUTE` | number | `30.0` |
+| `IMAGES_PROXY_ENABLED` | boolean | `true` |
+| `IMAGES_PROXY_REQUESTS_PER_MINUTE` | number | `120.0` |
+| `IMAGES_PROXY_BURST` | integer | `20` |
+| `IMAGES_PROXY_CACHE_SECONDS` | integer | `86400` |
 | `GROUPING_ENABLED` | boolean | `true` |
 | `GROUPING_MAX_DISTANCE_M` | number | `75.0` |
 | `GROUPING_MATCH_THRESHOLD` | number | `0.75` |

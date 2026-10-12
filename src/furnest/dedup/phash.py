@@ -17,6 +17,10 @@ broken URL can't cost much:
   :mod:`furnest.netguard`;
 * there are no retries. The caller records the failure and moves on.
 
+The web app's photo proxy (``furnest.web.routes.photos``) uses its own fetcher with a
+larger per-host burst, since a page of cards asks for many photos at once, and
+:meth:`ImageFetcher.fetch_image` to get the content type along with the bytes.
+
 :func:`compute_phash` refuses images with more than ``IMAGES_MAX_PIXELS`` pixels
 before decoding them. Nothing here writes a photo anywhere; only the hash is kept.
 Hashes are 16 lower-case hex digits, the form ``str(imagehash.ImageHash)`` gives.
@@ -27,6 +31,7 @@ from __future__ import annotations
 import io
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
 from urllib.parse import urlsplit
@@ -104,6 +109,13 @@ def matching_pairs(
 # --- Fetching -----------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class FetchedImage:
+    body: bytes
+    # The response's ``image/*`` media type, lower-cased, without parameters.
+    content_type: str
+
+
 class ImageFetcher:
     """Downloads photos into memory. Tests pass an ``httpx2.MockTransport`` and a fake
     clock and sleep."""
@@ -117,8 +129,12 @@ class ImageFetcher:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         resolver: Resolver | None = None,
+        requests_per_minute: float | None = None,
+        burst: int = 1,
     ) -> None:
         self._settings = settings
+        self._rate = requests_per_minute or settings.requests_per_minute
+        self._burst = burst
         self._user_agent = sources.user_agent
         self._respect_robots = sources.respect_robots
         self._clock = clock
@@ -141,6 +157,10 @@ class ImageFetcher:
 
     def fetch(self, url: str) -> bytes:
         """The photo's bytes. Raises :class:`ImageFetchError` with the reason."""
+        return self.fetch_image(url).body
+
+    def fetch_image(self, url: str) -> FetchedImage:
+        """The photo and its content type. Raises :class:`ImageFetchError`."""
         try:
             if self._respect_robots and not self.robots.allowed(url, self._user_agent):
                 raise ImageFetchError("robots.txt", url=url)
@@ -179,7 +199,7 @@ class ImageFetcher:
 
     # --- Internals ----------------------------------------------------------------
 
-    def _read(self, response: httpx2.Response, url: str, deadline: float) -> bytes:
+    def _read(self, response: httpx2.Response, url: str, deadline: float) -> FetchedImage:
         content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
         if not content_type.startswith("image/"):
             raise ImageFetchError(f"not an image ({content_type or 'no content-type'})", url=url)
@@ -194,15 +214,13 @@ class ImageFetcher:
                 raise ImageFetchError("too large", url=url)
             if self._clock() > deadline:
                 raise ImageFetchError("timeout", url=url)
-        return bytes(body)
+        return FetchedImage(bytes(body), content_type)
 
     def _limiter(self, url: str) -> TokenBucket:
         host = urlsplit(url).netloc.lower()
         limiter = self._limiters.get(host)
         if limiter is None:
-            limiter = TokenBucket(
-                self._settings.requests_per_minute, clock=self._clock, sleep=self._sleep
-            )
+            limiter = TokenBucket(self._rate, self._burst, clock=self._clock, sleep=self._sleep)
             self._limiters[host] = limiter
         return limiter
 

@@ -52,6 +52,14 @@ class SqlImageStore:
         with session_scope(self._session_factory) as session:
             return list(session.scalars(statement))
 
+    def known(self, url: str) -> bool:
+        """Whether some listing has a photo at ``url``."""
+        with session_scope(self._session_factory) as session:
+            found = session.scalars(
+                select(ListingImage.id).where(ListingImage.url == url).limit(1)
+            ).first()
+            return found is not None
+
     def cached(self, url: str) -> str | None:
         """A hash some row with this URL already has, if any."""
         with session_scope(self._session_factory) as session:
