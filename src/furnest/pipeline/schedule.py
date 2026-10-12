@@ -14,7 +14,10 @@ source has its own job, so a slow or broken source never holds up the others.
 One run (:class:`SourceRun`):
 
 1. resolves the source's config again with what the dashboard has *now* (toggle,
-   settings, credentials) and skips the run if the source is disabled. Sources
+   settings, credentials) and skips the run if the source is disabled, or if it is
+   an Apify source and the Apify monthly budget is used up
+   (:class:`~furnest.sources.budget.ApifyBudget`). A budget skip is logged but not
+   recorded as a run or a failure: nothing went wrong, and it resumes by itself. Sources
    toggled off, and sources still missing their API token, are scheduled all the
    same for this reason: turning one on or adding the token needs no worker
    restart. Sources pinned off in ``SOURCES_ADAPTERS``, stubs, and sources that
@@ -58,9 +61,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import SourcesSettings
 from furnest.db.base import utcnow
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.db.source_store import SqlSourceStore
 from furnest.logging import error_text, get_logger
+from furnest.sources.apify import ApifyAdapter
 from furnest.sources.base import AdapterConfig, Blocker, SourceAdapter
+from furnest.sources.budget import ApifyBudget
 from furnest.sources.config import resolve_config
 from furnest.worker import locks
 from furnest.worker.runtime import LEASE_GRACE
@@ -117,6 +123,7 @@ class SourceRun:
         settings: SourcesSettings,
         store: SqlSourceStore,
         ingestor: ListingIngestor,
+        budget: ApifyBudget | None = None,
         alert_after: int = 0,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -124,6 +131,7 @@ class SourceRun:
         self._settings = settings
         self._store = store
         self._ingestor = ingestor
+        self._budget = budget
         self._alert_after = alert_after
         self._clock = clock
 
@@ -137,6 +145,12 @@ class SourceRun:
             reason = config.disabled_reason or "turned off"
             log.info("source_run_skipped", source=self.name, reason=reason)
             return
+        adapter = self._adapter
+        if self._budget is not None and issubclass(adapter, ApifyAdapter):
+            if paused := self._budget.blocked_reason(adapter, config):
+                log.info("source_run_skipped", source=self.name, reason=paused)
+                return
+            self._budget.reserve(adapter.run_cost_usd(config))
         summary = self._ingestor.run(self._adapter(config), cancelled=ctx.cancelled)
         if summary is None or ctx.cancelled.is_set():
             # No criteria to search with, or the worker already recorded a timeout.
@@ -215,6 +229,7 @@ def schedule_sources(
     names an unknown adapter.
     """
     store = SqlSourceStore(session_factory)
+    budget = ApifyBudget(settings, SqlSettingsStore(session_factory))
     store.ensure(registry.names())
     configured = registry.configured(settings, store.stored(registry.credential_keys()))
     store.set_disabled_reasons(
@@ -239,6 +254,7 @@ def schedule_sources(
             settings=settings,
             store=store,
             ingestor=ingestor,
+            budget=budget,
             alert_after=alert_after,
             clock=clock,
         )
@@ -281,6 +297,7 @@ class RunSourceNow:
         self._settings = settings
         self._factory = session_factory
         self._store = SqlSourceStore(session_factory)
+        self._budget = ApifyBudget(settings, SqlSettingsStore(session_factory))
         self._ingestor = ingestor
         self._alert_after = alert_after
         self._clock = clock
@@ -301,6 +318,7 @@ class RunSourceNow:
             settings=self._settings,
             store=self._store,
             ingestor=self._ingestor,
+            budget=self._budget,
             alert_after=self._alert_after,
             clock=self._clock,
         )

@@ -49,6 +49,9 @@ class Zumper(ApifyAdapter):
     display_name: ClassVar[str] = "Zumper"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
+    # $0.005 a run and $0.0025 a row (docs/adapters.md, Cost).
+    start_cost_usd: ClassVar[float] = 0.005
+    result_cost_usd: ClassVar[float] = 0.0025
     search_locations_hint: ClassVar[str] = (
         'City and state, one per line, e.g. "Springfield, IL". Zumper shares much of its '
         "inventory with PadMapper."

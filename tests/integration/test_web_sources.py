@@ -1,12 +1,13 @@
 """The source health page: what it shows, the enable toggle and "run now", end to end."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx2 import Response
+from pydantic import SecretStr
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -15,10 +16,13 @@ from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import RunCounts, SqlListingStore
 from furnest.db.models import Job, JobStatus, SourceRunStatus
 from furnest.db.session import session_scope
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.db.source_store import SqlSourceStore
 from furnest.domain import Area, Criteria, NormalizedListing
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources import Capabilities, Credential, SourceAdapter, StubAdapter
+from furnest.sources.apify import ApifyAdapter
+from furnest.sources.budget import USAGE_KEY, ApifyUsage
 from furnest.sources.registry import SourceRegistry
 from furnest.web.app import create_app
 
@@ -630,3 +634,122 @@ def test_using_criteria_cities_is_refused_when_there_are_none(
     assert response.status_code == 409
     state = SqlSourceStore(session_factory).get("alpha")
     assert state is None or state.overrides.search_locations is None
+
+
+# --- Apify spend (#216) ------------------------------------------------------------
+
+
+class Billed(ApifyAdapter):
+    name: ClassVar[str] = "billed"
+    display_name: ClassVar[str] = "Billed Data"
+    default_enabled: ClassVar[bool] = True
+    job: ClassVar[str] = "someone/some-actor"
+    site: ClassVar[str] = "https://example.com"
+    start_cost_usd: ClassVar[float] = 0.05
+    result_cost_usd: ClassVar[float] = 0.01
+
+    def build_input(self, criteria: Criteria) -> dict[str, Any]:
+        return {}
+
+    def parse_items(
+        self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
+    ) -> list[NormalizedListing]:
+        return []
+
+
+class BrokenBilled(Billed):
+    name: ClassVar[str] = "broken_billed"
+    display_name: ClassVar[str] = "Broken Billed"
+    broken_reason: ClassVar[str | None] = "its actor rejects every search"
+
+
+def seed_usage(session_factory: sessionmaker[Session], used_usd: float) -> None:
+    """A fresh usage reading, so the page doesn't call Apify."""
+    usage = ApifyUsage(
+        used_usd=used_usd,
+        plan_limit_usd=5.0,
+        cycle_end=datetime(2026, 11, 6, 23, 59, 59, tzinfo=UTC),
+        fetched_at=datetime.now(UTC),
+    )
+    SqlSettingsStore(session_factory).set(USAGE_KEY, usage.to_json())
+
+
+@pytest.fixture
+def billed_client(migrated_engine: Engine, login: LoginFn) -> Iterator[TestClient]:
+    """Alpha (direct), Billed (Apify, with a token in SOURCES_ADAPTERS) and a broken
+    Apify source."""
+    registry = SourceRegistry()
+    for adapter in (Alpha, Billed, BrokenBilled):
+        registry.register(adapter)
+    settings = Settings(
+        sources=SourcesSettings(
+            adapters={"billed": AdapterOverrides(api_key=SecretStr("apify-token"))}
+        )
+    )
+    app = create_app(settings, engine=migrated_engine, source_registry=registry)
+    with TestClient(app) as client:
+        login(client)
+        yield client
+
+
+def test_the_apify_panel_shows_usage_budget_and_projection(
+    billed_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    seed_usage(session_factory, used_usd=1.25)
+
+    page = billed_client.get("/sources").text
+
+    assert 'id="apify-spend"' in page
+    assert "$1.25 of $5.00" in page
+    assert "the next cycle starts 2026-11-07" in page
+    # 15 runs a month of $0.30 each.
+    assert "$4.50 a month at the current intervals: Billed Data $4.50" in page
+    assert "would cost more than the budget" not in page
+
+
+def test_the_apify_panel_warns_when_the_projection_is_over_budget(
+    migrated_engine: Engine, login: LoginFn, session_factory: sessionmaker[Session]
+) -> None:
+    registry = SourceRegistry()
+    registry.register(Billed)
+    settings = Settings(
+        sources=SourcesSettings(
+            adapters={
+                "billed": AdapterOverrides(api_key=SecretStr("apify-token"), interval_minutes=60)
+            }
+        )
+    )
+    seed_usage(session_factory, used_usd=0.0)
+    app = create_app(settings, engine=migrated_engine, source_registry=registry)
+    with TestClient(app) as client:
+        login(client)
+        page = client.get("/sources").text
+
+    assert "would cost more than the budget" in page
+
+
+def test_over_budget_apify_sources_are_paused_and_left_out_of_run_all(
+    billed_client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
+) -> None:
+    seed_usage(session_factory, used_usd=4.9)
+
+    page = billed_client.get("/sources").text
+
+    assert "health-paused" in page
+    assert "Apify monthly budget reached ($4.90 of $5.00 used); resumes Nov 7" in page
+    response = post(billed_client, csrf, "/sources/run-all")
+    assert response.status_code == 303
+    assert [job.payload["source"] for job in jobs(session_factory)] == ["alpha"]
+    refused = post(billed_client, csrf, "/sources/billed/run")
+    assert refused.status_code == 409
+    assert "Apify monthly budget reached" in refused.text
+
+
+def test_a_broken_apify_source_is_unavailable_with_its_reason(
+    billed_client: TestClient, session_factory: sessionmaker[Session]
+) -> None:
+    seed_usage(session_factory, used_usd=0.0)
+
+    page = billed_client.get("/sources").text
+
+    assert "turned off: its actor rejects every search" in page

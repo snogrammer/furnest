@@ -44,6 +44,9 @@ class Airbnb(ApifyAdapter):
     display_name: ClassVar[str] = "Airbnb"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
+    # $0.004 a result, no start fee (docs/adapters.md, Cost).
+    start_cost_usd: ClassVar[float] = 0.0
+    result_cost_usd: ClassVar[float] = 0.004
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
         return build_input(

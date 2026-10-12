@@ -36,6 +36,7 @@ class FakeProvider:
         token: str,
         timeout_seconds: int,
         clock: Callable[[], float],
+        max_charge_usd: float | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append(
             {
@@ -45,6 +46,7 @@ class FakeProvider:
                 "timeout": timeout_seconds,
                 "respect_robots": http.config.respect_robots,
                 "clock": clock,
+                "max_charge_usd": max_charge_usd,
             }
         )
         return [{"id": "a"}, {"id": "b"}]
@@ -104,6 +106,7 @@ def test_runs_the_job_and_maps_its_items_with_the_input_it_sent(provider: FakePr
         "job": "robot-123",
         "input": sent,
         "token": TOKEN,
+        "max_charge_usd": None,
         "timeout": 840,
         "respect_robots": False,
         "clock": clock,

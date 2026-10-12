@@ -67,6 +67,7 @@ class Blocker(StrEnum):
     NOT_BUILT = "not_built"
     NO_BROWSER = "no_browser"
     NO_CREDENTIAL = "no_credential"
+    BROKEN = "broken"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ class AdapterConfig:
     run_timeout_seconds: int = 900
     search_locations: tuple[str, ...] = ()
     max_results: int = 100
+    # ``maxTotalChargeUsd`` for a pay-per-event provider run; ``None`` lets the adapter
+    # pick (see :meth:`furnest.sources.apify.ApifyAdapter.max_charge`).
+    max_charge_usd: float | None = None
     proxy_url: str | None = None
     api_key: SecretStr | None = None
     pinned: frozenset[str] = frozenset()
@@ -116,6 +120,14 @@ class SourceAdapter(ABC):
     default_enabled: ClassVar[bool] = False
     # False for a registered placeholder (see furnest.sources.stub): it can't be enabled.
     implemented: ClassVar[bool] = True
+    # Set while a built adapter is known not to work (and would cost money failing):
+    # it's off whatever env or the dashboard say, with this shown as the reason.
+    broken_reason: ClassVar[str | None] = None
+    # This source's own ``interval_minutes`` and ``max_results`` defaults, used when
+    # neither ``SOURCES_ADAPTERS`` nor the dashboard sets them; ``None`` falls back to
+    # the ``SOURCES_*`` default. Sources billed per run set them (see ApifyAdapter).
+    default_interval_minutes: ClassVar[int | None] = None
+    default_max_results: ClassVar[int | None] = None
     # The shared token this adapter's ``api_key`` comes from when ``SOURCES_ADAPTERS``
     # doesn't set one. Required when ``capabilities.requires_api_key`` and ``implemented``.
     credential: ClassVar[Credential | None] = None

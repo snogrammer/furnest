@@ -9,6 +9,11 @@ toggle, the settings, the credentials), the same as the scheduler. The web proce
 never probes for a browser itself, so that one reason comes from the worker, which
 stores it; every other reason (not built, no token) is worked out here, fresh, so a
 token just added shows at once.
+
+Apify sources also show what they cost: each one's projected monthly spend at its
+interval and ``max_results``, and the account's usage this cycle against
+``SOURCES_APIFY_MONTHLY_BUDGET_USD`` (:class:`ApifySpend`). Once the budget is
+reached they show as paused, with the same reason the worker skips their runs for.
 """
 
 from dataclasses import dataclass, field
@@ -23,7 +28,9 @@ from furnest.db.session import session_scope
 from furnest.db.source_store import SourceState, SqlSourceStore
 from furnest.domain.criteria import criteria_cities
 from furnest.pipeline.schedule import RUN_SOURCE
+from furnest.sources.apify import ApifyAdapter
 from furnest.sources.base import AdapterConfig, Blocker, Credential
+from furnest.sources.budget import ApifyBudget, ApifyUsage
 from furnest.sources.config import resolve_config
 from furnest.sources.registry import SourceRegistry
 from furnest.worker import queue
@@ -37,6 +44,7 @@ class Health(StrEnum):
     FAILING = "failing"
     NEVER_RUN = "never run"
     DISABLED = "disabled"
+    PAUSED = "paused"
     UNAVAILABLE = "unavailable"
 
 
@@ -78,6 +86,13 @@ class SourceRow:
     implemented: bool = True
     pending_job_id: int | None = None
     runs: list[SourceRunState] = field(default_factory=list)
+    # Billed sources only: a month of runs at the current interval and max results.
+    projected_monthly_usd: float | None = None
+    # Why the Apify budget stops this source starting a run (see furnest.sources.budget).
+    budget_reason: str | None = None
+    # The adapter's own defaults, when it has them (see SourceAdapter).
+    default_interval_minutes: int | None = None
+    default_max_results: int | None = None
 
     @property
     def name(self) -> str:
@@ -99,7 +114,7 @@ class SourceRow:
 
     @property
     def runnable(self) -> bool:
-        return self.enabled and self.disabled_reason is None
+        return self.enabled and self.disabled_reason is None and self.budget_reason is None
 
     @property
     def can_toggle(self) -> bool:
@@ -120,6 +135,8 @@ class SourceRow:
             return Health.UNAVAILABLE
         if not self.enabled:
             return Health.DISABLED
+        if self.budget_reason is not None:
+            return Health.PAUSED
         if self.state.consecutive_failures:
             return Health.FAILING
         if self.state.last_run_at is None:
@@ -134,9 +151,12 @@ def build_row(
     session_factory: sessionmaker[Session],
     *,
     with_runs: bool = False,
+    budget: ApifyBudget | None = None,
 ) -> SourceRow | None:
     """One source's row, or ``None`` if no adapter has that name."""
-    rows = build_rows(registry, settings, session_factory, only=name, with_runs=with_runs)
+    rows = build_rows(
+        registry, settings, session_factory, only=name, with_runs=with_runs, budget=budget
+    )
     return rows[0] if rows else None
 
 
@@ -147,8 +167,10 @@ def build_rows(
     *,
     only: str | None = None,
     with_runs: bool = True,
+    budget: ApifyBudget | None = None,
 ) -> list[SourceRow]:
-    """Every registered source (or just ``only``), sorted by name."""
+    """Every registered source (or just ``only``), sorted by name. With ``budget``,
+    an enabled Apify source the budget stops gets its ``budget_reason``."""
     store = SqlSourceStore(session_factory)
     states = {state.name: state for state in store.all()}
     credentials = store.stored(registry.credential_keys()).credentials
@@ -175,6 +197,11 @@ def build_rows(
         with session_scope(session_factory) as session:
             job = queue.pending(session, RUN_SOURCE, source=name)
             pending_job_id = None if job is None else job.id
+        projected = budget_reason = None
+        if issubclass(adapter, ApifyAdapter):
+            projected = adapter.monthly_cost_usd(config)
+            if budget is not None and config.enabled:
+                budget_reason = budget.blocked_reason(adapter, config)
         rows.append(
             SourceRow(
                 state=state,
@@ -193,9 +220,58 @@ def build_rows(
                 implemented=adapter.implemented,
                 pending_job_id=pending_job_id,
                 runs=list(listings.runs(name, limit=RECENT_RUNS)) if with_runs else [],
+                projected_monthly_usd=projected,
+                budget_reason=budget_reason,
+                default_interval_minutes=adapter.default_interval_minutes,
+                default_max_results=adapter.default_max_results,
             )
         )
     return rows
+
+
+@dataclass(frozen=True)
+class ApifySpend:
+    """The Sources page's Apify panel: this cycle's usage (``None`` when there's no
+    token or Apify can't be read), the budget, and what the sources that are on would
+    cost in a month."""
+
+    usage: ApifyUsage | None
+    budget_usd: float
+    # (display name, projected monthly USD) for each Apify source that is on.
+    projections: list[tuple[str, float]]
+
+    @property
+    def limit_usd(self) -> float:
+        """The budget, or the plan's own limit if that's lower."""
+        if self.usage is None:
+            return self.budget_usd
+        return min(self.budget_usd, self.usage.plan_limit_usd)
+
+    @property
+    def projected_usd(self) -> float:
+        return sum(cost for _, cost in self.projections)
+
+    @property
+    def over_budget(self) -> bool:
+        return self.projected_usd > self.limit_usd
+
+
+def build_apify_spend(rows: list[SourceRow], budget: ApifyBudget) -> ApifySpend | None:
+    """The Apify panel for ``rows``, or ``None`` if no source is billed through Apify."""
+    billed = [row for row in rows if row.projected_monthly_usd is not None]
+    if not billed:
+        return None
+    token = next((row.config.api_key for row in billed if row.config.api_key is not None), None)
+    usage = budget.usage(token.get_secret_value()) if token is not None else None
+    return ApifySpend(
+        usage=usage,
+        budget_usd=budget.budget_usd,
+        projections=[
+            (row.display_name, row.projected_monthly_usd or 0.0)
+            for row in billed
+            if row.enabled and row.disabled_reason is None
+        ],
+    )
 
 
 def build_credentials(

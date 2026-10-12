@@ -87,6 +87,7 @@ def call(
     *,
     clock: Callable[[], float] | None = None,
     timeout: int = 600,
+    max_charge_usd: float | None = None,
 ) -> list[Any]:
     transport = httpx2.MockTransport(apify)
     with SourceHttpClient(make_config(), transport=transport, sleep=lambda _: None) as http:
@@ -97,6 +98,7 @@ def call(
             token=TOKEN,
             timeout_seconds=timeout,
             clock=clock or Clock(),
+            max_charge_usd=max_charge_usd,
         )
 
 
@@ -210,3 +212,19 @@ def test_malformed_run_responses_are_errors(reply: httpx2.Response, message: str
 def test_a_dataset_that_is_not_a_list_is_an_error() -> None:
     with pytest.raises(SourceError, match="not a JSON list"):
         call(Apify(run_status("succeeded"), items={"items": []}))
+
+
+def test_a_run_cap_is_sent_as_max_total_charge() -> None:
+    apify = Apify(run_status("succeeded"))
+
+    call(apify, max_charge_usd=0.5)
+
+    assert apify.requests[0].url.params["maxTotalChargeUsd"] == "0.50"
+
+
+def test_no_cap_sends_no_max_total_charge() -> None:
+    apify = Apify(run_status("succeeded"))
+
+    call(apify)
+
+    assert "maxTotalChargeUsd" not in apify.requests[0].url.params

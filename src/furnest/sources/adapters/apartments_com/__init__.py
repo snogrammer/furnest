@@ -61,6 +61,9 @@ class ApartmentsCom(ApifyAdapter):
     display_name: ClassVar[str] = "Apartments.com"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
+    # About $0.01 a results page and $0.0005 an item (docs/adapters.md, Cost).
+    start_cost_usd: ClassVar[float] = 0.01
+    result_cost_usd: ClassVar[float] = 0.0005
     search_locations_hint: ClassVar[str] = (
         'City and state, one per line, e.g. "Springfield, IL" (or a ZIP code). '
         "CoStar's terms forbid scraping: you use this source at your own risk."

@@ -23,6 +23,10 @@ If the actor returns its "nothing was scanned" row (an empty search, or a blocke
 first page), the run fails rather than returning no listings. Otherwise a block would
 read as every listing having disappeared. Items that can't be mapped are logged and
 skipped, so one odd listing doesn't fail the run.
+
+It is turned off for now (``broken_reason``): every live run since 2026-10-07 has
+failed with the actor's geocoder rejecting the location, and each one was still
+billed (#216).
 """
 
 from __future__ import annotations
@@ -52,6 +56,13 @@ class FurnishedFinder(ApifyAdapter):
     display_name: ClassVar[str] = "Furnished Finder"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
+    # $0.08 a run, billed even when it fails, and $0.0025 a listing.
+    start_cost_usd: ClassVar[float] = 0.08
+    result_cost_usd: ClassVar[float] = 0.0025
+    broken_reason: ClassVar[str | None] = (
+        "the actor's geocoder rejects every location, and each failed run is still "
+        "billed $0.08 (#216)"
+    )
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
         return build_input(

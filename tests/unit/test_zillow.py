@@ -448,7 +448,7 @@ def test_search_returns_parsed_listings_and_skips_bad_items() -> None:
         ["Exampleville, XX"],
         True,
         1,
-        100,
+        25,
     )
     assert start.url.params["timeout"] == "840"
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)

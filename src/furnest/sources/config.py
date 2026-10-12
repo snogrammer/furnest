@@ -10,7 +10,8 @@ otherwise the default.
   adapter's ``default_enabled``;
 * ``search_locations``, ``interval_minutes``, ``max_results``: pinned by env, else the
   :class:`~furnest.config.SourceOverrides` stored in ``sources.overrides``, else the
-  ``SOURCES_*`` default (no locations);
+  adapter's own ``default_interval_minutes`` / ``default_max_results`` if it has one,
+  else the ``SOURCES_*`` default (no locations);
 * ``api_key``: pinned by env, else the shared :class:`~furnest.sources.base.Credential`
   the adapter declares, as stored from the dashboard, else none.
 
@@ -19,7 +20,8 @@ can show them read-only.
 
 An adapter that can't run is disabled whatever the above says, with the cause in
 ``blocker`` and the text in ``disabled_reason``: a stub that isn't built yet
-(``implemented`` false, see :mod:`furnest.sources.stub`), one with ``needs_browser``
+(``implemented`` false, see :mod:`furnest.sources.stub`), one known to be broken
+(``broken_reason`` set), one with ``needs_browser``
 while the browser layer is unavailable (see
 :func:`furnest.sources.browser.browser_unavailable_reason`), or one with
 ``requires_api_key`` and no ``api_key`` from either place.
@@ -93,6 +95,8 @@ def resolve_config(
     blocker = disabled_reason = None
     if not adapter.implemented:
         blocker, disabled_reason = Blocker.NOT_BUILT, NOT_BUILT_REASON
+    elif adapter.broken_reason is not None:
+        blocker, disabled_reason = Blocker.BROKEN, f"turned off: {adapter.broken_reason}"
     elif adapter.capabilities.needs_browser and browser_unavailable is not None:
         blocker, disabled_reason = Blocker.NO_BROWSER, f"needs a browser: {browser_unavailable}"
     elif adapter.capabilities.requires_api_key and api_key is None:
@@ -116,6 +120,7 @@ def resolve_config(
         interval_minutes=_pick(
             overrides.interval_minutes,
             stored.overrides.interval_minutes,
+            adapter.default_interval_minutes,
             settings.default_interval_minutes,
         ),
         jitter_seconds=_pick(overrides.jitter_seconds, settings.jitter_seconds),
@@ -130,8 +135,12 @@ def resolve_config(
         run_timeout_seconds=_pick(overrides.run_timeout_seconds, settings.run_timeout_seconds),
         search_locations=_pick(overrides.search_locations, stored.overrides.search_locations, ()),
         max_results=_pick(
-            overrides.max_results, stored.overrides.max_results, settings.max_results
+            overrides.max_results,
+            stored.overrides.max_results,
+            adapter.default_max_results,
+            settings.max_results,
         ),
+        max_charge_usd=overrides.max_charge_usd,
         proxy_url=str(proxy) if proxy is not None else None,
         api_key=api_key,
         pinned=pinned,

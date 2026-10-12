@@ -52,7 +52,7 @@ class DataProvider(Protocol):
 
     :meth:`run` runs ``job`` on ``run_input`` within ``timeout_seconds`` and returns
     its items, or raises :class:`SourceError` when the job fails or doesn't finish in
-    time.
+    time. ``max_charge_usd``, when set, is the most the provider may bill for the run.
     """
 
     #: Shown in messages, e.g. ``set "api_key" (an Apify API token)``.
@@ -67,6 +67,7 @@ class DataProvider(Protocol):
         token: str,
         timeout_seconds: int,
         clock: Callable[[], float],
+        max_charge_usd: float | None = None,
     ) -> list[JsonObject]: ...
 
 
@@ -103,6 +104,10 @@ class ProviderAdapter(SourceAdapter):
         self._clock = clock
         self._sleep = sleep
         self._today = today
+
+    def max_charge(self) -> float | None:
+        """The most one run may cost, in USD: ``max_charge_usd`` from the config, if set."""
+        return self.config.max_charge_usd
 
     def locations(self, criteria: Criteria) -> tuple[str, ...]:
         """The places to search: the source's own setting, else the criteria's cities."""
@@ -155,5 +160,6 @@ class ProviderAdapter(SourceAdapter):
                 token=config.api_key.get_secret_value(),
                 timeout_seconds=timeout,
                 clock=self._clock,
+                max_charge_usd=self.max_charge(),
             )
         return self.parse_items(items, run_input)

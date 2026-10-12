@@ -178,7 +178,7 @@ Every setting, with its type and default (the table is generated from the code a
 | `RISK_MIN_COMPARABLES` | integer | `3` |
 | `RISK_PHASH_DISTANCE` | integer | `4` |
 | `SOURCES_USER_AGENT` | string | `furnest/0 (+https://example.com/furnest)` |
-| `SOURCES_DEFAULT_INTERVAL_MINUTES` | integer | `60` |
+| `SOURCES_DEFAULT_INTERVAL_MINUTES` | integer | `360` |
 | `SOURCES_JITTER_SECONDS` | integer | `300` |
 | `SOURCES_REQUEST_TIMEOUT_SECONDS` | integer | `30` |
 | `SOURCES_RUN_TIMEOUT_SECONDS` | integer | `900` |
@@ -188,6 +188,7 @@ Every setting, with its type and default (the table is generated from the code a
 | `SOURCES_ALLOW_PRIVATE_ADDRESSES` | boolean | `false` |
 | `SOURCES_MAX_RETRIES` | integer | `3` |
 | `SOURCES_MAX_RESULTS` | integer | `100` |
+| `SOURCES_APIFY_MONTHLY_BUDGET_USD` | number | `5.0` |
 | `SOURCES_BROWSER_ENABLED` | boolean | `false` |
 | `SOURCES_REMOVE_AFTER_MISSED_RUNS` | integer | `3` |
 | `SOURCES_REMOVE_AFTER_HOURS` | integer | `24` |

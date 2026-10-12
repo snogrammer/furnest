@@ -8,7 +8,8 @@ calls :func:`run_actor` with the actor's input and maps the items it gets back.
 One call:
 
 1. starts a run (``POST /v2/acts/<actor>/runs``) and returns at once, with
-   Apify's own ``timeout`` set so the run can't outlive ours;
+   Apify's own ``timeout`` set so the run can't outlive ours, and
+   ``maxTotalChargeUsd`` so a pay-per-event actor can't bill more than the cap;
 2. long-polls the run (``GET /v2/actor-runs/<id>?waitForFinish=60``), so a run of
    several minutes costs a handful of requests, each well inside the rate limit;
 3. reads the default dataset once the run has ``SUCCEEDED``.
@@ -38,7 +39,7 @@ from urllib.parse import quote
 import httpx2
 
 from furnest.logging import get_logger
-from furnest.sources.base import Credential
+from furnest.sources.base import AdapterConfig, Credential
 from furnest.sources.errors import SourceError
 from furnest.sources.http import SourceHttpClient
 from furnest.sources.provider import DataProvider, JsonObject, ProviderAdapter
@@ -59,16 +60,23 @@ def run_actor(
     token: str,
     timeout_seconds: int,
     clock: Callable[[], float] = time.monotonic,
+    max_charge_usd: float | None = None,
 ) -> list[JsonObject]:
-    """Run ``actor`` (``"user/name"``) on ``run_input``; returns its dataset items."""
+    """Run ``actor`` (``"user/name"``) on ``run_input``; returns its dataset items.
+
+    ``max_charge_usd`` caps what a pay-per-event actor may bill for the run.
+    """
     headers = {"Authorization": f"Bearer {token}"}
     deadline = clock() + timeout_seconds
     actor_path = quote(actor.replace("/", "~"), safe="~")
+    params: dict[str, Any] = {"timeout": timeout_seconds, "waitForFinish": 0}
+    if max_charge_usd is not None:
+        params["maxTotalChargeUsd"] = f"{max_charge_usd:.2f}"
 
     run = _data(
         http.post(
             f"{APIFY_API}/acts/{actor_path}/runs",
-            params={"timeout": timeout_seconds, "waitForFinish": 0},
+            params=params,
             json=dict(run_input),
             headers=headers,
         ),
@@ -154,9 +162,16 @@ class ApifyProvider:
         token: str,
         timeout_seconds: int,
         clock: Callable[[], float],
+        max_charge_usd: float | None = None,
     ) -> list[JsonObject]:
         return run_actor(
-            http, job, run_input, token=token, timeout_seconds=timeout_seconds, clock=clock
+            http,
+            job,
+            run_input,
+            token=token,
+            timeout_seconds=timeout_seconds,
+            clock=clock,
+            max_charge_usd=max_charge_usd,
         )
 
 
@@ -167,11 +182,47 @@ APIFY_CREDENTIAL = Credential(
 )
 
 
+# The lowest ``maxTotalChargeUsd`` actors accept: their ``minimalMaxTotalChargeUsd``
+# was $0.50 on the ones tried in #111.
+MIN_MAX_CHARGE_USD = 0.50
+# Average minutes in a month, for projecting a source's monthly spend.
+MINUTES_PER_MONTH = 30 * 24 * 60
+
+
 class ApifyAdapter(ProviderAdapter):
     """A source read through an Apify actor. Subclasses set :attr:`job` to the actor
     (``"user/name"``) and :attr:`site`, and implement ``build_input`` and
     ``parse_items`` (see :class:`~furnest.sources.provider.ProviderAdapter`). They all
-    share :data:`APIFY_CREDENTIAL`."""
+    share :data:`APIFY_CREDENTIAL`.
+
+    Every run is billed, so Apify sources default to a run every two days of 25
+    results (#216), and each sets :attr:`start_cost_usd` and :attr:`result_cost_usd`
+    from what its actor bills. Those give the estimate the monthly budget guard
+    (:mod:`furnest.sources.budget`) and the Sources page's projection use, and the
+    run's ``maxTotalChargeUsd`` cap.
+    """
 
     provider: ClassVar[DataProvider] = APIFY
     credential: ClassVar[Credential | None] = APIFY_CREDENTIAL
+    default_interval_minutes: ClassVar[int | None] = 2880
+    default_max_results: ClassVar[int | None] = 25
+    # What the actor bills to start a run and for each result, in USD.
+    start_cost_usd: ClassVar[float] = 0.0
+    result_cost_usd: ClassVar[float] = 0.0
+
+    @classmethod
+    def run_cost_usd(cls, config: AdapterConfig) -> float:
+        """The estimated cost of one run with ``config``'s ``max_results``."""
+        return cls.start_cost_usd + cls.result_cost_usd * config.max_results
+
+    @classmethod
+    def monthly_cost_usd(cls, config: AdapterConfig) -> float:
+        """The estimated cost of a month of scheduled runs with ``config``."""
+        return cls.run_cost_usd(config) * MINUTES_PER_MONTH / config.interval_minutes
+
+    def max_charge(self) -> float:
+        """``max_charge_usd`` from the config, else twice the estimated run cost, but
+        never under :data:`MIN_MAX_CHARGE_USD`."""
+        if self.config.max_charge_usd is not None:
+            return self.config.max_charge_usd
+        return max(MIN_MAX_CHARGE_USD, 2 * self.run_cost_usd(self.config))

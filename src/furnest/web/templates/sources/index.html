@@ -9,6 +9,19 @@
 {% if not rows %}
 <p class="muted">No source adapters are installed.</p>
 {% else %}
+{% if apify %}
+<h2 id="apify-spend">Apify spend</h2>
+<dl class="apify-spend">
+  <dt>Used this cycle</dt>
+  <dd>{% if apify.usage %}${{ "%.2f" | format(apify.usage.used_usd) }} of ${{ "%.2f" | format(apify.limit_usd) }}{% if apify.usage.plan_limit_usd < apify.budget_usd %} (the plan's limit){% endif %}; the next cycle starts {{ apify.usage.resumes_on.strftime("%Y-%m-%d") }}{% else %}<span class="muted">unknown{% if not credentials or not (credentials | selectattr("stored") | list) %}: no Apify token{% endif %}</span>{% endif %}</dd>
+  <dt>Budget</dt>
+  <dd>${{ "%.2f" | format(apify.budget_usd) }} a month (<code>SOURCES_APIFY_MONTHLY_BUDGET_USD</code>)</dd>
+  <dt>Projected</dt>
+  <dd>{% if apify.projections %}${{ "%.2f" | format(apify.projected_usd) }} a month at the current intervals: {% for name, cost in apify.projections %}{{ name }} ${{ "%.2f" | format(cost) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="muted">no Apify source is on</span>{% endif %}</dd>
+</dl>
+{% if apify.over_budget %}<p class="form-error" role="alert">The sources that are on would cost more than the budget in a month. Raise their intervals or lower their max results, or they'll pause once the budget is used.</p>{% endif %}
+<p class="muted">Apify sources pause when this cycle's usage plus a run's estimated cost reaches the budget, and resume when the next cycle starts. Other sources aren't affected.</p>
+{% endif %}
 {% if credentials %}
 <h2>Credentials</h2>
 <p class="muted">A token entered here is shared by every source that uses it. It is stored in the database, shown only as set or not set, and kept out of the logs.</p>
@@ -80,6 +93,7 @@
       <th scope="row">{{ row.display_name }}<br><code class="muted">{{ row.name }}</code></th>
       <td>
         <span class="health health-{{ row.health.value | replace(' ', '-') }}">{{ row.health.value }}</span>
+        {% if row.budget_reason and not row.disabled_reason %}<br><small class="muted">{{ row.budget_reason }} (<a href="#apify-spend">spend</a>)</small>{% endif %}
         {% if row.disabled_reason %}<br><small class="muted">{{ row.disabled_reason }}{% if row.missing_credential %} (<a href="#credential-{{ row.credential.key }}">add it</a>){% endif %}</small>{% endif %}
         {% if row.pinned %}<br><small class="muted">set in SOURCES_ADAPTERS</small>{% endif %}
       </td>
@@ -157,7 +171,7 @@
         {% else %}
         <input id="interval-{{ row.name }}" type="number" name="interval_minutes" min="1" step="1" placeholder="{{ d.interval_minutes }}" value="{% if editing %}{{ form.get("interval_minutes", "") }}{% elif o.interval_minutes is not none %}{{ o.interval_minutes }}{% endif %}"{% if errors.get("interval_minutes") and editing %} aria-invalid="true"{% endif %}>
         {% if editing and errors.get("interval_minutes") %}<p class="field-error">{{ errors["interval_minutes"] }}</p>{% endif %}
-        <p class="hint">How often the source is searched. Empty means {{ d.interval_minutes }} (<code>SOURCES_DEFAULT_INTERVAL_MINUTES</code>).</p>
+        <p class="hint">How often the source is searched. Empty means {{ d.interval_minutes }} ({% if row.default_interval_minutes %}this source's default{% else %}<code>SOURCES_DEFAULT_INTERVAL_MINUTES</code>{% endif %}).{% if row.projected_monthly_usd is not none %} At the current settings a month of runs costs about ${{ "%.2f" | format(row.projected_monthly_usd) }}.{% endif %}</p>
         {% endif %}
       </div>
       <div class="field">
@@ -168,7 +182,7 @@
         {% else %}
         <input id="max-results-{{ row.name }}" type="number" name="max_results" min="1" step="1" placeholder="{{ d.max_results }}" value="{% if editing %}{{ form.get("max_results", "") }}{% elif o.max_results is not none %}{{ o.max_results }}{% endif %}"{% if errors.get("max_results") and editing %} aria-invalid="true"{% endif %}>
         {% if editing and errors.get("max_results") %}<p class="field-error">{{ errors["max_results"] }}</p>{% endif %}
-        <p class="hint">The most listings one run asks for; keep it low for sources that bill per listing. Empty means {{ d.max_results }} (<code>SOURCES_MAX_RESULTS</code>).</p>
+        <p class="hint">The most listings one run asks for; keep it low for sources that bill per listing. Empty means {{ d.max_results }} ({% if row.default_max_results %}this source's default{% else %}<code>SOURCES_MAX_RESULTS</code>{% endif %}).</p>
         {% endif %}
       </div>
       <div class="source-actions">

@@ -864,21 +864,61 @@ saves writing a parser.
 
 ### Staying inside Apify's free credit
 
-Approximate cost of one run of `max_results` 20 at October 2026 free-tier prices,
-checked against the live runs on 2026-10-07:
+The Free plan's $5 a month went in about a day on 2026-10-11, when every Apify
+source ran hourly with `max_results` 100 (about $1.20 a sweep; #216). Three things now
+keep the spend inside the budget:
 
-| Source | One run | Daily for a month | Every 2 days for a month |
-| --- | --- | --- | --- |
-| Zillow | $0.06 ($0.0005 start, $0.0029 a listing) | $1.80 | $0.90 |
-| Airbnb | $0.08 ($0.004 a listing) | $2.40 | $1.20 |
-| Furnished Finder | $0.13 ($0.08 start, $0.0025 a listing) | $3.90 | $1.95 |
-| Apartments.com | about $0.02 ($0.01 a listing page, $0.0005 an item; a 10-item run was billed $0.0145). Free plan: 5 runs a month, then demo mode | $0.60 | $0.30 |
-| Zumper | about $0.055 ($0.005 start, $0.0025 a row; 15-row runs were billed $0.03–$0.04 in all) | $1.65 | $0.83 |
+* **Per-source defaults.** Apify sources default to a run every two days
+  (`interval_minutes` 2880) of 25 results. The dashboard or `SOURCES_ADAPTERS` can
+  change either. The global `SOURCES_DEFAULT_INTERVAL_MINUTES` went from 60 to 360 for
+  everything else. A field resolves in this order: `SOURCES_ADAPTERS`, then the
+  dashboard, then the adapter's own default, then `SOURCES_*`.
+* **A monthly budget** (`SOURCES_APIFY_MONTHLY_BUDGET_USD`, default 5;
+  `sources/budget.py`).
+  * Before each Apify run, the worker reads the account's usage this cycle from
+    `GET /v2/users/me/limits`. The reading is cached for 10 minutes in the `settings`
+    table.
+  * It skips the run when usage plus the run's estimate would reach the budget, or
+    the plan's own limit if that is lower.
+  * A skipped run isn't a failure. Nothing is recorded and no alert goes out, and the
+    source shows as **paused** on the Sources page until the next cycle starts. Only
+    Apify sources pause.
+  * A starting run's estimate is added to the cached reading, so "Run all now" can't
+    start every source against one stale figure.
+  * If the usage can't be read, the run goes ahead, still bounded by its cap.
+* **A cap on every run.** `maxTotalChargeUsd` is sent with each run: `max_charge_usd`
+  in `SOURCES_ADAPTERS`, otherwise twice the run's estimate, and never under $0.50
+  (the `minimalMaxTotalChargeUsd` seen on #111).
 
-All three daily comes to about $8 a month, over the $5 credit. Two sources daily fit,
-and so do all three at `"interval_minutes": 2880` (about $4). Note that Furnished
-Finder bills its start fee even when the run fails. The account's usage is at
-`https://console.apify.com/billing`.
+The Sources page shows this cycle's usage against the budget and when the next cycle
+starts. It also projects what the sources that are on would cost in a month, and warns
+when that projection is over budget.
+
+The estimates come from each adapter's `start_cost_usd` and `result_cost_usd`. These
+are October 2026 prices, checked against live runs:
+
+| Source | Start | Per result | One run of 25 | Every 2 days for a month |
+| --- | --- | --- | --- | --- |
+| Zillow | $0.0005 | $0.0029 (with details) | $0.073 | $1.10 |
+| Airbnb | none | $0.004 | $0.10 | $1.50 |
+| Zumper | $0.005 | $0.0025 | $0.068 | $1.01 |
+| Apartments.com | about $0.01 a page | $0.0005 | about $0.023 | $0.34 |
+| Furnished Finder | $0.08, billed even when the run fails | $0.0025 | $0.14 | turned off |
+
+With the four working sources on at their defaults, a month comes to about $4,
+inside the $5 credit. Daily runs of all four would cost about $8. Apartments.com's
+actor also allows only 5 real runs a month on the Free plan, then answers in demo mode.
+
+**Furnished Finder is turned off** (`broken_reason`, shown on the Sources page). Every
+live run since 2026-10-07 has failed because the actor's geocoder rejects the
+location, and each failure was still billed $0.08. It stays off whatever env or the
+dashboard say until the actor works or another provider replaces it (#216, part 2).
+
+**`fetchDetails`.** Zillow keeps `fetchDetails: True`. Its `_details` supply the
+description, the amenity lists and the lease terms that matching and the property page
+use, and a cheaper Zillow actor is part 2 of #216.
+
+The account's usage is also at `https://console.apify.com/billing`.
 
 ## Candidates
 

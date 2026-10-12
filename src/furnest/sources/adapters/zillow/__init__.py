@@ -46,6 +46,9 @@ class Zillow(ApifyAdapter):
     display_name: ClassVar[str] = "Zillow"
     job: ClassVar[str] = ACTOR
     site: ClassVar[str] = SITE
+    # $0.0005 a run and $0.0029 a listing with details (docs/adapters.md, Cost).
+    start_cost_usd: ClassVar[float] = 0.0005
+    result_cost_usd: ClassVar[float] = 0.0029
 
     def build_input(self, criteria: Criteria) -> dict[str, Any]:
         return build_input(

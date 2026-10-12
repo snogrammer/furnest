@@ -18,7 +18,9 @@ whether one is set.
 "Run now" queues a ``run_source`` job for the worker (see
 :class:`furnest.pipeline.schedule.RunSourceNow`). A source with one already queued
 or running gets no second job. "Run all now" does the same for every source that can
-run, skipping those that already have one.
+run, skipping those that already have one. An Apify source the monthly budget stops
+(see :mod:`furnest.sources.budget`) shows as paused and can't be run until the
+next usage cycle.
 
 Handlers are plain ``def`` so FastAPI runs the blocking SQLite calls in its threadpool.
 """
@@ -34,13 +36,21 @@ from starlette.responses import Response
 
 from furnest.config import SourceOverrides
 from furnest.db.session import make_session_factory, session_scope
+from furnest.db.settings_store import SqlSettingsStore
 from furnest.db.source_store import SqlSourceStore
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources.base import Credential
+from furnest.sources.budget import ApifyBudget
 from furnest.sources.registry import SourceRegistry
 from furnest.web.auth import require_auth
 from furnest.web.csrf import require_csrf
-from furnest.web.source_health import SourceRow, build_credentials, build_row, build_rows
+from furnest.web.source_health import (
+    SourceRow,
+    build_apify_spend,
+    build_credentials,
+    build_row,
+    build_rows,
+)
 from furnest.web.templating import templates
 from furnest.worker import queue
 
@@ -53,6 +63,10 @@ MAX_FIELD_LENGTH = 2000
 
 def _factory(request: Request) -> sessionmaker[Session]:
     return make_session_factory(request.app.state.engine)
+
+
+def _budget(request: Request) -> ApifyBudget:
+    return ApifyBudget(request.app.state.settings.sources, SqlSettingsStore(_factory(request)))
 
 
 def _render(
@@ -70,9 +84,12 @@ def _render(
     registry = request.app.state.source_registry
     settings = request.app.state.settings.sources
     factory = _factory(request)
+    budget = _budget(request)
+    rows = build_rows(registry, settings, factory, budget=budget)
     context = {
         "credentials": build_credentials(registry, settings, factory),
-        "rows": build_rows(registry, settings, factory),
+        "rows": rows,
+        "apify": build_apify_spend(rows, budget),
         "flash": flash,
         "error": error,
         "errors": errors or {},
@@ -90,6 +107,7 @@ def _row(request: Request, name: str) -> SourceRow:
         request.app.state.source_registry,
         request.app.state.settings.sources,
         _factory(request),
+        budget=_budget(request),
     )
     if row is None:
         raise HTTPException(status_code=404, detail="no such source")
@@ -299,7 +317,7 @@ def _message(error: Mapping[str, object]) -> str:
 def run_now(request: Request, name: str) -> Response:
     row = _row(request, name)
     if not row.runnable:
-        reason = row.disabled_reason or "it is turned off"
+        reason = row.disabled_reason or row.budget_reason or "it is turned off"
         return _render(request, error=f"{name} can't run now: {reason}.", status_code=409)
     with session_scope(_factory(request)) as session:
         job_id, queued = _queue_run(session, name)
@@ -312,7 +330,10 @@ def run_now(request: Request, name: str) -> Response:
 def run_all(request: Request) -> Response:
     """Queue a run for every source that can run now."""
     rows = build_rows(
-        request.app.state.source_registry, request.app.state.settings.sources, _factory(request)
+        request.app.state.source_registry,
+        request.app.state.settings.sources,
+        _factory(request),
+        budget=_budget(request),
     )
     names = [row.name for row in rows if row.runnable]
     if not names:

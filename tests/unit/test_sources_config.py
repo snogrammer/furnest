@@ -94,7 +94,7 @@ def test_overrides_win_field_by_field() -> None:
 def test_overrides_for_one_adapter_do_not_leak_to_another() -> None:
     settings = SourcesSettings(adapters={"on_by_default": AdapterOverrides(interval_minutes=5)})
 
-    assert resolve_config(OffByDefault, settings).interval_minutes == 60
+    assert resolve_config(OffByDefault, settings).interval_minutes == 360
 
 
 @pytest.mark.parametrize(
@@ -321,3 +321,50 @@ def test_source_overrides_validate_and_know_when_empty() -> None:
         SourceOverrides(search_locations=(" ",))
     with pytest.raises(ValueError, match="extra"):
         SourceOverrides.model_validate({"api_key": "x"})
+
+
+class OwnDefaults(OffByDefault):
+    """A source with its own interval and max results defaults, like the Apify ones."""
+
+    name = "own_defaults"
+    default_interval_minutes = 2880
+    default_max_results = 25
+
+
+class KnownBroken(OnByDefault):
+    name = "known_broken"
+    broken_reason = "its provider rejects every search"
+
+
+def test_an_adapters_own_defaults_sit_between_the_dashboard_and_sources_star() -> None:
+    settings = SourcesSettings(default_interval_minutes=360, max_results=100)
+
+    assert resolve_config(OffByDefault, settings).interval_minutes == 360
+    config = resolve_config(OwnDefaults, settings)
+    assert (config.interval_minutes, config.max_results) == (2880, 25)
+
+    stored = StoredSource(overrides=SourceOverrides(interval_minutes=1440, max_results=40))
+    config = resolve_config(OwnDefaults, settings, stored)
+    assert (config.interval_minutes, config.max_results) == (1440, 40)
+
+    pinned = SourcesSettings(
+        adapters={"own_defaults": AdapterOverrides(interval_minutes=720, max_results=10)}
+    )
+    config = resolve_config(OwnDefaults, pinned, stored)
+    assert (config.interval_minutes, config.max_results) == (720, 10)
+
+
+def test_a_broken_adapter_stays_off_even_when_pinned_on() -> None:
+    settings = SourcesSettings(adapters={"known_broken": AdapterOverrides(enabled=True)})
+
+    config = resolve_config(KnownBroken, settings, StoredSource(enabled=True))
+
+    assert config.enabled is False
+    assert config.blocker is Blocker.BROKEN
+    assert config.disabled_reason == "turned off: its provider rejects every search"
+
+
+def test_max_charge_is_only_set_from_sources_adapters() -> None:
+    assert resolve_config(OffByDefault, SourcesSettings()).max_charge_usd is None
+    settings = SourcesSettings(adapters={"off_by_default": AdapterOverrides(max_charge_usd=1.5)})
+    assert resolve_config(OffByDefault, settings).max_charge_usd == 1.5

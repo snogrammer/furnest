@@ -3,16 +3,18 @@ failing, slow or stuck source is kept from affecting the others."""
 
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import (
     AdapterOverrides,
+    InMemorySettingsStore,
     Settings,
     SourceOverrides,
     SourcesSettings,
@@ -38,6 +40,8 @@ from furnest.pipeline.schedule import (
     schedule_sources,
 )
 from furnest.sources import Capabilities, Credential, SourceAdapter
+from furnest.sources.apify import ApifyAdapter
+from furnest.sources.budget import USAGE_KEY, ApifyBudget, ApifyUsage
 from furnest.sources.registry import SourceRegistry
 from furnest.worker import locks, queue, runtime
 from furnest.worker.execution import Handler, JobContext, JobRegistry, JobTimeoutError
@@ -161,9 +165,35 @@ class Stuck(Good):
         return [listing(self.name, "1")]
 
 
+class Billed(ApifyAdapter):
+    """An Apify source that never calls Apify: ``search`` just counts."""
+
+    name: ClassVar[str] = "billed"
+    display_name: ClassVar[str] = "Billed"
+    default_enabled: ClassVar[bool] = True
+    job: ClassVar[str] = "someone/some-actor"
+    site: ClassVar[str] = "https://example.com"
+    start_cost_usd: ClassVar[float] = 0.05
+    result_cost_usd: ClassVar[float] = 0.01
+    searches: ClassVar[int] = 0
+
+    def search(self, criteria: Criteria) -> list[NormalizedListing]:
+        type(self).searches += 1
+        return [listing(self.name, "1")]
+
+    def build_input(self, criteria: Criteria) -> dict[str, Any]:
+        return {}
+
+    def parse_items(
+        self, items: list[dict[str, Any]], run_input: Mapping[str, Any]
+    ) -> list[NormalizedListing]:
+        return []
+
+
 @pytest.fixture(autouse=True)
 def reset_adapters() -> None:
     Good.searches = Broken.searches = Slow.searches = OffByDefault.searches = 0
+    Billed.searches = 0
     Keyed.tokens = []
     Slow.running = Slow.peak = 0
     Stuck.release = threading.Event()
@@ -367,6 +397,63 @@ def test_success_records_listings_found_and_resets_failures(
     assert state is not None
     assert (state.consecutive_failures, state.last_error) == (0, None)
     assert (state.listings_found, state.last_run_at, state.last_success_at) == (2, T0, T0)
+
+
+def apify_budget(used_usd: float) -> tuple[ApifyBudget, InMemorySettingsStore]:
+    """A budget whose usage reading (fresh at T0) is ``used_usd`` of a $5 plan."""
+    usage = ApifyUsage(
+        used_usd=used_usd,
+        plan_limit_usd=5.0,
+        cycle_end=datetime(2026, 11, 6, 23, 59, 59, tzinfo=UTC),
+        fetched_at=T0,
+    )
+    store = InMemorySettingsStore({USAGE_KEY: usage.to_json()})
+    return ApifyBudget(SourcesSettings(), store, now=lambda: T0), store
+
+
+BILLED_SETTINGS = SourcesSettings(
+    adapters={"billed": AdapterOverrides(api_key=SecretStr("apify-token"))}
+)
+
+
+@pytest.mark.usefixtures("criteria")
+def test_an_apify_source_over_budget_is_skipped_without_a_failure(
+    store: SqlSourceStore, ingestor: ListingIngestor, session_factory: sessionmaker[Session]
+) -> None:
+    budget, _ = apify_budget(used_usd=4.9)
+    store.ensure(["billed", "good"])
+    billed = SourceRun(
+        Billed, settings=BILLED_SETTINGS, store=store, ingestor=ingestor, budget=budget
+    )
+    good = SourceRun(
+        Good, settings=SourcesSettings(), store=store, ingestor=ingestor, budget=budget
+    )
+
+    billed(context())
+    good(context())
+
+    assert (Billed.searches, Good.searches) == (0, 1)
+    state = store.get("billed")
+    assert state is not None
+    assert (state.last_run_at, state.consecutive_failures, state.last_error) == (None, 0, None)
+    assert list(SqlListingStore(session_factory).runs("billed", limit=5)) == []
+
+
+@pytest.mark.usefixtures("criteria")
+def test_an_apify_source_under_budget_runs_and_reserves_its_cost(
+    store: SqlSourceStore, ingestor: ListingIngestor
+) -> None:
+    budget, settings_store = apify_budget(used_usd=1.0)
+    store.ensure(["billed"])
+    run = SourceRun(Billed, settings=BILLED_SETTINGS, store=store, ingestor=ingestor, budget=budget)
+
+    run(context())
+
+    assert Billed.searches == 1
+    usage = ApifyUsage.from_json(settings_store.get(USAGE_KEY))
+    assert usage is not None
+    # 25 results at $0.01 plus the $0.05 start.
+    assert usage.used_usd == pytest.approx(1.30)
 
 
 def test_failure_counts_up_and_keeps_the_last_error(

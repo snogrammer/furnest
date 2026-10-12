@@ -403,7 +403,7 @@ def test_search_returns_furnished_listings_and_skips_the_rest() -> None:
     assert str(start.url).startswith(f"{APIFY_API}/acts/epctex~apartments-scraper-api/runs")
     body = json.loads(start.content)
     assert body["startUrls"] == ["https://www.apartments.com/exampleville-xx/min-1-bedrooms/"]
-    assert body["maxItems"] == 100
+    assert body["maxItems"] == 25
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)
 
 

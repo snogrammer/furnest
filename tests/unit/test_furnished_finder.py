@@ -28,6 +28,7 @@ from furnest.sources import SourceError, discover, resolve_config
 from furnest.sources.adapters.furnished_finder import FurnishedFinder
 from furnest.sources.adapters.furnished_finder.parse import build_input, parse_item
 from furnest.sources.apify import APIFY_API
+from furnest.sources.base import Blocker
 
 pytestmark = pytest.mark.unit
 
@@ -328,7 +329,7 @@ def test_search_returns_parsed_listings_and_skips_bad_items() -> None:
     assert (body["locations"], body["minBedrooms"], body["maxListings"]) == (
         ["Exampleville, XX"],
         1,
-        100,
+        25,
     )
     # The actor gets the run timeout less a margin, so Apify stops first.
     assert start.url.params["timeout"] == "840"
@@ -366,23 +367,19 @@ def test_no_api_key_fails_with_a_hint() -> None:
         FurnishedFinder(config, transport=httpx2.MockTransport(apify)).search(Criteria())
 
 
-def test_discovered_and_disabled_until_it_has_a_key() -> None:
+def test_discovered_and_turned_off_while_the_actor_is_broken() -> None:
     registry = discover()
     assert registry.get("furnished_finder") is FurnishedFinder
 
-    by_name = {source.config.name: source for source in registry.configured(SourcesSettings())}
-    source = by_name["furnished_finder"]
-    assert source.config.enabled is False
-    assert (
-        source.config.disabled_reason
-        == "needs the Apify API token: add it under Credentials on the Sources page"
-    )
-
-    keyed = {s.config.name: s for s in registry.configured(settings(enabled=True))}
-    assert (
-        keyed["furnished_finder"].config.enabled,
-        keyed["furnished_finder"].config.disabled_reason,
-    ) == (True, None)
+    # Every run fails on the actor's side and is still billed (#216), so it stays off
+    # even with a key and pinned on.
+    for sources in (SourcesSettings(), settings(enabled=True)):
+        by_name = {source.config.name: source for source in registry.configured(sources)}
+        config = by_name["furnished_finder"].config
+        assert config.enabled is False
+        assert config.blocker is Blocker.BROKEN
+        assert config.disabled_reason is not None
+        assert "geocoder" in config.disabled_reason
 
 
 # --- Owner type ----------------------------------------------------------------------

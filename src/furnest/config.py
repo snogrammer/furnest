@@ -548,13 +548,17 @@ class AdapterOverrides(SourceOverrides):
     run_timeout_seconds: PositiveInt | None = None
     respect_robots: bool | None = None
     max_retries: Annotated[int, Field(ge=0)] | None = None
+    # Cap in USD on one provider run (Apify's ``maxTotalChargeUsd``); unset, the
+    # adapter's own cap applies.
+    max_charge_usd: PositiveFloat | None = None
 
 
 class SourcesSettings(_Group):
     model_config = SettingsConfigDict(env_prefix="SOURCES_")
 
     user_agent: str = "furnest/0 (+https://example.com/furnest)"
-    default_interval_minutes: PositiveInt = 60
+    # Sources billed per run (the Apify ones) have their own, longer default.
+    default_interval_minutes: PositiveInt = 360
     jitter_seconds: Annotated[int, Field(ge=0)] = 300
     request_timeout_seconds: PositiveInt = 30
     # A whole run of one source (search, store, match) is abandoned after this long.
@@ -570,6 +574,9 @@ class SourcesSettings(_Group):
     max_retries: Annotated[int, Field(ge=0)] = 3
     # Upper bound on listings one run asks for, for sources that page or bill per result.
     max_results: PositiveInt = 100
+    # Apify sources stop starting runs once the account's usage this cycle, plus the
+    # next run's estimated cost, would reach this (or the plan's own limit, if lower).
+    apify_monthly_budget_usd: PositiveFloat = 5.0
     browser_enabled: bool = False
     # A listing is marked removed once it has been missing from this many successful
     # runs of its source *and* unseen for this many hours.

@@ -257,7 +257,7 @@ def test_search_returns_furnished_listings_and_skips_the_rest() -> None:
     assert body["startUrls"] == [
         "https://www.zumper.com/apartments-for-rent/exampleville-xx/furnished"
     ]
-    assert body["maxItems"] == 100
+    assert body["maxItems"] == 25
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)
 
 

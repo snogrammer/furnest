@@ -536,8 +536,24 @@ button.secondary {
   color: var(--muted);
 }
 
-.health-incomplete {
+.health-incomplete,
+.health-paused {
   color: #8a5300;
+}
+
+.apify-spend {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.apify-spend dt {
+  font-weight: 600;
+}
+
+.apify-spend dd {
+  margin: 0;
 }
 
 /* The enable switch: a checkbox drawn as a pill with a knob. */

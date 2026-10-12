@@ -430,7 +430,7 @@ def test_search_returns_parsed_listings_and_skips_bad_items() -> None:
         ["Exampleville, IL"],
         "2026-10-07",
         "2026-11-07",
-        100,
+        25,
     )
     assert not any(request.url.path == "/robots.txt" for request in apify.requests)
 
