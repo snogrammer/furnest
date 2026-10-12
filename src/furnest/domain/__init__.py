@@ -12,7 +12,14 @@ from furnest.domain.address import (
     normalize_zip,
 )
 from furnest.domain.amenities import Amenity, AmenityExtractor, AmenityResult, amenity_label
-from furnest.domain.criteria import Area, Criteria, CriteriaChange, FilterRule, diff_criteria
+from furnest.domain.criteria import (
+    Area,
+    Criteria,
+    CriteriaChange,
+    FilterRule,
+    Outline,
+    diff_criteria,
+)
 from furnest.domain.geo import EARTH_RADIUS, DistanceUnit, haversine
 from furnest.domain.listing import Address, Contact, NormalizedListing, beds_baths
 from furnest.domain.money import (
@@ -65,6 +72,7 @@ __all__ = [
     "InvalidTransitionError",
     "Money",
     "NormalizedListing",
+    "Outline",
     "OwnerType",
     "ParsedAddress",
     "PassthroughAddressParser",

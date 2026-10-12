@@ -1,10 +1,11 @@
-"""Haversine distances in miles and kilometres."""
+"""Haversine distances in miles and kilometres, and points inside outlines."""
 
 import math
 
 import pytest
 
 from furnest.domain import EARTH_RADIUS, DistanceUnit, haversine
+from furnest.domain.geo import bbox, point_in_polygon, ring_area
 
 
 def test_zero_distance() -> None:
@@ -39,3 +40,58 @@ def test_units_agree() -> None:
 def test_distance_unit_values_are_stable() -> None:
     # Stored criteria versions hold these strings.
     assert [u.value for u in DistanceUnit] == ["mi", "km"]
+
+
+# --- Outlines: point in polygon (#214) ----------------------------------------
+
+SQUARE = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]
+# A "C" open to the east: the notch (x 2..4, y 1..3) is outside.
+C_SHAPE = [
+    (0.0, 0.0),
+    (4.0, 0.0),
+    (4.0, 1.0),
+    (2.0, 1.0),
+    (2.0, 3.0),
+    (4.0, 3.0),
+    (4.0, 4.0),
+    (0.0, 4.0),
+    (0.0, 0.0),
+]
+
+
+@pytest.mark.parametrize(
+    ("point", "inside"),
+    [
+        ((2.0, 2.0), True),
+        ((5.0, 2.0), False),
+        ((-1.0, 2.0), False),
+        ((2.0, 0.0), True),  # on an edge
+        ((4.0, 2.5), True),  # on a vertical edge
+        ((4.0, 4.0), True),  # on a vertex
+        ((0.0, 0.0), True),  # on the closing vertex
+    ],
+)
+def test_point_in_square(point: tuple[float, float], inside: bool) -> None:
+    assert point_in_polygon(*point, SQUARE) is inside
+
+
+@pytest.mark.parametrize(
+    ("point", "inside"),
+    [((1.0, 2.0), True), ((3.0, 2.0), False), ((3.0, 0.5), True), ((3.0, 3.5), True)],
+)
+def test_point_in_concave_polygon(point: tuple[float, float], inside: bool) -> None:
+    assert point_in_polygon(*point, C_SHAPE) is inside
+
+
+def test_ray_through_a_vertex_is_counted_once() -> None:
+    diamond = [(0.0, -2.0), (2.0, 0.0), (0.0, 2.0), (-2.0, 0.0), (0.0, -2.0)]
+    # The ray from (-1, 0) runs along y = 0 through the vertex at (2, 0).
+    assert point_in_polygon(-1.0, 0.0, diamond)
+    assert not point_in_polygon(-3.0, 0.0, diamond)
+
+
+def test_bbox_and_area() -> None:
+    assert bbox(C_SHAPE) == (0.0, 0.0, 4.0, 4.0)
+    assert ring_area(SQUARE) == 16.0
+    assert ring_area(C_SHAPE) == 12.0
+    assert ring_area([(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (0.0, 0.0)]) == 0.0

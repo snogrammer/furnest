@@ -32,6 +32,7 @@ def _price(criteria: Criteria) -> str | None:
 
 def _where(criteria: Criteria) -> str | None:
     places = [f"within {a.radius:g} {a.unit.value} of {a.name}" for a in criteria.areas]
+    places += [f"inside {o.name}" for o in criteria.outlines]
     if criteria.zip_codes:
         places.append(f"ZIP {', '.join(criteria.zip_codes)}")
     if criteria.neighborhoods:

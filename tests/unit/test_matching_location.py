@@ -198,3 +198,49 @@ def test_all_matches_are_explained_first_one_reported() -> None:
         "ZIP 62701 is in the list",
         "neighborhood 'old town' is in the list",
     )
+
+
+# --- Outlines drawn on the map (#214) -----------------------------------------
+
+
+def box_around_centre(half: float = 0.5) -> dict[str, Any]:
+    lat, lng = CENTRE
+    ring = [
+        [lng - half, lat - half],
+        [lng + half, lat - half],
+        [lng + half, lat + half],
+        [lng - half, lat + half],
+        [lng - half, lat - half],
+    ]
+    return {"name": "Box", "polygon": ring}
+
+
+def test_inside_an_outline() -> None:
+    result = match_location(
+        listing(lat=CENTRE[0], lng=CENTRE[1]), criteria(outlines=[box_around_centre()])
+    )
+    assert result.status is LocationStatus.MATCH
+    assert result.matched_by == "outline:Box"
+    assert result.reasons == ("inside Box",)
+
+
+def test_outside_an_outline() -> None:
+    result = match_location(
+        listing(**north_of_centre(50)), criteria(outlines=[box_around_centre()])
+    )
+    assert result.status is LocationStatus.NO_MATCH
+    assert result.reasons == ("outside Box",)
+
+
+def test_outline_without_coordinates_is_unknown() -> None:
+    result = match_location(listing(), criteria(outlines=[box_around_centre()]))
+    assert result.status is LocationStatus.UNKNOWN
+    assert result.reasons == ("location unknown: no coordinates",)
+
+
+def test_outline_or_zip() -> None:
+    lst = listing(**north_of_centre(50), address={"postal_code": "00001", "country": "US"})
+    result = match_location(lst, criteria(outlines=[box_around_centre()], zip_codes=["00001"]))
+    assert result.status is LocationStatus.MATCH
+    assert result.matched_by == "zip:00001"
+    assert result.reasons == ("outside Box", "ZIP 00001 is in the list")

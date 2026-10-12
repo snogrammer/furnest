@@ -14,11 +14,13 @@ from furnest.domain import (
     DistanceUnit,
     FilterRule,
     Money,
+    Outline,
     OwnerType,
     PropertyType,
     diff_criteria,
     register_currency,
 )
+from furnest.domain.criteria import MAX_OUTLINE_CITIES, criteria_cities
 
 
 def criteria(**fields: object) -> Criteria:
@@ -182,3 +184,73 @@ def test_windows_and_lease_range() -> None:
     assert c.lease_months_range() == (2, 10)
     assert Criteria().move_in_window() is None
     assert Criteria(move_in=date(2026, 11, 8)).lease_months_range() == (None, None)
+
+
+# --- Outlines (#214) ------------------------------------------------------------
+
+# Around Springfield, IL (the hygiene placeholder area), GeoJSON [lng, lat] order.
+SPRINGFIELD_BOX = [[-89.8, 39.7], [-89.5, 39.7], [-89.5, 39.9], [-89.8, 39.9], [-89.8, 39.7]]
+# Most of Illinois: far more than MAX_OUTLINE_CITIES places.
+ILLINOIS_BOX = [[-91.0, 37.0], [-87.5, 37.0], [-87.5, 42.0], [-91.0, 42.0], [-91.0, 37.0]]
+
+
+def test_outline_round_trips_through_json() -> None:
+    profile = criteria(outlines=[{"name": " Downtown ", "polygon": SPRINGFIELD_BOX}])
+
+    assert profile.outlines == (
+        Outline(name="Downtown", polygon=tuple((lng, lat) for lng, lat in SPRINGFIELD_BOX)),
+    )
+    assert Criteria.model_validate(profile.model_dump(mode="json")) == profile
+    assert profile.model_dump(mode="json")["outlines"][0]["polygon"][0] == [-89.8, 39.7]
+
+
+@pytest.mark.parametrize(
+    ("polygon", "message"),
+    [
+        (SPRINGFIELD_BOX[:-1], "end where it starts"),
+        ([[0, 0], [1, 1], [0, 0]], "at least 3 corners"),
+        ([[0, 0], [200, 0], [0, 1], [0, 0]], "not a longitude, latitude pair"),
+        ([[0, 0], [0, 95], [1, 0], [0, 0]], "not a longitude, latitude pair"),
+        ([[0, 0], [1, 1], [2, 2], [0, 0]], "enclose an area"),
+        ([[0, 0], *([[1, i / 1000] for i in range(500)]), [0, 0]], "at most 500 points"),
+    ],
+)
+def test_bad_outlines_are_rejected(polygon: list[list[float]], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        criteria(outlines=[{"name": "Bad", "polygon": polygon}])
+
+
+@pytest.mark.parametrize("name", ["", "   ", "x" * 81])
+def test_outline_needs_a_short_name(name: str) -> None:
+    with pytest.raises(ValidationError):
+        criteria(outlines=[{"name": name, "polygon": SPRINGFIELD_BOX}])
+
+
+def test_diff_reports_outlines() -> None:
+    new = criteria(outlines=[{"name": "Downtown", "polygon": SPRINGFIELD_BOX}])
+
+    (change,) = diff_criteria(Criteria(), new)
+
+    assert change.field == "outlines"
+    assert change.old == []
+
+
+def test_criteria_cities_include_places_inside_outlines() -> None:
+    profile = criteria(
+        areas=[{"name": "Springfield, IL", "lat": 39.8, "lng": -89.65, "radius": 5}],
+        outlines=[{"name": "Downtown", "polygon": SPRINGFIELD_BOX}],
+    )
+
+    # Springfield is both an area and inside the outline: listed once, first.
+    assert criteria_cities(profile)[0] == "Springfield, IL"
+    assert criteria_cities(profile).count("Springfield, IL") == 1
+
+
+def test_criteria_cities_cap_each_outline(caplog: pytest.LogCaptureFixture) -> None:
+    profile = criteria(outlines=[{"name": "Illinois", "polygon": ILLINOIS_BOX}])
+
+    with caplog.at_level("WARNING", logger="furnest.domain.criteria"):
+        cities = criteria_cities(profile)
+
+    assert len(cities) == MAX_OUTLINE_CITIES
+    assert "outline 'Illinois' holds" in caplog.text

@@ -1,0 +1,10 @@
+{% from "criteria/_macros.html" import error %}
+{% set p = "outlines-" ~ index %}
+{# Drawn on the dashboard map; the editor only keeps or removes it. #}
+<div class="row outline-row" id="{{ p }}-row">
+  <input type="hidden" name="{{ p }}-name" value="{{ row.name }}">
+  <input type="hidden" name="{{ p }}-polygon" value="{{ row.polygon }}">
+  <p class="outline-name"><strong>{{ row.name }}</strong> <span class="muted">{{ row.corners }} corners</span></p>
+  <label class="remove"><input type="checkbox" name="{{ p }}-remove"> Remove</label>
+  {{ error(errors, p ~ "-name") }}
+</div>

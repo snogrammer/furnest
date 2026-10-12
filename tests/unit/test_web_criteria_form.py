@@ -11,6 +11,7 @@ from furnest.domain import (
     DistanceUnit,
     FilterRule,
     Money,
+    Outline,
     OwnerType,
     PropertyType,
 )
@@ -31,6 +32,8 @@ def to_pairs(state: FormState) -> list[tuple[str, str | UploadFile]]:
         pairs += [(f"areas-{i}-{key}", value) for key, value in row.items()]
     for i, (tag, weight) in enumerate(state.nice):
         pairs += [(f"nice-{i}-tag", tag), (f"nice-{i}-weight", weight)]
+    for i, row in enumerate(state.outlines):
+        pairs += [(f"outlines-{i}-name", row["name"]), (f"outlines-{i}-polygon", row["polygon"])]
     return pairs
 
 
@@ -252,3 +255,47 @@ def test_failed_parse_keeps_what_was_typed() -> None:
     parsed = parse_form(submit(min_beds="two", keywords_allow="quiet\nsunny"))
     assert parsed.state.value("min_beds") == "two"
     assert parsed.state.value("keywords_allow") == "quiet\nsunny"
+
+
+# --- Outlines (#214): carried through the form, never edited in it ------------
+
+RING = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0))
+WITH_OUTLINES = Criteria(
+    outlines=(Outline(name="North", polygon=RING), Outline(name="South", polygon=RING))
+)
+
+
+def test_outlines_survive_a_save_of_the_form() -> None:
+    state = state_from_criteria(WITH_OUTLINES)
+
+    assert [row["corners"] for row in state.outlines] == ["3", "3"]
+    parsed = parse_form(FormData(to_pairs(state)))
+    assert parsed.errors == {}
+    assert parsed.criteria is not None
+    assert parsed.criteria.outlines == WITH_OUTLINES.outlines
+
+
+def test_an_outline_can_be_removed() -> None:
+    pairs = [*to_pairs(state_from_criteria(WITH_OUTLINES)), ("outlines-0-remove", "on")]
+
+    parsed = parse_form(FormData(pairs))
+
+    assert parsed.criteria is not None
+    assert [o.name for o in parsed.criteria.outlines] == ["South"]
+
+
+def test_an_unreadable_outline_is_reported_on_its_row() -> None:
+    pairs = [
+        *to_pairs(state_from_criteria(Criteria())),
+        ("outlines-0-name", "Broken"),
+        ("outlines-0-polygon", "[[0, 0"),
+        ("outlines-1-name", "Open"),
+        ("outlines-1-polygon", "[[0, 0], [1, 0], [1, 1], [0, 1]]"),
+    ]
+
+    parsed = parse_form(FormData(pairs))
+
+    assert parsed.criteria is None
+    assert "unreadable" in parsed.errors["outlines-0-name"]
+    assert parsed.errors["outlines-1-name"] == "an outline must end where it starts"
+    assert parsed.state.outlines[0]["corners"] == "?"

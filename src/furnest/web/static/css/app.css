@@ -1620,3 +1620,53 @@ a.button {
     color: var(--muted);
   }
 }
+
+/* Search outlines (#214): saved ones are drawn quietly, the one being drawn stands out.
+   Leaflet puts these classes on the SVG paths, so stroke and fill set the look. */
+.map path.outline-saved {
+  stroke: var(--ok);
+  stroke-width: 2;
+  fill: var(--ok);
+  fill-opacity: 0.08;
+}
+
+.map path.outline-draft {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+  fill: var(--accent);
+  fill-opacity: 0.12;
+}
+
+.outline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem var(--space);
+  margin-top: var(--space);
+}
+
+.outline-form[hidden],
+.map-hint[hidden] {
+  display: none;
+}
+
+.outline-form label {
+  flex-basis: 100%;
+  font-weight: 600;
+}
+
+.outline-form input[name="name"] {
+  flex: 1 1 14rem;
+}
+
+.outline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem var(--space);
+}
+
+.outline-row .outline-name {
+  margin: 0;
+}

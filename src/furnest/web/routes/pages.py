@@ -10,7 +10,8 @@ results fragment only (``HX-Request``) and push the URL, so back and reload keep
 working. A page past the last one shows the last page. The map view's page holds
 an empty map; its script fetches the pins from ``/properties/map.json`` (JSON, same
 filters and auth). With ``MAP_ENABLED`` off, ``view=map`` shows the list and the
-JSON is a 404.
+JSON is a 404. A shape drawn on the map posts to ``/criteria/outlines``, which saves
+it as an outline in a new criteria version and comes back to the map (303).
 
 The detail page also asks for an inquiry (Inquire, :func:`inquire`): it approves a
 suggested property and queues the job that drafts the email, as the Discord button
@@ -45,11 +46,13 @@ The handlers are plain ``def`` so FastAPI runs the blocking SQLite calls in its
 threadpool.
 """
 
+import json
 from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import ValidationError
 from starlette.responses import Response
 
 from furnest.config import INQUIRY_MODE, InquiryMode, RuntimeSettings
@@ -69,7 +72,15 @@ from furnest.db.property_store import (
 )
 from furnest.db.session import make_session_factory, session_scope
 from furnest.db.settings_store import SqlSettingsStore
-from furnest.domain import Actor, InvalidTransitionError, OwnerType, PropertyStatus, beds_baths
+from furnest.domain import (
+    Actor,
+    Criteria,
+    InvalidTransitionError,
+    Outline,
+    OwnerType,
+    PropertyStatus,
+    beds_baths,
+)
 from furnest.domain.status import TRANSITIONS
 from furnest.email.inquiry import request_inquiry_in
 from furnest.email.templates import MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH
@@ -184,6 +195,61 @@ def map_points(request: Request, filters: Annotated[Filters, Depends(_filters)])
     )
 
 
+@router.post("/criteria/outlines")
+def save_outline(
+    request: Request,
+    name: Annotated[str, Form(max_length=200)] = "",
+    polygon: Annotated[str, Form(max_length=100_000)] = "",
+    back: Annotated[str, Form(max_length=1000)] = "",
+) -> Response:
+    """Save a shape drawn on the map as a search area: a new criteria version.
+
+    ``polygon`` is the drawn GeoJSON geometry (a Polygon) or its outer ring. An
+    outline with the same name is replaced. A bad shape or name re-renders the map
+    with the reason (422) and saves nothing. ``back`` is the dashboard URL the form
+    was on; only a dashboard URL (``/?...``) is followed, so it can't redirect away.
+    """
+    filters = Filters(view=View.MAP)
+    target = back if back == "/" or back.startswith("/?") else filters.url()
+    try:
+        outline = Outline.model_validate({"name": name, "polygon": _outline_ring(polygon)})
+    except (ValueError, ValidationError) as exc:
+        message = _outline_error(exc)
+        return _render_dashboard(request, filters, error=message, status_code=422)
+    store = CriteriaStore(make_session_factory(request.app.state.engine))
+    active = store.active()
+    current = active.criteria if active else Criteria()
+    kept = tuple(o for o in current.outlines if o.name != outline.name)
+    criteria = current.model_copy(update={"outlines": (*kept, outline)})
+    store.save(Criteria.model_validate(criteria.model_dump()), created_by="dashboard")
+    return RedirectResponse(target, status_code=303)
+
+
+def _outline_ring(text: str) -> object:
+    """The outer ring of a submitted GeoJSON Polygon (or a bare ring), unvalidated."""
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        msg = "The drawn shape couldn't be read. Draw it again."
+        raise ValueError(msg) from exc
+    if isinstance(data, dict):
+        if data.get("type") != "Polygon" or not data.get("coordinates"):
+            msg = "Only a polygon or rectangle can be saved."
+            raise ValueError(msg)
+        return data["coordinates"][0]
+    return data
+
+
+def _outline_error(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        error = exc.errors()[0]
+        field = ".".join(str(part) for part in error["loc"])
+        text = str(error["msg"]).removeprefix("Value error, ")
+        prefix = "Name: " if field == "name" else ""
+        return f"Not saved. {prefix}{text[0].upper()}{text[1:]}."
+    return f"Not saved. {exc}"
+
+
 def _render_dashboard(
     request: Request,
     filters: Filters,
@@ -209,6 +275,11 @@ def _render_dashboard(
         "source_name": _source_namer(request),
         "map": request.app.state.settings.map,
     }
+    active = CriteriaStore(make_session_factory(request.app.state.engine)).active()
+    if filters.view is View.MAP:
+        # Saved outlines are drawn on the map (GeoJSON order, as stored).
+        outlines = active.criteria.outlines if active else ()
+        context["outlines"] = [{"name": o.name, "polygon": o.polygon} for o in outlines]
     if request.headers.get("HX-Request") == "true":
         # The tab lives in the filter form, outside the swapped results; update it too.
         context["oob"] = True
@@ -218,7 +289,6 @@ def _render_dashboard(
         # The form sends every field; push the short, canonical URL instead.
         response.headers["HX-Push-Url"] = filters.url(page=dashboard.page)
         return response
-    active = CriteriaStore(make_session_factory(request.app.state.engine)).active()
     context["criteria_summary"] = summarize_criteria(active.criteria) if active else None
     return templates.TemplateResponse(request, "index.html", context, status_code=status_code)
 

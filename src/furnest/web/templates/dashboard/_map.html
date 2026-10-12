@@ -1,9 +1,22 @@
-{# The pins come from points_url; static/js/map.js draws them and fills in the notes. #}
+{# The pins come from points_url; static/js/map.js draws them, the saved outlines and
+   the drawing tools, and fills in the notes. #}
 <div class="map-view">
+  {% if notice %}<p class="flash" role="status">{{ notice }}</p>{% endif %}
+  {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
   <div id="map" class="map" role="region" aria-label="Map of {{ f.tab.label | lower }} properties"
     data-points-url="{{ f.points_url }}"
     data-tile-url="{{ map.tile_url }}"
     data-tile-attribution="{{ map.tile_attribution }}"
-    data-max-zoom="{{ map.max_zoom }}"></div>
+    data-max-zoom="{{ map.max_zoom }}"
+    data-outlines="{{ outlines | default([]) | tojson | forceescape }}"></div>
   <p class="muted map-note" data-map-note role="status"></p>
+  <p class="muted map-hint" data-outline-hint>Draw a shape with the tools on the left of the map to save it as a search area.</p>
+  <form class="outline-form" method="post" action="/criteria/outlines" data-outline-form hidden>
+    {{ csrf_field(request) }}
+    <input type="hidden" name="polygon" data-outline-polygon>
+    <input type="hidden" name="back" value="{{ f.url() }}">
+    <label for="outline-name">Name this search area</label>
+    <input id="outline-name" name="name" required maxlength="80" placeholder="e.g. Near the office" autocomplete="off">
+    <button type="submit">Save as search area</button>
+  </form>
 </div>

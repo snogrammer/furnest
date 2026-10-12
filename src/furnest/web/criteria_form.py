@@ -10,6 +10,9 @@ conventions:
   checkbox groups.
 - Areas and nice-to-have weights are repeated rows named ``areas-<i>-<field>`` and
   ``nice-<i>-<field>``. A row left blank, or with its ``remove`` box ticked, is dropped.
+- Outlines drawn on the dashboard map (#214) are rows of hidden ``outlines-<i>-name``
+  and ``outlines-<i>-polygon`` (the ring as JSON) with a ``remove`` box: the editor
+  can't reshape them, only keep or drop them.
 - An area row's name is a "City, State" lookup (#179). A row with a name and no
   coordinates is filled from :mod:`furnest.domain.places`: the canonical name, the
   centre, and a 50 mi radius unless one was typed. ``lookup=<i>`` (the row's "Look up"
@@ -26,6 +29,7 @@ otherwise, keyed by input name, with ``__all__`` for errors about the whole prof
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -72,7 +76,7 @@ AREA_FIELDS = ("name", "lat", "lng", "radius")
 DEFAULT_AREA_RADIUS = "50"
 DEFAULT_AREA_UNIT = DistanceUnit.MILES
 
-_ROW_KEY = re.compile(r"^(areas|nice)-(\d+)-")
+_ROW_KEY = re.compile(r"^(areas|nice|outlines)-(\d+)-")
 _SPLIT = re.compile(r"[,\n]")
 
 
@@ -84,6 +88,9 @@ class FormState:
     checked: dict[str, set[str]] = field(default_factory=dict)
     areas: list[dict[str, str]] = field(default_factory=list)
     nice: list[tuple[str, str]] = field(default_factory=list)
+    # Outlines drawn on the map (#214) aren't edited here, only carried along (hidden
+    # fields) so saving the form keeps them, or removed: ``name`` and ``polygon`` JSON.
+    outlines: list[dict[str, str]] = field(default_factory=list)
 
     def value(self, name: str) -> str:
         return self.fields.get(name, "")
@@ -135,7 +142,20 @@ def state_from_criteria(criteria: Criteria) -> FormState:
         for area in criteria.areas
     ]
     nice = [(tag, _show(weight)) for tag, weight in criteria.nice_to_have_amenities.items()]
-    return FormState(fields=fields, checked=checked, areas=areas, nice=nice)
+    outlines = [
+        _outline_row(o.name, json.dumps(o.polygon, separators=(",", ":")))
+        for o in criteria.outlines
+    ]
+    return FormState(fields=fields, checked=checked, areas=areas, nice=nice, outlines=outlines)
+
+
+def _outline_row(name: str, polygon: str) -> dict[str, str]:
+    """An outline as the form carries it, with its corner count for display."""
+    try:
+        corners = str(max(0, len(json.loads(polygon)) - 1))
+    except (ValueError, TypeError):
+        corners = "?"
+    return {"name": name, "polygon": polygon, "corners": corners}
 
 
 def _text(form: FormData, key: str) -> str:
@@ -179,7 +199,14 @@ def _read_state(form: FormData, lookup: int | None = None) -> FormState:
         if f"nice-{i}-remove" in form or not (tag or weight):
             continue
         nice.append((tag, weight))
-    return FormState(fields=fields, checked=checked, areas=areas, nice=nice)
+
+    outlines = []
+    for i in _row_indices(form, "outlines"):
+        name, polygon = _text(form, f"outlines-{i}-name"), _text(form, f"outlines-{i}-polygon")
+        if f"outlines-{i}-remove" in form or not (name or polygon):
+            continue
+        outlines.append(_outline_row(name, polygon))
+    return FormState(fields=fields, checked=checked, areas=areas, nice=nice, outlines=outlines)
 
 
 def resolve_area_row(row: dict[str, str]) -> str | None:
@@ -323,6 +350,16 @@ def _to_data(state: FormState, errors: dict[str, str]) -> dict[str, Any]:
         else:
             weights[tag] = weight
     data["nice_to_have_amenities"] = weights
+
+    data["outlines"] = []
+    for i, row in enumerate(state.outlines):
+        try:
+            polygon = json.loads(row["polygon"])
+        except ValueError:
+            # Kept in the list (as None) so later rows' error locations still line up.
+            errors[f"outlines-{i}-name"] = "the outline's shape is unreadable; remove it"
+            polygon = None
+        data["outlines"].append({"name": row["name"], "polygon": polygon})
     return data
 
 
@@ -332,6 +369,8 @@ def _error_key(loc: tuple[int | str, ...], state: FormState) -> str:
     head = str(loc[0])
     if head == "areas" and len(loc) >= 3:
         return f"areas-{loc[1]}-{loc[2]}"
+    if head == "outlines" and len(loc) >= 2:
+        return f"outlines-{loc[1]}-name"
     if head == "nice_to_have_amenities" and len(loc) >= 2:
         tags = [tag for tag, _ in state.nice]
         if loc[1] in tags:

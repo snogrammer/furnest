@@ -1,7 +1,8 @@
-"""Location matching: is a listing inside the searcher's areas, ZIP codes or neighborhoods?
+"""Location matching: is a listing inside the searcher's areas, outlines, ZIPs or neighborhoods?
 
 A listing qualifies when it matches **any** configured location criterion: within
-the radius of an area, in a listed ZIP code, or in a listed neighborhood. Each
+the radius of an area, inside an outline drawn on the map (#214), in a listed ZIP
+code, or in a listed neighborhood. Each
 criterion is evaluated only when the listing has the data for it. Missing
 coordinates fall back to ZIP and neighborhood, and the result says so.
 
@@ -25,7 +26,7 @@ from enum import StrEnum
 
 from furnest.domain import AddressParser, Criteria, DistanceUnit, NormalizedListing
 from furnest.domain.address import normalize_zip
-from furnest.domain.geo import EARTH_RADIUS, haversine
+from furnest.domain.geo import EARTH_RADIUS, haversine, point_in_polygon
 
 _SPACE = re.compile(r"\s+")
 
@@ -62,7 +63,7 @@ def match_location(
     *,
     parser: AddressParser | None = None,
 ) -> LocationResult:
-    if not (criteria.areas or criteria.zip_codes or criteria.neighborhoods):
+    if not (criteria.areas or criteria.outlines or criteria.zip_codes or criteria.neighborhoods):
         return LocationResult(LocationStatus.NOT_CONFIGURED, ("no location criteria",))
 
     parsed = parser.parse(listing.address) if parser else None
@@ -73,11 +74,16 @@ def match_location(
     nearest: tuple[float, DistanceUnit] | None = None
     nearest_km = 0.0
 
-    if criteria.areas:
+    if criteria.areas or criteria.outlines:
         if listing.lat is None or listing.lng is None:
             unknown = True
             reasons.append("location unknown: no coordinates")
         else:
+            for outline in criteria.outlines:
+                inside = point_in_polygon(listing.lng, listing.lat, outline.polygon)
+                reasons.append(f"{'inside' if inside else 'outside'} {outline.name}")
+                if inside:
+                    matches.append(f"outline:{outline.name}")
             for area in criteria.areas:
                 distance = haversine(listing.lat, listing.lng, area.lat, area.lng, area.unit)
                 # Areas may mix units, so rank them by their distance in kilometres.

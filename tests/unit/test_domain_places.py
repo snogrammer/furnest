@@ -6,7 +6,7 @@ Tests use Springfield, IL (the hygiene placeholder area) as the known place.
 import pytest
 
 from furnest.domain import haversine
-from furnest.domain.places import find_places, parse_query, resolve_place
+from furnest.domain.places import find_places, parse_query, places_within, resolve_place
 
 pytestmark = pytest.mark.unit
 
@@ -76,3 +76,24 @@ def test_neighborhood_names_are_other_names_for_the_citys_zips() -> None:
     assert "Brooklyn Heights" in names
     assert "Brooklyn" not in names
     assert list(names) == sorted(names)
+
+
+def test_places_within_an_outline() -> None:
+    box = [(-89.8, 39.7), (-89.5, 39.7), (-89.5, 39.9), (-89.8, 39.9), (-89.8, 39.7)]
+
+    places, dropped = places_within(box, limit=50)
+
+    assert "Springfield, IL" in [p.label for p in places]
+    assert dropped == 0
+    assert all(-89.8 <= p.lng <= -89.5 and 39.7 <= p.lat <= 39.9 for p in places)
+
+
+def test_places_within_keeps_the_biggest() -> None:
+    box = [(-91.0, 37.0), (-87.5, 37.0), (-87.5, 42.0), (-91.0, 42.0), (-91.0, 37.0)]
+
+    places, dropped = places_within(box, limit=3)
+
+    assert len(places) == 3
+    assert dropped > 100
+    sizes = [len(p.zip_codes) for p in places]
+    assert sizes == sorted(sizes, reverse=True)

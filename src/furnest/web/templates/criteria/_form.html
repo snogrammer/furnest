@@ -24,7 +24,7 @@
 
   <fieldset>
     <legend>Location</legend>
-    <p class="muted">Where to look. A listing qualifies if it is in any area, ZIP code or neighborhood below. Type a city and state (like "Springfield, IL") and pick it from the list; a radius of 50 miles is a good start.</p>
+    <p class="muted">Where to look. A listing qualifies if it is in any area, outline, ZIP code or neighborhood below. Type a city and state (like "Springfield, IL") and pick it from the list; a radius of 50 miles is a good start.</p>
     {% if not state.areas %}<p class="muted empty-state">No areas yet. Type a city and state in the row below, or list ZIP codes or neighborhoods instead.</p>{% endif %}
     <div id="area-rows" class="rows">
       {% for row in state.areas %}
@@ -34,6 +34,16 @@
     </div>
     {{ m.add_button("area", "Add area", state.areas|length + 1) }}
     {{ m.error(errors, "areas") }}
+    <h3 class="outlines-heading">Outlines</h3>
+    {% if state.outlines %}
+    <div id="outline-rows" class="rows">
+      {% for row in state.outlines %}
+        {% with index=loop.index0 %}{% include "criteria/_outline_row.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    <p class="muted">{% if not state.outlines %}No outlines yet. {% endif %}Draw one around the streets you want on the <a href="/?view=map">dashboard map</a>; sources then search the cities inside it.</p>
+    {{ m.error(errors, "outlines") }}
     <div class="grid">
       {{ m.textarea(state, errors, "zip_codes", "ZIP codes", "Exact ZIP codes to include, one per line or comma-separated.") }}
       {{ m.textarea(state, errors, "neighborhoods", "Neighborhoods", "Names as they appear in listings, one per line or comma-separated.") }}

@@ -13,6 +13,7 @@ reports only real changes. All prices are monthly amounts.
 from __future__ import annotations
 
 import calendar
+import logging
 import math
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -29,12 +30,19 @@ from pydantic import (
     model_validator,
 )
 
-from furnest.domain.geo import DistanceUnit
+from furnest.domain.geo import DistanceUnit, ring_area
 from furnest.domain.money import Money
 from furnest.domain.owner_type import OwnerType
+from furnest.domain.places import places_within
 from furnest.domain.property_type import PropertyType
 
+logger = logging.getLogger(__name__)
+
 MAX_FLEX_DAYS = 365
+# Positions in one drawn outline, the closing one included.
+MAX_OUTLINE_VERTICES = 500
+# Cities searched for each outline; the biggest are kept (see criteria_cities).
+MAX_OUTLINE_CITIES = 10
 _DAYS_PER_MONTH = 30.4375
 _LEGACY_DATE_FIELDS = frozenset(
     {
@@ -117,11 +125,47 @@ class Area(BaseModel):
     unit: DistanceUnit = DistanceUnit.MILES
 
 
+class Outline(BaseModel):
+    """A shape drawn on the dashboard map (#214): one closed ring, GeoJSON order.
+
+    ``polygon`` holds ``(lng, lat)`` positions, the first repeated as the last, so it
+    is the ``coordinates[0]`` of a GeoJSON Polygon. Holes aren't supported.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+    polygon: tuple[tuple[float, float], ...]
+
+    @model_validator(mode="after")
+    def _valid_ring(self) -> Self:
+        ring = self.polygon
+        if len(ring) < 4:
+            msg = "an outline needs at least 3 corners"
+            raise ValueError(msg)
+        if len(ring) > MAX_OUTLINE_VERTICES:
+            msg = f"an outline may have at most {MAX_OUTLINE_VERTICES} points"
+            raise ValueError(msg)
+        if ring[0] != ring[-1]:
+            msg = "an outline must end where it starts"
+            raise ValueError(msg)
+        for lng, lat in ring:
+            if not (-180 <= lng <= 180 and -90 <= lat <= 90):
+                msg = f"({lng}, {lat}) is not a longitude, latitude pair"
+                raise ValueError(msg)
+        if ring_area(ring) == 0:
+            msg = "an outline must enclose an area"
+            raise ValueError(msg)
+        return self
+
+
 class Criteria(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    # Location: a listing qualifies if it is in any area, ZIP or neighborhood (#13).
+    # Location: a listing qualifies if it is in any area, outline, ZIP or neighborhood
+    # (#13, #214).
     areas: tuple[Area, ...] = ()
+    outlines: tuple[Outline, ...] = ()
     zip_codes: TextList = ()
     neighborhoods: TagList = ()
 
@@ -275,6 +319,22 @@ def diff_criteria(old: Criteria, new: Criteria) -> list[CriteriaChange]:
 
 
 def criteria_cities(criteria: Criteria) -> tuple[str, ...]:
-    """The areas named "City, State", in order and without repeats."""
-    names = (area.name for area in criteria.areas if "," in area.name)
+    """The places to search: areas named "City, State", then each outline's cities.
+
+    The Apify actors only search by city, so an outline becomes the places whose
+    centre is inside it, the biggest :data:`MAX_OUTLINE_CITIES` of them to keep run
+    costs bounded; matching then keeps only listings inside the outline itself.
+    In order and without repeats.
+    """
+    names = [area.name for area in criteria.areas if "," in area.name]
+    for outline in criteria.outlines:
+        places, dropped = places_within(outline.polygon, limit=MAX_OUTLINE_CITIES)
+        if dropped:
+            logger.warning(
+                "outline %r holds %d more places than the %d searched",
+                outline.name,
+                dropped,
+                MAX_OUTLINE_CITIES,
+            )
+        names.extend(place.label for place in places)
     return tuple(dict.fromkeys(names))

@@ -1,20 +1,23 @@
 """The dashboard at ``/``: tabs, search, sort, paging, list, board and map, htmx fragments."""
 
+import json
 import re
 from collections.abc import Callable
 from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.db.base import utcnow
+from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import SqlListingStore
 from furnest.db.models import Property
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import Money, NormalizedListing, OwnerType, PropertyStatus
+from furnest.domain import Criteria, Money, NormalizedListing, OwnerType, PropertyStatus
 from furnest.domain.price import Price
 from furnest.web.property_views import PAGE_SIZE, Filters, View
 
@@ -529,3 +532,145 @@ def test_filters_points_url_drops_view_and_page() -> None:
         Filters(status="approved", q="a b", view=View.MAP, page=3, snoozed=True).points_url
         == "/properties/map.json?status=approved&q=a+b&snoozed=true"
     )
+
+
+# --- Saving a drawn outline (#214) ----------------------------------------------
+
+BOX = [[-89.8, 39.7], [-89.5, 39.7], [-89.5, 39.9], [-89.8, 39.9], [-89.8, 39.7]]
+
+
+def save_outline(
+    client: TestClient,
+    csrf: Callable[[str], str],
+    name: str,
+    polygon: object,
+    back: str = "",
+) -> Response:
+    token = csrf(get(client, "/?view=map"))
+    body = polygon if isinstance(polygon, str) else json.dumps(polygon)
+    return client.post(
+        "/criteria/outlines",
+        data={"csrf_token": token, "name": name, "polygon": body, "back": back},
+        headers=HTML,
+        follow_redirects=False,
+    )
+
+
+def test_map_page_has_the_save_form(authed_client: TestClient) -> None:
+    html = get(authed_client, "/?view=map")
+
+    assert 'action="/criteria/outlines"' in html
+    assert 'data-outlines="[]"' in html
+    assert 'name="back" value="/?view=map"' in html
+    assert "vendor/leaflet-geoman-free-2.20.2/leaflet-geoman.min.js" in html
+
+
+@pytest.mark.parametrize(
+    ("back", "location"),
+    [
+        ("/?status=all&view=map", "/?status=all&view=map"),
+        ("https://evil.example.com/", "/?view=map"),
+        ("//evil.example.com/", "/?view=map"),
+    ],
+)
+def test_saving_an_outline_returns_to_the_dashboard_only(
+    authed_client: TestClient, csrf: Callable[[str], str], back: str, location: str
+) -> None:
+    response = save_outline(authed_client, csrf, "Downtown", BOX, back=back)
+
+    assert response.headers["location"] == location
+
+
+def test_saving_an_outline_needs_login(client: TestClient) -> None:
+    response = client.post("/criteria/outlines", data={"name": "x", "polygon": "[]"})
+
+    assert response.status_code == 401
+
+
+def test_saving_an_outline_needs_csrf(authed_client: TestClient) -> None:
+    response = authed_client.post(
+        "/criteria/outlines", data={"name": "Downtown", "polygon": json.dumps(BOX)}
+    )
+
+    assert response.status_code == 403
+
+
+def test_a_drawn_polygon_becomes_a_criteria_outline(
+    authed_client: TestClient,
+    csrf: Callable[[str], str],
+    session_factory: sessionmaker[Session],
+) -> None:
+    geometry = {"type": "Polygon", "coordinates": [BOX]}
+
+    response = save_outline(authed_client, csrf, " Downtown ", geometry)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?view=map"
+    active = CriteriaStore(session_factory).active()
+    assert active is not None
+    assert active.created_by == "dashboard"
+    (outline,) = active.criteria.outlines
+    assert outline.name == "Downtown"
+    assert outline.polygon[0] == (-89.8, 39.7)
+    html = get(authed_client, "/?view=map")
+    assert "Downtown" in html
+    assert "&#34;polygon&#34;: [[-89.8, 39.7]" in html
+
+
+def test_saving_an_outline_keeps_the_rest_of_the_criteria(
+    authed_client: TestClient,
+    csrf: Callable[[str], str],
+    session_factory: sessionmaker[Session],
+) -> None:
+    store = CriteriaStore(session_factory)
+    store.save(Criteria(min_beds=2), created_by="test")
+
+    save_outline(authed_client, csrf, "Downtown", BOX)
+    smaller = [[-89.7, 39.75], [-89.6, 39.75], [-89.6, 39.85], [-89.7, 39.75]]
+    save_outline(authed_client, csrf, "Downtown", smaller)
+    save_outline(authed_client, csrf, "Uptown", BOX)
+
+    active = store.active()
+    assert active is not None
+    assert active.version == 4
+    assert active.criteria.min_beds == 2
+    assert [o.name for o in active.criteria.outlines] == ["Downtown", "Uptown"]
+    assert len(active.criteria.outlines[0].polygon) == 4  # replaced, not added
+
+
+@pytest.mark.parametrize(
+    ("name", "polygon", "message"),
+    [
+        ("Downtown", "not json", "couldn&#39;t be read"),
+        ("Downtown", {"type": "LineString", "coordinates": BOX}, "Only a polygon"),
+        ("Downtown", BOX[:-1], "end where it starts"),
+        ("", BOX, "Name: "),
+    ],
+)
+def test_a_bad_outline_is_not_saved(
+    authed_client: TestClient,
+    csrf: Callable[[str], str],
+    session_factory: sessionmaker[Session],
+    name: str,
+    polygon: object,
+    message: str,
+) -> None:
+    response = save_outline(authed_client, csrf, name, polygon)
+
+    assert response.status_code == 422
+    assert "Not saved." in response.text
+    assert message in response.text
+    assert 'id="map"' in response.text
+    assert CriteriaStore(session_factory).active() is None
+
+
+def test_criteria_editor_lists_outlines(
+    authed_client: TestClient, csrf: Callable[[str], str]
+) -> None:
+    save_outline(authed_client, csrf, "Downtown", BOX)
+
+    html = get(authed_client, "/criteria")
+
+    assert 'name="outlines-0-name" value="Downtown"' in html
+    assert "4 corners" in html
+    assert 'name="outlines-0-remove"' in html

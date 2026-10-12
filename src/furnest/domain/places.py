@@ -25,6 +25,8 @@ from functools import cache
 
 import zipcodes
 
+from furnest.domain.geo import Ring, bbox, point_in_polygon
+
 # Postal codes for the states, DC and the territories in the dataset.
 US_STATES: dict[str, str] = {
     "alabama": "AL",
@@ -211,3 +213,20 @@ def neighborhood_names(place: Place) -> tuple[str, ...]:
                 if key and key != own:
                     names.setdefault(key, _display(str(name)))
     return tuple(sorted(names.values()))
+
+
+def places_within(ring: Ring, *, limit: int) -> tuple[list[Place], int]:
+    """The places whose centre lies inside a ring, biggest first, and how many didn't fit.
+
+    A linear scan with a bounding-box prefilter: about 30,000 places, fast enough
+    for the once-per-run lookup it serves.
+    """
+    min_lng, min_lat, max_lng, max_lat = bbox(ring)
+    inside = [
+        p.place
+        for p in _index()
+        if min_lng <= p.place.lng <= max_lng
+        and min_lat <= p.place.lat <= max_lat
+        and point_in_polygon(p.place.lng, p.place.lat, ring)
+    ]
+    return inside[:limit], max(0, len(inside) - limit)
