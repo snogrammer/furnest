@@ -862,24 +862,26 @@ its own input and output shape. For such sources, compare it against a plain HTT
 browser adapter, which needs no extra service. A provider earns its keep when it
 saves writing a parser.
 
-### Staying inside Apify's free credit
+### Staying inside the Apify budget
 
 The Free plan's $5 a month went in about a day on 2026-10-11, when every Apify
-source ran hourly with `max_results` 100 (about $1.20 a sweep; #216). Three things now
-keep the spend inside the budget:
+source ran hourly with `max_results` 100 (about $1.20 a sweep; #216). The account moved
+to the Starter plan on 2026-10-12: $19 of usage a month, a cycle that starts on the
+12th, and Bronze-tier Store prices. Three things keep the spend inside the plan:
 
-* **Per-source defaults.** Apify sources default to a run every two days
-  (`interval_minutes` 2880) of 25 results. The dashboard or `SOURCES_ADAPTERS` can
+* **Per-source defaults.** Apify sources default to a daily run
+  (`interval_minutes` 1440) of 25 results. The dashboard or `SOURCES_ADAPTERS` can
   change either. The global `SOURCES_DEFAULT_INTERVAL_MINUTES` went from 60 to 360 for
   everything else. A field resolves in this order: `SOURCES_ADAPTERS`, then the
   dashboard, then the adapter's own default, then `SOURCES_*`.
-* **A monthly budget** (`SOURCES_APIFY_MONTHLY_BUDGET_USD`, default 5;
-  `sources/budget.py`).
+* **A monthly limit** (`sources/budget.py`): the plan's own, or
+  `SOURCES_APIFY_MONTHLY_BUDGET_USD` if that's set and lower (unset by default).
   * Before each Apify run, the worker reads the account's usage this cycle from
     `GET /v2/users/me/limits`. The reading is cached for 10 minutes in the `settings`
     table.
-  * It skips the run when usage plus the run's estimate would reach the budget, or
-    the plan's own limit if that is lower.
+  * It skips the run when usage plus the run's estimate would reach the plan's own
+    limit (`maxMonthlyUsageUsd` from the same call), or the budget if one is set and
+    lower.
   * A skipped run isn't a failure. Nothing is recorded and no alert goes out, and the
     source shows as **paused** on the Sources page until the next cycle starts. Only
     Apify sources pause.
@@ -890,24 +892,27 @@ keep the spend inside the budget:
   in `SOURCES_ADAPTERS`, otherwise twice the run's estimate, and never under $0.50
   (the `minimalMaxTotalChargeUsd` seen on #111).
 
-The Sources page shows this cycle's usage against the budget and when the next cycle
+The Sources page shows this cycle's usage against that limit and when the next cycle
 starts. It also projects what the sources that are on would cost in a month, and warns
 when that projection is over budget.
 
 The estimates come from each adapter's `start_cost_usd` and `result_cost_usd`. These
 are October 2026 prices, checked against live runs:
 
-| Source | Start | Per result | One run of 25 | Every 2 days for a month |
+| Source | Start | Per result | One run of 25 | Daily for a month |
 | --- | --- | --- | --- | --- |
-| Zillow | $0.0005 | $0.0029 (with details) | $0.073 | $1.10 |
-| Airbnb | none | $0.004 | $0.10 | $1.50 |
-| Zumper | $0.005 | $0.0025 | $0.068 | $1.01 |
-| Apartments.com | about $0.01 a page | $0.0005 | about $0.023 | $0.34 |
+| Zillow | $0.0005 | $0.0029 (with details) | $0.073 | $2.19 |
+| Airbnb | none | $0.004 | $0.10 | $3.00 |
+| Zumper | $0.005 | $0.0025 | $0.068 | $2.03 |
+| Apartments.com | about $0.01 a page | $0.0005 | about $0.023 | $0.68 |
 | Furnished Finder | $0.08, billed even when the run fails | $0.0025 | $0.14 | turned off |
 
-With the four working sources on at their defaults, a month comes to about $4,
-inside the $5 credit. Daily runs of all four would cost about $8. Apartments.com's
-actor also allows only 5 real runs a month on the Free plan, then answers in demo mode.
+With the four working sources on at their defaults, a month comes to about $8,
+inside Starter's $19. Residential proxy traffic is billed on top ($8 a GB on Starter;
+$0.71 of the Free plan's $5 went on it in October). On the Free plan the same sources
+would need a run every two days (`interval_minutes` 2880, about $4), and
+Apartments.com's actor allows only 5 real runs a month there before it answers in demo
+mode.
 
 **Furnished Finder is turned off** (`broken_reason`, shown on the Sources page). Every
 live run since 2026-10-07 has failed because the actor's geocoder rejects the

@@ -575,8 +575,9 @@ class SourcesSettings(_Group):
     # Upper bound on listings one run asks for, for sources that page or bill per result.
     max_results: PositiveInt = 100
     # Apify sources stop starting runs once the account's usage this cycle, plus the
-    # next run's estimated cost, would reach this (or the plan's own limit, if lower).
-    apify_monthly_budget_usd: PositiveFloat = 5.0
+    # next run's estimated cost, would reach the plan's own monthly limit, or this if
+    # it's set and lower.
+    apify_monthly_budget_usd: PositiveFloat | None = None
     browser_enabled: bool = False
     # A listing is marked removed once it has been missing from this many successful
     # runs of its source *and* unseen for this many hours.

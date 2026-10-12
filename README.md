@@ -188,7 +188,7 @@ Every setting, with its type and default (the table is generated from the code a
 | `SOURCES_ALLOW_PRIVATE_ADDRESSES` | boolean | `false` |
 | `SOURCES_MAX_RETRIES` | integer | `3` |
 | `SOURCES_MAX_RESULTS` | integer | `100` |
-| `SOURCES_APIFY_MONTHLY_BUDGET_USD` | number | `5.0` |
+| `SOURCES_APIFY_MONTHLY_BUDGET_USD` | number | unset |
 | `SOURCES_BROWSER_ENABLED` | boolean | `false` |
 | `SOURCES_REMOVE_AFTER_MISSED_RUNS` | integer | `3` |
 | `SOURCES_REMOVE_AFTER_HOURS` | integer | `24` |

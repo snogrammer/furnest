@@ -663,11 +663,13 @@ class BrokenBilled(Billed):
     broken_reason: ClassVar[str | None] = "its actor rejects every search"
 
 
-def seed_usage(session_factory: sessionmaker[Session], used_usd: float) -> None:
-    """A fresh usage reading, so the page doesn't call Apify."""
+def seed_usage(
+    session_factory: sessionmaker[Session], used_usd: float, plan_limit_usd: float = 19.0
+) -> None:
+    """A fresh usage reading on a Starter plan, so the page doesn't call Apify."""
     usage = ApifyUsage(
         used_usd=used_usd,
-        plan_limit_usd=5.0,
+        plan_limit_usd=plan_limit_usd,
         cycle_end=datetime(2026, 11, 6, 23, 59, 59, tzinfo=UTC),
         fetched_at=datetime.now(UTC),
     )
@@ -700,11 +702,35 @@ def test_the_apify_panel_shows_usage_budget_and_projection(
     page = billed_client.get("/sources").text
 
     assert 'id="apify-spend"' in page
-    assert "$1.25 of $5.00" in page
+    assert "$1.25 of $19.00 (the plan's limit)" in page
+    assert "the plan's limit (<code>SOURCES_APIFY_MONTHLY_BUDGET_USD</code> unset)" in page
     assert "the next cycle starts 2026-11-07" in page
-    # 15 runs a month of $0.30 each.
-    assert "$4.50 a month at the current intervals: Billed Data $4.50" in page
+    # 30 runs a month of $0.30 each.
+    assert "$9.00 a month at the current intervals: Billed Data $9.00" in page
     assert "would cost more than the budget" not in page
+
+
+def test_the_apify_panel_uses_a_budget_set_below_the_plan_limit(
+    migrated_engine: Engine, login: LoginFn, session_factory: sessionmaker[Session]
+) -> None:
+    registry = SourceRegistry()
+    registry.register(Billed)
+    settings = Settings(
+        sources=SourcesSettings(
+            apify_monthly_budget_usd=5,
+            adapters={"billed": AdapterOverrides(api_key=SecretStr("apify-token"))},
+        )
+    )
+    seed_usage(session_factory, used_usd=1.25)
+    app = create_app(settings, engine=migrated_engine, source_registry=registry)
+    with TestClient(app) as client:
+        login(client)
+        page = client.get("/sources").text
+
+    assert "$1.25 of $5.00;" in page
+    assert "$5.00 a month (<code>SOURCES_APIFY_MONTHLY_BUDGET_USD</code>)" in page
+    # $9.00 a month of daily runs is over the $5 budget.
+    assert "would cost more than the budget" in page
 
 
 def test_the_apify_panel_warns_when_the_projection_is_over_budget(
@@ -731,12 +757,12 @@ def test_the_apify_panel_warns_when_the_projection_is_over_budget(
 def test_over_budget_apify_sources_are_paused_and_left_out_of_run_all(
     billed_client: TestClient, csrf: Csrf, session_factory: sessionmaker[Session]
 ) -> None:
-    seed_usage(session_factory, used_usd=4.9)
+    seed_usage(session_factory, used_usd=18.9)
 
     page = billed_client.get("/sources").text
 
     assert "health-paused" in page
-    assert "Apify monthly budget reached ($4.90 of $5.00 used); resumes Nov 7" in page
+    assert "Apify monthly budget reached ($18.90 of $19.00 used); resumes Nov 7" in page
     response = post(billed_client, csrf, "/sources/run-all")
     assert response.status_code == 303
     assert [job.payload["source"] for job in jobs(session_factory)] == ["alpha"]

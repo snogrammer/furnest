@@ -21,6 +21,7 @@ pytestmark = pytest.mark.unit
 
 T0 = datetime(2026, 10, 11, 20, 0, tzinfo=UTC)
 TOKEN = "apify-test-token"  # noqa: S105 - a fake
+STARTER_PLAN_USD = 19.0
 
 
 class Billed(ApifyAdapter):
@@ -86,7 +87,7 @@ def budget(
     *,
     store: InMemorySettingsStore | None = None,
     clock: Clock | None = None,
-    monthly: float = 5.0,
+    monthly: float | None = 5.0,
 ) -> ApifyBudget:
     return ApifyBudget(
         SourcesSettings(apify_monthly_budget_usd=monthly, max_retries=0),
@@ -99,13 +100,13 @@ def budget(
 # --- Cost model ------------------------------------------------------------------------
 
 
-def test_apify_sources_default_to_every_two_days_and_25_results() -> None:
+def test_apify_sources_default_to_a_daily_run_of_25_results() -> None:
     resolved = config()
 
-    assert (resolved.interval_minutes, resolved.max_results) == (2880, 25)
+    assert (resolved.interval_minutes, resolved.max_results) == (1440, 25)
     assert Billed.run_cost_usd(resolved) == pytest.approx(0.30)
-    # 15 runs in a 30-day month.
-    assert Billed.monthly_cost_usd(resolved) == pytest.approx(4.50)
+    # 30 runs in a 30-day month.
+    assert Billed.monthly_cost_usd(resolved) == pytest.approx(9.00)
 
 
 def test_the_run_cap_is_twice_the_estimate_but_at_least_the_actor_minimum() -> None:
@@ -114,8 +115,10 @@ def test_the_run_cap_is_twice_the_estimate_but_at_least_the_actor_minimum() -> N
     assert Billed(config(max_charge_usd=2.5)).max_charge() == pytest.approx(2.5)
 
 
-def test_with_defaults_a_month_of_every_working_apify_source_fits_the_budget() -> None:
+def test_with_defaults_a_month_of_every_working_apify_source_fits_the_starter_plan() -> None:
     settings = SourcesSettings()
+    # No budget set: runs may spend up to the plan's limit, $19 on Starter.
+    assert settings.apify_monthly_budget_usd is None
     apify = [
         adapter
         for name in discover().names()
@@ -126,7 +129,7 @@ def test_with_defaults_a_month_of_every_working_apify_source_fits_the_budget() -
     working = [a for a in apify if a.broken_reason is None]
     projected = sum(a.monthly_cost_usd(resolve_config(a, settings)) for a in working)
 
-    assert projected <= settings.apify_monthly_budget_usd
+    assert projected <= STARTER_PLAN_USD
 
 
 # --- Usage and the budget check ------------------------------------------------------------
@@ -152,6 +155,15 @@ def test_the_plan_limit_wins_over_a_larger_budget() -> None:
 
     assert reason is not None
     assert "of $5.00" in reason
+
+
+def test_without_a_budget_runs_may_spend_up_to_the_plan_limit() -> None:
+    guard = budget(Limits(used=18.0, plan=STARTER_PLAN_USD), monthly=None)
+
+    assert guard.blocked_reason(Billed, config()) is None
+    guard.reserve(0.75)
+    reason = guard.blocked_reason(Billed, config())
+    assert reason == "Apify monthly budget reached ($18.75 of $19.00 used); resumes Nov 7"
 
 
 def test_a_smaller_budget_wins_over_the_plan_limit() -> None:

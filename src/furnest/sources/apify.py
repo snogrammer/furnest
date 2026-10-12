@@ -195,7 +195,7 @@ class ApifyAdapter(ProviderAdapter):
     ``parse_items`` (see :class:`~furnest.sources.provider.ProviderAdapter`). They all
     share :data:`APIFY_CREDENTIAL`.
 
-    Every run is billed, so Apify sources default to a run every two days of 25
+    Every run is billed, so Apify sources default to a daily run of 25
     results (#216), and each sets :attr:`start_cost_usd` and :attr:`result_cost_usd`
     from what its actor bills. Those give the estimate the monthly budget guard
     (:mod:`furnest.sources.budget`) and the Sources page's projection use, and the
@@ -204,7 +204,7 @@ class ApifyAdapter(ProviderAdapter):
 
     provider: ClassVar[DataProvider] = APIFY
     credential: ClassVar[Credential | None] = APIFY_CREDENTIAL
-    default_interval_minutes: ClassVar[int | None] = 2880
+    default_interval_minutes: ClassVar[int | None] = 1440
     default_max_results: ClassVar[int | None] = 25
     # What the actor bills to start a run and for each result, in USD.
     start_cost_usd: ClassVar[float] = 0.0

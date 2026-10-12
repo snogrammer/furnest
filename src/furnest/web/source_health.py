@@ -30,7 +30,7 @@ from furnest.domain.criteria import criteria_cities
 from furnest.pipeline.schedule import RUN_SOURCE
 from furnest.sources.apify import ApifyAdapter
 from furnest.sources.base import AdapterConfig, Blocker, Credential
-from furnest.sources.budget import ApifyBudget, ApifyUsage
+from furnest.sources.budget import ApifyBudget, ApifyUsage, spend_limit
 from furnest.sources.config import resolve_config
 from furnest.sources.registry import SourceRegistry
 from furnest.worker import queue
@@ -236,16 +236,23 @@ class ApifySpend:
     cost in a month."""
 
     usage: ApifyUsage | None
-    budget_usd: float
+    # ``SOURCES_APIFY_MONTHLY_BUDGET_USD``; ``None`` means the plan's limit.
+    budget_usd: float | None
     # (display name, projected monthly USD) for each Apify source that is on.
     projections: list[tuple[str, float]]
 
     @property
-    def limit_usd(self) -> float:
-        """The budget, or the plan's own limit if that's lower."""
+    def limit_usd(self) -> float | None:
+        """The plan's limit, or the budget if it's set and lower. ``None`` when
+        there's no budget and the plan's limit can't be read."""
         if self.usage is None:
             return self.budget_usd
-        return min(self.budget_usd, self.usage.plan_limit_usd)
+        return spend_limit(self.budget_usd, self.usage.plan_limit_usd)
+
+    @property
+    def plan_limited(self) -> bool:
+        """Whether the limit is the plan's own rather than the budget."""
+        return self.usage is not None and self.limit_usd == self.usage.plan_limit_usd
 
     @property
     def projected_usd(self) -> float:
@@ -253,7 +260,8 @@ class ApifySpend:
 
     @property
     def over_budget(self) -> bool:
-        return self.projected_usd > self.limit_usd
+        limit = self.limit_usd
+        return limit is not None and self.projected_usd > limit
 
 
 def build_apify_spend(rows: list[SourceRow], budget: ApifyBudget) -> ApifySpend | None:

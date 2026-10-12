@@ -4,8 +4,9 @@ Every Apify-backed source bills per run, and the Free plan's $5 a cycle went in 
 when they all ran hourly (#216). Before each Apify run, :class:`ApifyBudget` reads
 how much the account has used this cycle (``GET /v2/users/me/limits``, which also
 gives the plan's own limit and when the cycle ends) and declines the run when that
-plus the run's estimated cost would reach ``SOURCES_APIFY_MONTHLY_BUDGET_USD``, or the
-plan's limit if lower. Direct-HTTP sources never come here.
+plus the run's estimated cost would reach the plan's limit ($19 on Starter), or
+``SOURCES_APIFY_MONTHLY_BUDGET_USD`` if that's set and lower. Direct-HTTP sources
+never come here.
 
 The reading is cached for :data:`USAGE_TTL` in the ``settings`` table under
 :data:`USAGE_KEY`, so the worker and the web process share one reading and a page
@@ -86,6 +87,13 @@ class ApifyUsage:
             return None
 
 
+def spend_limit(budget_usd: float | None, plan_limit_usd: float) -> float:
+    """The plan's limit, lowered to ``budget_usd`` when that's set."""
+    if budget_usd is None:
+        return plan_limit_usd
+    return min(budget_usd, plan_limit_usd)
+
+
 class ApifyBudget:
     """Whether an Apify source may start a run, given the account's spend this cycle."""
 
@@ -103,12 +111,15 @@ class ApifyBudget:
         self._now = now
 
     @property
-    def budget_usd(self) -> float:
+    def budget_usd(self) -> float | None:
+        """``SOURCES_APIFY_MONTHLY_BUDGET_USD``, or ``None`` to spend up to the plan's
+        limit."""
         return self._settings.apify_monthly_budget_usd
 
     def limit_usd(self, usage: ApifyUsage) -> float:
-        """What runs may spend this cycle: the budget, or the plan's limit if lower."""
-        return min(self.budget_usd, usage.plan_limit_usd)
+        """What runs may spend this cycle: the plan's limit, or the budget if it's set
+        and lower."""
+        return spend_limit(self.budget_usd, usage.plan_limit_usd)
 
     def cached(self) -> ApifyUsage | None:
         """The last reading, however old, without calling Apify."""
