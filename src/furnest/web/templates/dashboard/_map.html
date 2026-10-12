@@ -1,0 +1,9 @@
+{# The pins come from points_url; static/js/map.js draws them and fills in the notes. #}
+<div class="map-view">
+  <div id="map" class="map" role="region" aria-label="Map of {{ f.tab.label | lower }} properties"
+    data-points-url="{{ f.points_url }}"
+    data-tile-url="{{ map.tile_url }}"
+    data-tile-attribution="{{ map.tile_attribution }}"
+    data-max-zoom="{{ map.max_zoom }}"></div>
+  <p class="muted map-note" data-map-note role="status"></p>
+</div>

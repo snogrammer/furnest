@@ -262,6 +262,34 @@ def test_nominatim_geocoding_loads_when_configured(monkeypatch: pytest.MonkeyPat
     assert geocoding.requests_per_minute == 120
 
 
+def test_map_defaults_to_openstreetmap_tiles() -> None:
+    map_settings = Settings().map
+
+    assert map_settings.enabled is True
+    assert map_settings.tile_url == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    assert "OpenStreetMap" in map_settings.tile_attribution
+    assert map_settings.max_points == 5000
+
+
+def test_map_takes_another_tile_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAP_TILE_URL", "https://tiles.example.com/{z}/{x}/{y}@2x.png?key=k")
+
+    assert Settings().map.tile_url.startswith("https://tiles.example.com/")
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://tile.example.com/{z}/{x}/{y}.png", "https://tile.example.com/{z}/{x}.png", ""],
+)
+def test_map_tile_url_must_be_an_https_xyz_template(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("MAP_TILE_URL", url)
+
+    with pytest.raises(ValidationError, match="MAP_TILE_URL"):
+        Settings()
+
+
 @pytest.mark.parametrize("missing", ["GEOCODING_BASE_URL", "GEOCODING_USER_AGENT"])
 def test_nominatim_geocoding_requires_base_url_and_user_agent(
     monkeypatch: pytest.MonkeyPatch, missing: str

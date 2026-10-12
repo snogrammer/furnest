@@ -7,7 +7,10 @@ properties only show up on their own tab.
 
 The list view pages through one tab. The board view shows every tab but ``all``
 and ``archived`` as a column, each capped at :data:`PAGE_SIZE` cards with a link
-to the full list. Search, sort and the "include snoozed" switch apply to both.
+to the full list. The map view (#214) pins every property of one tab that has
+coordinates; its page holds only the map, and the browser fetches the pins from
+``/properties/map.json`` with the same filters (:meth:`Filters.points_url`). Search,
+sort and the "include snoozed" switch apply to all three, though the map ignores sort.
 
 Status actions: the detail page offers a button for each move the state machine
 allows the dashboard (:func:`status_actions`), and the list view can deny or archive
@@ -63,6 +66,7 @@ PAGE_SIZE = 25
 class View(StrEnum):
     LIST = "list"
     BOARD = "board"
+    MAP = "map"
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,17 @@ class Filters:
 
     def url(self, **overrides: object) -> str:
         """``/`` with these filters and ``overrides``, leaving defaults out."""
+        query = self.query(**overrides)
+        return f"/?{query}" if query else "/"
+
+    @property
+    def points_url(self) -> str:
+        """Where the map view fetches its pins: these filters, without view and page."""
+        query = self.query(view=View.LIST, page=1)
+        return f"/properties/map.json?{query}" if query else "/properties/map.json"
+
+    def query(self, **overrides: object) -> str:
+        """These filters and ``overrides`` as a query string, leaving defaults out."""
         values = {
             "status": self.status,
             "q": self.q,
@@ -139,8 +154,7 @@ class Filters:
             if isinstance(value, StrEnum):
                 value = value.value
             params[name] = "true" if value is True else str(value)
-        query = urlencode(params)
-        return f"/?{query}" if query else "/"
+        return urlencode(params)
 
 
 @dataclass(frozen=True)
@@ -160,12 +174,12 @@ class Column:
 class Dashboard:
     filters: Filters
     tabs: list[TabCount]
-    # List view: the page shown. Board view: empty.
+    # List view: the page shown. Board and map views: empty.
     rows: list[PropertyRow]
     total: int
     page: int
     pages: int
-    # Board view: one per board tab. List view: empty.
+    # Board view: one per board tab. Other views: empty.
     columns: list[Column]
 
 
@@ -191,6 +205,11 @@ def build_dashboard(
             owner_type=filters.owner,
         )
         return page.rows, page.total
+
+    if filters.view is View.MAP:
+        # The pins come from /properties/map.json; the page needs only the tab counts.
+        total = next(count.count for count in tabs if count.tab == filters.tab)
+        return Dashboard(filters, tabs, [], total, 1, 1, [])
 
     if filters.view is View.BOARD:
         columns = []

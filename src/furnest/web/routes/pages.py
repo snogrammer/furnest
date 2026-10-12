@@ -1,4 +1,4 @@
-"""The dashboard: properties as a list or a board, by status tab, and one
+"""The dashboard: properties as a list, a board or a map, by status tab, and one
 property's detail page, where notes are added, the status is changed, and a
 property can be denied with a reason (saved as a note). All need auth, and the
 posts need the CSRF token.
@@ -7,7 +7,10 @@ Filters live in the query string (see :class:`furnest.web.property_views.Filters
 so every view has a URL and the filter form works as a plain GET without
 JavaScript. With htmx the form and the tab, page and view links ask for the
 results fragment only (``HX-Request``) and push the URL, so back and reload keep
-working. A page past the last one shows the last page.
+working. A page past the last one shows the last page. The map view's page holds
+an empty map; its script fetches the pins from ``/properties/map.json`` (JSON, same
+filters and auth). With ``MAP_ENABLED`` off, ``view=map`` shows the list and the
+JSON is a 404.
 
 The detail page also asks for an inquiry (Inquire, :func:`inquire`): it approves a
 suggested property and queues the job that drafts the email, as the Discord button
@@ -43,10 +46,10 @@ threadpool.
 """
 
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.responses import Response
 
 from furnest.config import INQUIRY_MODE, InquiryMode, RuntimeSettings
@@ -93,7 +96,7 @@ from furnest.web.property_views import (
     status_actions,
     status_label,
 )
-from furnest.web.templating import templates
+from furnest.web.templating import photo_src, templates
 
 
 def _source_namer(request: Request) -> Callable[[str], str]:
@@ -114,8 +117,7 @@ _OWNER_CHOICE_PATTERN = "^(|" + "|".join(k.value for k in _OWNER_CHOICES) + ")$"
 MAX_BULK = 100
 
 
-@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
-def index(
+def _filters(
     request: Request,
     status: Annotated[str, Query(pattern=_TAB_PATTERN)] = DEFAULT_TAB,
     q: Annotated[str, Query(max_length=200)] = "",
@@ -124,8 +126,11 @@ def index(
     page: Annotated[int, Query(ge=1)] = 1,
     snoozed: bool = False,
     owner: Annotated[str, Query(pattern=_OWNER_FILTER_PATTERN)] = "",
-) -> Response:
-    filters = Filters(
+) -> Filters:
+    """The dashboard's query string, shared by the page and the map's pins."""
+    if view is View.MAP and not request.app.state.settings.map.enabled:
+        view = View.LIST
+    return Filters(
         status=status,
         q=q.strip(),
         sort=sort,
@@ -134,7 +139,49 @@ def index(
         snoozed=snoozed,
         owner=OwnerType(owner) if owner else None,
     )
+
+
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def index(request: Request, filters: Annotated[Filters, Depends(_filters)]) -> Response:
     return _render_dashboard(request, filters)
+
+
+# Declared before /properties/{property_id}, which would otherwise claim the path.
+@router.get("/properties/map.json")
+def map_points(request: Request, filters: Annotated[Filters, Depends(_filters)]) -> Response:
+    """The map view's pins: every matching property with coordinates, newest first."""
+    settings = request.app.state.settings.map
+    if not settings.enabled:
+        raise HTTPException(status_code=404)
+    result = _store(request).map_points(
+        now=utcnow(),
+        limit=settings.max_points,
+        statuses=filters.tab.statuses,
+        text=filters.q or None,
+        include_snoozed=filters.snoozed,
+        owner_type=filters.owner,
+    )
+    points: list[dict[str, Any]] = []
+    for row in result.rows:
+        prop, listing = row.property, row.listing
+        price = listing.monthly_price if listing else None
+        photo = listing.photo_url if listing else None
+        points.append(
+            {
+                "id": prop.id,
+                "lat": prop.lat,
+                "lng": prop.lng,
+                "title": listing.title if listing else f"Property #{prop.id}",
+                "rent": f"{price.format()}/mo" if price else None,
+                "status": prop.status.value,
+                "status_label": status_label(prop.status),
+                "url": f"/properties/{prop.id}",
+                "photo": photo_src(request, photo) if photo else None,
+            }
+        )
+    return JSONResponse(
+        {"points": points, "unlocated": result.unlocated, "truncated": result.truncated}
+    )
 
 
 def _render_dashboard(
@@ -160,6 +207,7 @@ def _render_dashboard(
         "owner_label": owner_label,
         "owner_types_all": list(OwnerType),
         "source_name": _source_namer(request),
+        "map": request.app.state.settings.map,
     }
     if request.headers.get("HX-Request") == "true":
         # The tab lives in the filter form, outside the swapped results; update it too.

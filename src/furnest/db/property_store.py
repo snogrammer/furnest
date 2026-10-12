@@ -260,6 +260,18 @@ class PropertyPage:
 
 
 @dataclass(frozen=True)
+class MapPage:
+    """The properties the dashboard's Map view pins (#214)."""
+
+    # Matching properties that have coordinates, newest first.
+    rows: list[PropertyRow]
+    # Matching properties left off the map because they have no coordinates.
+    unlocated: int
+    # More located properties matched than ``limit`` allowed.
+    truncated: bool
+
+
+@dataclass(frozen=True)
 class ListingDetail:
     """One of a property's listings, whole, for the detail page."""
 
@@ -1298,6 +1310,56 @@ class SqlPropertyStore:
                 for prop, listing in pairs
             ]
             return PropertyPage(rows=rows, total=total)
+
+    def map_points(
+        self,
+        *,
+        now: datetime,
+        limit: int,
+        statuses: Iterable[PropertyStatus] | None = None,
+        text: str | None = None,
+        include_snoozed: bool = False,
+        owner_type: OwnerType | None = None,
+    ) -> MapPage:
+        """What :meth:`search` would find, unpaged, split by whether it can be pinned.
+
+        Located properties come newest first and stop at ``limit``.
+        """
+        statuses = None if statuses is None else list(statuses)
+
+        def filtered[*Ts](statement: Select[*Ts]) -> Select[*Ts]:
+            return _filtered(
+                statement,
+                now=now,
+                statuses=statuses,
+                text=text,
+                include_snoozed=include_snoozed,
+                owner_type=owner_type,
+            )
+
+        located = Property.lat.is_not(None) & Property.lng.is_not(None)
+        statement = (
+            filtered(select(Property, Listing))
+            .where(located)
+            .order_by(Property.created_at.desc(), Property.id.desc())
+            .limit(limit + 1)
+        )
+        with session_scope(self._session_factory) as session:
+            unlocated = session.scalar(filtered(select(func.count(Property.id))).where(~located))
+            pairs = list(session.execute(statement))
+            truncated = len(pairs) > limit
+            pairs = pairs[:limit]
+            photos = _first_photos(session, [item.id for _, item in pairs if item is not None])
+            rows = [
+                PropertyRow(
+                    property=_state(prop),
+                    listing=None
+                    if listing is None
+                    else replace(_summary(listing), photo_url=photos.get(listing.id)),
+                )
+                for prop, listing in pairs
+            ]
+            return MapPage(rows=rows, unlocated=unlocated or 0, truncated=truncated)
 
     def status_counts(
         self,

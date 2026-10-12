@@ -590,6 +590,39 @@ class PipelineSettings(_Group):
     unsnooze_interval_minutes: PositiveInt = 15
 
 
+class MapSettings(_Group):
+    """The dashboard's Map view (Leaflet, vendored under ``static/vendor/``).
+
+    The browser loads map tiles straight from ``tile_url``. The default is the
+    OpenStreetMap Foundation's tile server, which needs no key but has a usage policy
+    (attribution, a valid Referer, no bulk downloads); see docs/ARCHITECTURE.md.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="MAP_")
+
+    enabled: bool = True
+    # An https XYZ template with ``{z}``, ``{x}`` and ``{y}`` (and optionally ``{s}``,
+    # ``{r}``). Swap it for another provider if OSM's servers block the instance.
+    tile_url: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    # Shown on the map, as HTML: the operator sets it, so it is trusted markup.
+    tile_attribution: str = (
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    )
+    max_zoom: Annotated[int, Field(ge=1, le=22)] = 19
+    # Most pins the map shows; newer properties win when there are more.
+    max_points: PositiveInt = 5000
+
+    @field_validator("tile_url")
+    @classmethod
+    def _xyz_template(cls, value: str) -> str:
+        if not value.startswith("https://") or not all(
+            part in value for part in ("{z}", "{x}", "{y}")
+        ):
+            msg = "MAP_TILE_URL must be an https URL template with {z}, {x} and {y}"
+            raise ValueError(msg)
+        return value
+
+
 class Settings(BaseModel):
     """All environment settings, one attribute per group."""
 
@@ -615,6 +648,7 @@ class Settings(BaseModel):
     risk: RiskSettings = Field(default_factory=RiskSettings)
     sources: SourcesSettings = Field(default_factory=SourcesSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    map: MapSettings = Field(default_factory=MapSettings)
 
     @property
     def database_url(self) -> str:

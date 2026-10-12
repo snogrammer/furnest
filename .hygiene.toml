@@ -33,6 +33,7 @@ allowed_domains = [
   "apify.com",
   "discord.com",
   "openstreetmap.org",
+  "osmfoundation.org",
   "tineye.com",
   "bing.microsoft.com",
   "serpapi.com",
@@ -74,8 +75,8 @@ reason = "Capture inputs: a real-looking email the capture must scrub."
 
 [[exempt]]
 path = "src/furnest/web/static/vendor/*"
-kinds = ["domain", "email", "ip"]
-reason = "Vendored third-party code (swagger-ui), kept byte-for-byte."
+kinds = ["domain", "email", "ip", "location"]
+reason = "Vendored third-party code (swagger-ui, Leaflet and its plugins), kept byte-for-byte. The Leaflet plugins' inline SVG paths look like coordinates."
 
 [[exempt]]
 path = "tests/conftest.py"

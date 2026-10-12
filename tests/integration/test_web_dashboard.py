@@ -1,4 +1,4 @@
-"""The dashboard at ``/``: tabs, search, sort, paging, list and board, htmx fragments."""
+"""The dashboard at ``/``: tabs, search, sort, paging, list, board and map, htmx fragments."""
 
 import re
 from collections.abc import Callable
@@ -16,7 +16,7 @@ from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
 from furnest.domain import Money, NormalizedListing, OwnerType, PropertyStatus
 from furnest.domain.price import Price
-from furnest.web.property_views import PAGE_SIZE, Filters
+from furnest.web.property_views import PAGE_SIZE, Filters, View
 
 pytestmark = pytest.mark.integration
 
@@ -45,6 +45,8 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
         source: str = "test",
         owner: OwnerType = OwnerType.UNKNOWN,
         images: tuple[str, ...] = (),
+        lat: float | None = None,
+        lng: float | None = None,
     ) -> int:
         n = next(counter)
         at = now - age - timedelta(seconds=n)
@@ -58,6 +60,8 @@ def seed(session_factory: sessionmaker[Session]) -> Seed:
                 "beds": 0,
                 "baths": 1,
                 "images": list(images),
+                "lat": lat,
+                "lng": lng,
             }
         )
         (listing_id,) = listings.upsert_batch(source, [listing], seen_at=at).new_ids
@@ -381,3 +385,147 @@ def test_owner_filter_survives_a_bulk_action(
 
     assert response.status_code == 303
     assert response.headers["location"] == "/?owner=agent"
+
+
+# --- Map view (#214) -----------------------------------------------------------
+
+# Springfield, IL: the hygiene scan's sanctioned example location.
+LAT, LNG = 39.78, -89.65
+
+
+def _set_map(client: TestClient, **fields: object) -> None:
+    state = client.app.state  # type: ignore[attr-defined]
+    settings = state.settings.map.model_copy(update=fields)
+    state.settings = state.settings.model_copy(update={"map": settings})
+
+
+def points(client: TestClient, query: str = "") -> dict[str, object]:
+    response = client.get(f"/properties/map.json{query}", headers={"Accept": "application/json"})
+    assert response.status_code == 200, response.text
+    data: dict[str, object] = response.json()
+    return data
+
+
+def point_ids(data: dict[str, object]) -> list[int]:
+    return [p["id"] for p in data["points"]]  # type: ignore[attr-defined]
+
+
+def test_map_view_renders_an_empty_map_with_its_settings(authed_client: TestClient) -> None:
+    html = get(authed_client, "/?view=map&status=approved&q=loft")
+
+    assert 'id="map"' in html
+    assert 'data-points-url="/properties/map.json?status=approved&amp;q=loft"' in html
+    assert 'data-tile-url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"' in html
+    assert "OpenStreetMap" in html
+    assert 'value="map" checked' in html
+    assert "/static/js/map.js" in html
+    assert "vendor/leaflet-1.9.4/leaflet.js" in html
+
+
+def test_map_view_htmx_swap_returns_the_map_fragment(authed_client: TestClient) -> None:
+    response = authed_client.get("/?view=map", headers=HTMX)
+
+    assert 'id="map"' in response.text
+    assert "<html" not in response.text
+    assert response.headers["HX-Push-Url"] == "/?view=map"
+
+
+def test_map_disabled_hides_the_view(authed_client: TestClient, seed: Seed) -> None:
+    seed("Listed")
+    _set_map(authed_client, enabled=False)
+
+    html = get(authed_client, "/?view=map")
+
+    assert 'value="map"' not in html
+    assert 'id="map"' not in html
+    assert "leaflet" not in html
+    assert "Listed" in html
+    assert authed_client.get("/properties/map.json").status_code == 404
+
+
+def test_map_points_require_login(client: TestClient) -> None:
+    response = client.get("/properties/map.json", headers={"Accept": "application/json"})
+
+    assert response.status_code == 401
+
+
+def test_map_points_include_located_properties_and_count_the_rest(
+    authed_client: TestClient, seed: Seed
+) -> None:
+    pinned = seed(
+        "Pinned",
+        lat=LAT,
+        lng=LNG,
+        price=2100,
+        images=("https://img.example.com/a.jpg",),
+    )
+    seed("Nowhere")
+    seed("Nowhere either")
+
+    data = points(authed_client)
+
+    assert data["unlocated"] == 2
+    assert data["truncated"] is False
+    assert data["points"] == [
+        {
+            "id": pinned,
+            "lat": LAT,
+            "lng": LNG,
+            "title": "Pinned",
+            "rent": "$2,100.00/mo",
+            "status": "suggested",
+            "status_label": "suggested",
+            "url": f"/properties/{pinned}",
+            "photo": "/photo?src=https%3A%2F%2Fimg.example.com%2Fa.jpg",
+        }
+    ]
+
+
+def test_map_points_apply_the_dashboard_filters(authed_client: TestClient, seed: Seed) -> None:
+    loft = seed("Sunny loft", lat=LAT, lng=LNG)
+    seed("Basement", lat=LAT, lng=LNG)
+    approved = seed("Approved loft", lat=LAT, lng=LNG, status=S.APPROVED)
+    seed("Snoozed loft", lat=LAT, lng=LNG, snoozed=True)
+    agent = seed("Agent loft", lat=LAT, lng=LNG, owner=OwnerType.AGENT)
+
+    assert point_ids(points(authed_client, "?q=loft")) == [loft, agent]
+    assert point_ids(points(authed_client, "?status=approved")) == [approved]
+    assert point_ids(points(authed_client, "?q=loft&owner=agent")) == [agent]
+    assert len(point_ids(points(authed_client, "?q=loft&snoozed=true"))) == 3
+
+
+def test_map_points_are_capped_newest_first(authed_client: TestClient, seed: Seed) -> None:
+    seed("Oldest", lat=LAT, lng=LNG, age=timedelta(days=3))
+    middle = seed("Middle", lat=LAT, lng=LNG, age=timedelta(days=2))
+    newest = seed("Newest", lat=LAT, lng=LNG, age=timedelta(days=1))
+    _set_map(authed_client, max_points=2)
+
+    data = points(authed_client)
+
+    assert point_ids(data) == [newest, middle]
+    assert data["truncated"] is True
+
+
+def test_map_points_reject_bad_filters(authed_client: TestClient) -> None:
+    assert authed_client.get("/properties/map.json?status=bogus").status_code == 422
+
+
+def test_map_points_link_photos_directly_when_the_proxy_is_off(
+    authed_client: TestClient, seed: Seed
+) -> None:
+    seed(lat=LAT, lng=LNG, images=("https://img.example.com/a.jpg",))
+    state = authed_client.app.state  # type: ignore[attr-defined]
+    images = state.settings.images.model_copy(update={"proxy_enabled": False})
+    state.settings = state.settings.model_copy(update={"images": images})
+
+    data = points(authed_client)
+
+    assert data["points"][0]["photo"] == "https://img.example.com/a.jpg"  # type: ignore[index]
+
+
+def test_filters_points_url_drops_view_and_page() -> None:
+    assert Filters(view=View.MAP).points_url == "/properties/map.json"
+    assert (
+        Filters(status="approved", q="a b", view=View.MAP, page=3, snoozed=True).points_url
+        == "/properties/map.json?status=approved&q=a+b&snoozed=true"
+    )

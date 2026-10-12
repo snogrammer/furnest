@@ -1,5 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · furnest{% endblock %}
+{% block scripts %}
+{% if map.enabled %}
+  {# On every dashboard page, not only the map: switching views swaps #results only. #}
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet-1.9.4/leaflet.css').path }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet.markercluster-1.5.3/MarkerCluster.css').path }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/leaflet.markercluster-1.5.3/MarkerCluster.Default.css').path }}">
+  <script src="{{ url_for('static', path='vendor/leaflet-1.9.4/leaflet.js').path }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/leaflet.markercluster-1.5.3/leaflet.markercluster.js').path }}" defer></script>
+  <script src="{{ url_for('static', path='js/map.js').path }}" defer></script>
+{% endif %}
+{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
 {% if criteria_summary %}<p class="criteria-summary muted">Searching for: {{ criteria_summary }}. <a href="/criteria">Change criteria</a></p>{% endif %}
@@ -32,6 +43,7 @@
     <legend class="visually-hidden">Layout</legend>
     <label><input type="radio" name="view" value="list" {% if f.view.value == "list" %}checked{% endif %}> List</label>
     <label><input type="radio" name="view" value="board" {% if f.view.value == "board" %}checked{% endif %}> Board</label>
+    {% if map.enabled %}<label><input type="radio" name="view" value="map" {% if f.view.value == "map" %}checked{% endif %}> Map</label>{% endif %}
   </fieldset>
   <label class="check"><input type="checkbox" name="snoozed" value="true" {% if f.snoozed %}checked{% endif %}> Include snoozed</label>
   <button type="submit" class="secondary">Apply</button>

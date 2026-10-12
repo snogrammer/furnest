@@ -1542,3 +1542,81 @@ a.button {
 #form-alert {
   scroll-margin-top: var(--space);
 }
+
+/* Dashboard map view (#214). Leaflet's own CSS is vendored; these only theme it. */
+.map {
+  height: 60vh;
+  min-height: 18rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@media (min-width: 40rem) {
+  .map {
+    height: 70vh;
+  }
+}
+
+.map-note:empty {
+  display: none;
+}
+
+/* Pins are divIcons: a dot coloured like the card's status chip. */
+.pin {
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 1px var(--muted);
+}
+
+.pin-suggested,
+.pin-new,
+.pin-approved {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.pin-won {
+  background: var(--ok);
+  box-shadow: 0 0 0 1px var(--ok);
+}
+
+.map-popup img {
+  display: block;
+  width: 100%;
+  height: 8rem;
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
+.map-popup .map-popup-title {
+  font-weight: 600;
+}
+
+.map-popup p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0;
+}
+
+/* Scoped under .map to outrank leaflet.css, which loads after this file. */
+.map .leaflet-popup-content-wrapper,
+.map .leaflet-popup-tip {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Dim the light raster tiles instead of glaring next to the dark page. */
+  .map .leaflet-tile-pane {
+    filter: brightness(0.75) contrast(1.1) saturate(0.8);
+  }
+
+  .map .leaflet-control-attribution {
+    background: rgb(15 23 42 / 80%);
+    color: var(--muted);
+  }
+}

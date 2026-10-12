@@ -24,6 +24,9 @@ def test_csp_is_strict_self_only() -> None:
     assert "frame-ancestors 'none'" in CONTENT_SECURITY_POLICY
     assert "unsafe-inline" not in CONTENT_SECURITY_POLICY
     assert "unsafe-eval" not in CONTENT_SECURITY_POLICY
+    # The map's scripts fetch only from this origin and never start workers.
+    assert "connect-src 'self'" in CONTENT_SECURITY_POLICY
+    assert "worker-src 'none'" in CONTENT_SECURITY_POLICY
 
 
 def test_index_renders_layout_with_security_headers(authed_client: TestClient) -> None:

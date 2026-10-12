@@ -14,7 +14,7 @@ A self-hosted monitor for furnished rental listings. furnest watches several lis
 - Filters and scores listings against your criteria, and groups duplicates of the same property across sources.
 - Posts matches to Discord with approve/deny/snooze buttons ([docs/discord-setup.md](docs/discord-setup.md)).
 - Drafts or sends inquiry emails and reads replies by IMAP.
-- Tracks every property through a review pipeline in a small web dashboard, with a JSON API.
+- Tracks every property through a review pipeline in a small web dashboard (list, board or map), with a JSON API.
 - Self-hosted: one Docker image, SQLite, no external services required ([docs/deployment.md](docs/deployment.md)).
 
 <!-- Screenshots: add images of the dashboard, a property page and a Discord post under docs/screenshots/ and link them here. -->
@@ -194,6 +194,11 @@ Every setting, with its type and default (the table is generated from the code a
 | `SOURCES_ADAPTERS` | JSON object | unset |
 | `PIPELINE_SNOOZE_HOURS` | integer | `72` |
 | `PIPELINE_UNSNOOZE_INTERVAL_MINUTES` | integer | `15` |
+| `MAP_ENABLED` | boolean | `true` |
+| `MAP_TILE_URL` | string | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
+| `MAP_TILE_ATTRIBUTION` | string | `&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors` |
+| `MAP_MAX_ZOOM` | integer | `19` |
+| `MAP_MAX_POINTS` | integer | `5000` |
 
 <!-- config-table:end -->
 

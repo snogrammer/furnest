@@ -4,11 +4,13 @@
   <ul>
     {% for t in d.tabs %}
     <li><a href="{{ f.url(status=t.tab.key, page=1) }}" hx-get="{{ f.url(status=t.tab.key, page=1) }}"
-      {% if f.view.value == "list" and t.tab.key == f.status %}aria-current="page"{% endif %}>{{ t.tab.label }} <span class="count">{{ t.count }}</span></a></li>
+      {% if f.view.value != "board" and t.tab.key == f.status %}aria-current="page"{% endif %}>{{ t.tab.label }} <span class="count">{{ t.count }}</span></a></li>
     {% endfor %}
   </ul>
 </nav>
-{% if f.view.value == "board" %}
+{% if f.view.value == "map" %}
+{% include "dashboard/_map.html" %}
+{% elif f.view.value == "board" %}
 <div class="board">
   {% for col in d.columns %}
   <section class="board-column" aria-labelledby="col-{{ col.tab.key }}">
