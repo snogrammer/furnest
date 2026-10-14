@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from furnest.config import SourcesSettings
 from furnest.db.criteria_store import CriteriaStore
 from furnest.db.listing_store import RunCounts, SqlListingStore, StoredListing
-from furnest.db.models import Job, SourceRunStatus
+from furnest.db.models import Job, Property, SourceRunStatus
 from furnest.db.property_store import NOTIFY, PropertyState, SqlPropertyStore
 from furnest.db.session import session_scope
 from furnest.domain import Amenity, AmenityResult, Criteria, NormalizedListing, PropertyStatus
@@ -312,10 +312,21 @@ def property_of(session_factory: sessionmaker[Session], source_id: str) -> Prope
     return state
 
 
-def notify_jobs(session_factory: sessionmaker[Session]) -> list[int]:
+def notify_jobs(session_factory: sessionmaker[Session]) -> int:
     with session_scope(session_factory) as session:
-        jobs = session.scalars(select(Job).where(Job.kind == NOTIFY).order_by(Job.id))
-        return [job.payload["property_id"] for job in jobs]
+        return len(list(session.scalars(select(Job.id).where(Job.kind == NOTIFY))))
+
+
+def marked(session_factory: sessionmaker[Session]) -> list[int]:
+    """The properties waiting for the next batched post, by id."""
+    with session_scope(session_factory) as session:
+        return list(
+            session.scalars(
+                select(Property.id)
+                .where(Property.notify_requested_at.is_not(None))
+                .order_by(Property.id)
+            )
+        )
 
 
 def test_a_passing_listing_is_suggested_and_a_failing_one_stays_new(
@@ -329,7 +340,8 @@ def test_a_passing_listing_is_suggested_and_a_failing_one_stays_new(
     assert (a.status, b.status) == (PropertyStatus.SUGGESTED, PropertyStatus.NEW)
     assert a.score is not None
     assert b.score is not None
-    assert notify_jobs(session_factory) == [a.id]
+    assert marked(session_factory) == [a.id]
+    assert notify_jobs(session_factory) == 1
 
 
 def test_a_property_whose_listing_disappears_is_unavailable_until_it_returns(
@@ -354,7 +366,9 @@ def test_a_property_whose_listing_disappears_is_unavailable_until_it_returns(
 
     assert property_of(session_factory, "a").status is PropertyStatus.SUGGESTED
     # Back where it was, so the user isn't notified a second time.
-    assert len(notify_jobs(session_factory)) == 2
+    both = [property_of(session_factory, key).id for key in ("a", "b")]
+    assert marked(session_factory) == sorted(both)
+    assert notify_jobs(session_factory) == 1
 
 
 def test_a_failing_hook_does_not_fail_the_run(

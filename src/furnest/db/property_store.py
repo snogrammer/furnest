@@ -23,8 +23,9 @@ The pipeline (:mod:`furnest.pipeline.properties`) drives the system's side of it
 
 * :meth:`SqlPropertyStore.record_match` stores a listing's latest match, if it is
   the property's best (or replaces the result of the same listing). A passing
-  match moves a ``new`` property to ``suggested`` and queues a :data:`NOTIFY` job in
-  the same transaction. In every other state only the score changes, so re-running
+  match moves a ``new`` property to ``suggested`` and marks it for the next batched
+  Discord post (``notify_requested_at`` and a :data:`NOTIFY` job) in the same
+  transaction. In every other state only the score changes, so re-running
   the criteria never undoes a decision a person made.
   It also keeps ``manual_contact_required`` in step with the primary listing: set
   while that listing has no email address, so the inquiry is sent by hand through
@@ -69,7 +70,7 @@ A snooze isn't a status change, but who snoozed matters, so it is still written 
 the audit trail as an event whose ``from_status`` and ``to_status`` are the same.
 
 Once the notify job has posted a property to Discord
-(:meth:`SqlPropertyStore.attach_message`), every status change and every snooze or
+(:meth:`SqlPropertyStore.attach_batch`), every status change and every snooze or
 unsnooze also queues a :data:`MESSAGE_SYNC_JOB` (:func:`enqueue_sync`) in the same
 transaction. It doesn't matter whether the change came from the dashboard, the API,
 a button or the system: the message always ends up showing the property as it is.
@@ -83,7 +84,7 @@ together with the record of the interaction.
 from __future__ import annotations
 
 import builtins
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -109,6 +110,7 @@ from furnest.db.listing_store import PricePoint, price_of, price_points, stored_
 from furnest.db.models import (
     AuditEvent,
     CriteriaVersion,
+    DiscordBatch,
     JobStatus,
     Listing,
     ListingImage,
@@ -134,7 +136,8 @@ from furnest.matching import MatchResult
 from furnest.pipeline.rerun import RERUN_CRITERIA
 from furnest.worker import queue
 
-# The job that tells the user about a suggested property: furnest.notify.post posts it.
+# The job that tells the user about new suggestions: furnest.notify.post posts every
+# property marked with ``notify_requested_at`` in one list message.
 NOTIFY = "notify"
 # The job that redraws a property's Discord message from the database: furnest.notify.sync.
 MESSAGE_SYNC_JOB = "discord.message_sync"
@@ -646,10 +649,55 @@ def _sync_message(session: Session, row: Property) -> None:
     )
 
 
-def _enqueue_notify(session: Session, property_id: int) -> None:
-    """Queue a :data:`NOTIFY` job for the property, unless one is already waiting."""
-    if queue.pending(session, NOTIFY, statuses=_NOT_STARTED, property_id=property_id) is None:
-        queue.enqueue(session, NOTIFY, {"property_id": property_id})
+def _enqueue_notify(session: Session, row: Property, *, at: datetime) -> None:
+    """Mark the property for the next batched post, and queue a :data:`NOTIFY` job
+    unless one is already waiting. The job itself waits out the batch window."""
+    if row.notify_requested_at is None:
+        row.notify_requested_at = at
+    _queue_notify(session)
+
+
+def _queue_notify(session: Session, *, run_after: datetime | None = None) -> None:
+    if queue.pending(session, NOTIFY, statuses=_NOT_STARTED) is None:
+        queue.enqueue(session, NOTIFY, run_after=run_after)
+
+
+def _attach(
+    session: Session, row: Property, *, channel_id: str, message_id: str, rendered: PropertyState
+) -> None:
+    """Point ``row`` at a message just posted from ``rendered``, syncing what needs it."""
+    if row.discord_message_id != message_id:
+        _sync_message(session, row)
+    row.discord_channel_id = channel_id
+    row.discord_message_id = message_id
+    if (row.status, row.snoozed_until) != (rendered.status, rendered.snoozed_until):
+        _sync_message(session, row)
+
+
+def detail_in(session: Session, property_id: int) -> PropertyDetail | None:
+    """Everything stored about one property, read in the caller's transaction."""
+    row = session.get(Property, property_id)
+    if row is None:
+        return None
+    listing_rows = session.scalars(
+        select(Listing).where(Listing.property_id == property_id).order_by(*_LISTING_ORDER)
+    )
+    listings = [
+        ListingDetail(
+            summary=_summary(listing),
+            listing=stored_listing(listing).listing,
+            price_history=price_points(session, listing.id),
+        )
+        for listing in listing_rows
+    ]
+    return PropertyDetail(
+        property=_state(row),
+        match=_match(row.match_result),
+        listings=listings,
+        audit=_audit(session, property_id),
+        notes=_notes(session, property_id),
+        price_history=property_price_points(session, property_id),
+    )
 
 
 def _enqueue_enrichment(session: Session, property_id: int) -> None:
@@ -1118,7 +1166,7 @@ class SqlPropertyStore:
                     detail="match",
                     payload={"score": result.score, "criteria_version": result.criteria_version},
                 )
-                _enqueue_notify(session, row.id)
+                _enqueue_notify(session, row, at=at)
             return _state(row)
 
     def mark_gone(self, listing_ids: Iterable[int], *, at: datetime) -> list[int]:
@@ -1191,8 +1239,8 @@ class SqlPropertyStore:
     def unsnooze_expired(self, *, now: datetime) -> list[int]:
         """Clear every snooze that ended by ``now``; return the property ids.
 
-        A property still waiting on a decision (``suggested``) gets a new
-        :data:`NOTIFY` job, so it comes back to the user rather than only to the
+        A property still waiting on a decision (``suggested``) is marked for the next
+        batched post (:data:`NOTIFY`), so it comes back to the user rather than only to the
         dashboard's default view.
         """
         with session_scope(self._session_factory) as session:
@@ -1210,7 +1258,7 @@ class SqlPropertyStore:
                     session, row, actor=Actor.SYSTEM, at=now, payload={"unsnoozed": True}
                 )
                 if row.status is PropertyStatus.SUGGESTED:
-                    _enqueue_notify(session, row.id)
+                    _enqueue_notify(session, row, at=now)
             return [row.id for row in rows]
 
     def attach_message(
@@ -1227,12 +1275,82 @@ class SqlPropertyStore:
             row = session.get(Property, property_id)
             if row is None:
                 raise PropertyNotFoundError(property_id)
-            if row.discord_message_id != message_id:
-                _sync_message(session, row)
-            row.discord_channel_id = channel_id
-            row.discord_message_id = message_id
-            if (row.status, row.snoozed_until) != (rendered.status, rendered.snoozed_until):
-                _sync_message(session, row)
+            _attach(session, row, channel_id=channel_id, message_id=message_id, rendered=rendered)
+
+    def first_notify_request(self) -> datetime | None:
+        """When the longest-waiting property was marked for a batched post, if any is."""
+        with session_scope(self._session_factory) as session:
+            return session.scalar(select(func.min(Property.notify_requested_at)))
+
+    def defer_notify(self, *, until: datetime) -> None:
+        """Queue a :data:`NOTIFY` job to run at ``until``, unless one is already waiting."""
+        with session_scope(self._session_factory) as session:
+            _queue_notify(session, run_after=until)
+
+    def notify_candidates(self, *, now: datetime) -> list[PropertyDetail]:
+        """The properties marked for a batched post that should still go out, best
+        score first.
+
+        A marked property that was decided on, merged away or snoozed since it was
+        marked loses its mark here; a snooze running out marks it again.
+        """
+        with session_scope(self._session_factory) as session:
+            rows = list(
+                session.scalars(
+                    select(Property)
+                    .where(Property.notify_requested_at.is_not(None))
+                    .order_by(Property.score.desc().nulls_last(), Property.id)
+                )
+            )
+            details: list[PropertyDetail] = []
+            for row in rows:
+                waiting = row.snoozed_until is not None and row.snoozed_until > now
+                if (
+                    row.status is not PropertyStatus.SUGGESTED
+                    or row.merged_into_id is not None
+                    or waiting
+                ):
+                    row.notify_requested_at = None
+                    continue
+                detail = detail_in(session, row.id)
+                if detail is not None:
+                    details.append(detail)
+            return details
+
+    def attach_batch(
+        self, *, channel_id: str, message_id: str, rendered: Sequence[PropertyState]
+    ) -> None:
+        """Remember the list message just posted for the ``rendered`` properties.
+
+        Each property points at the message and loses its mark, and the message's
+        list is saved (:class:`~furnest.db.models.DiscordBatch`) so later edits draw
+        the same properties. As with :meth:`attach_message`, a property that changed
+        while the message was being posted, or that had a message before, gets the
+        relevant message synced. A property deleted meanwhile is left out.
+        """
+        with session_scope(self._session_factory) as session:
+            session.add(
+                DiscordBatch(
+                    channel_id=channel_id,
+                    message_id=message_id,
+                    property_ids=[state.id for state in rendered],
+                )
+            )
+            for state in rendered:
+                row = session.get(Property, state.id)
+                if row is None:
+                    continue
+                row.notify_requested_at = None
+                _attach(session, row, channel_id=channel_id, message_id=message_id, rendered=state)
+
+    def batch_property_ids(self, message_id: str) -> list[int] | None:
+        """The properties a batched list message shows, or ``None`` if ``message_id``
+        isn't one (a single-property message from before batching)."""
+        with session_scope(self._session_factory) as session:
+            batch = session.scalars(
+                select(DiscordBatch).where(DiscordBatch.message_id == message_id)
+            ).first()
+            return None if batch is None else list(batch.property_ids)
 
     def query(
         self,
@@ -1389,28 +1507,7 @@ class SqlPropertyStore:
     def detail(self, property_id: int) -> PropertyDetail | None:
         """Everything stored about one property, read in one transaction."""
         with session_scope(self._session_factory) as session:
-            row = session.get(Property, property_id)
-            if row is None:
-                return None
-            listing_rows = session.scalars(
-                select(Listing).where(Listing.property_id == property_id).order_by(*_LISTING_ORDER)
-            )
-            listings = [
-                ListingDetail(
-                    summary=_summary(listing),
-                    listing=stored_listing(listing).listing,
-                    price_history=price_points(session, listing.id),
-                )
-                for listing in listing_rows
-            ]
-            return PropertyDetail(
-                property=_state(row),
-                match=_match(row.match_result),
-                listings=listings,
-                audit=_audit(session, property_id),
-                notes=_notes(session, property_id),
-                price_history=property_price_points(session, property_id),
-            )
+            return detail_in(session, property_id)
 
     def for_listing(self, listing_id: int) -> PropertyState | None:
         with session_scope(self._session_factory) as session:

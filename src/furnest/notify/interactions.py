@@ -32,7 +32,7 @@ from typing import Any
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
-from furnest.notify.custom_ids import DiscordAction, parse_custom_id
+from furnest.notify.custom_ids import OPEN_CUSTOM_ID, DiscordAction, parse_custom_id
 
 JsonObject = dict[str, Any]
 
@@ -59,6 +59,7 @@ class ResponseType(IntEnum):
     PONG = 1
     CHANNEL_MESSAGE_WITH_SOURCE = 4
     DEFERRED_UPDATE_MESSAGE = 6
+    UPDATE_MESSAGE = 7
     MODAL = 9
 
 
@@ -96,6 +97,9 @@ class Interaction:
     user_name: str | None = None
     channel_id: str | None = None
     message_id: str | None = None
+    # The clicked message is one only the clicker sees (a card opened from a list's
+    # menu). The bot token can't edit it; the response has to.
+    message_ephemeral: bool = False
     # Text inputs of a submitted modal, by their custom_id.
     fields: dict[str, str] = field(default_factory=dict)
 
@@ -126,6 +130,10 @@ class Interaction:
         payload = _obj(data, "data")
         custom_id = _str(payload, "custom_id")
         parsed = parse_custom_id(custom_id) if custom_id is not None else None
+        if custom_id == OPEN_CUSTOM_ID:
+            parsed = _picked(payload.get("values"))
+        message = _obj(data, "message")
+        flags = message.get("flags")
         # A click in a server carries ``member.user``; one in a DM carries ``user``.
         user = _obj(_obj(data, "member"), "user") or _obj(data, "user")
         return cls(
@@ -139,7 +147,8 @@ class Interaction:
             user_id=_str(user, "id"),
             user_name=_str(user, "global_name") or _str(user, "username"),
             channel_id=_str(data, "channel_id"),
-            message_id=_str(_obj(data, "message"), "id"),
+            message_id=_str(message, "id"),
+            message_ephemeral=type(flags) is int and bool(flags & EPHEMERAL),
             fields=_text_inputs(payload.get("components")),
         )
 
@@ -198,12 +207,35 @@ def paragraph_input(
     return item
 
 
+def update_message(payload: JsonObject) -> JsonObject:
+    """Redraw the clicked message with ``payload`` as the response itself."""
+    return {"type": ResponseType.UPDATE_MESSAGE, "data": payload}
+
+
+def ephemeral_message(payload: JsonObject) -> JsonObject:
+    """Reply with the message ``payload`` (embeds, buttons), shown only to the clicker."""
+    return {
+        "type": ResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        "data": {**payload, "flags": EPHEMERAL},
+    }
+
+
 def ephemeral(content: str) -> JsonObject:
     """A reply only the clicking user sees, which can't ping anyone."""
     return {
         "type": ResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         "data": {"content": content, "flags": EPHEMERAL, "allowed_mentions": {"parse": []}},
     }
+
+
+def _picked(values: object) -> tuple[DiscordAction, int] | None:
+    """The property picked in a list message's menu, from the interaction's ``values``."""
+    if not isinstance(values, list) or len(values) != 1 or not isinstance(values[0], str):
+        return None
+    value = values[0]
+    if not value.isascii() or not value.isdigit() or len(value) > 18 or int(value) < 1:
+        return None
+    return DiscordAction.OPEN, int(value)
 
 
 def _obj(data: object, key: str) -> JsonObject:

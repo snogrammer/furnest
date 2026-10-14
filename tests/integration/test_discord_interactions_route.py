@@ -156,6 +156,17 @@ def test_unhandled_button_click_is_acked_and_syncs_the_message(
     }
 
 
+def test_unhandled_click_on_a_card_only_the_clicker_sees_syncs_nothing(
+    post: Post, session_factory: sessionmaker[Session]
+) -> None:
+    message = {"id": "1300000000000000000", "flags": 1 << 6}
+
+    response = post(click(message=message))
+
+    assert response.json() == {"type": ResponseType.DEFERRED_UPDATE_MESSAGE}
+    assert jobs(session_factory) == []
+
+
 def test_replayed_interaction_is_a_no_op(
     post: Post, session_factory: sessionmaker[Session]
 ) -> None:

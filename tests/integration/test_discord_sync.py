@@ -7,15 +7,15 @@ from typing import Any
 
 import httpx2
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from furnest.config import Settings
 from furnest.db.listing_store import SqlListingStore
-from furnest.db.models import Property
+from furnest.db.models import Job, Property
 from furnest.db.property_store import SqlPropertyStore
 from furnest.db.session import session_scope
-from furnest.domain import NormalizedListing, PropertyStatus
+from furnest.domain import Actor, NormalizedListing, PropertyStatus
 from furnest.email.inquiry import INQUIRY_CREATE
 from furnest.notify.discord import DiscordClient, DiscordError
 from furnest.notify.embeds import disabled_actions, match_message
@@ -198,3 +198,92 @@ def test_a_merged_property_is_drawn_merged_with_its_buttons_off(
     payload = json.loads(requests[0].content)
     assert all(b["disabled"] for b in payload["components"][0]["components"])
     assert f"merged into #{survivor}" in payload["embeds"][0]["footer"]["text"]
+
+
+# --- List messages ------------------------------------------------------------------
+
+
+@pytest.fixture
+def listed(session_factory: sessionmaker[Session], property_id: int) -> list[int]:
+    """``property_id`` and a second, suggested property, posted together in MESSAGE."""
+    listing = NormalizedListing.model_validate(
+        {"source": "test", "source_id": "l2", "url": "https://example.com/l2", "title": "Flat"}
+    )
+    (listing_id,) = (
+        SqlListingStore(session_factory).upsert_batch("test", [listing], seen_at=T0).new_ids
+    )
+    store = SqlPropertyStore(session_factory)
+    other = store.ensure_for_listing(listing_id, at=T0).id
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == other).values(status=PropertyStatus.SUGGESTED)
+        )
+    states = [store.get(pid) for pid in (property_id, other)]
+    store.attach_batch(
+        channel_id=CHANNEL, message_id=MESSAGE, rendered=[s for s in states if s is not None]
+    )
+    return [property_id, other]
+
+
+def test_a_list_message_is_redrawn_with_each_property_as_it_is(
+    session_factory: sessionmaker[Session], listed: list[int]
+) -> None:
+    ok = httpx2.Response(200, json={"id": MESSAGE, "channel_id": CHANNEL})
+    requests, factory = fake_discord(ok)
+
+    sync(session_factory, factory)(ctx(listed[1]))
+
+    (request,) = requests
+    assert request.method == "PATCH"
+    assert request.url.path == f"/api/v10/channels/{CHANNEL}/messages/{MESSAGE}"
+    body = json.loads(request.content)
+    approved, waiting = body["embeds"][0]["description"].splitlines()
+    assert approved.startswith("✅ [Loft]") and approved.endswith("*approved*")
+    assert waiting.startswith("• [Flat]")
+    options = body["components"][0]["components"][0]["options"]
+    assert [o["value"] for o in options] == [str(pid) for pid in listed]
+
+
+def test_a_property_posted_again_since_is_marked_reposted_on_the_old_list(
+    session_factory: sessionmaker[Session], listed: list[int]
+) -> None:
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == listed[1]).values(discord_message_id="newer")
+        )
+    requests, factory = fake_discord(httpx2.Response(200, json={"id": MESSAGE}))
+
+    sync(session_factory, factory)(ctx(listed[0]))
+
+    lines = json.loads(requests[0].content)["embeds"][0]["description"].splitlines()
+    assert lines[1].startswith("↪ ") and lines[1].endswith("*reposted*")
+
+
+def test_a_list_is_not_redrawn_without_discord(
+    session_factory: sessionmaker[Session], listed: list[int]
+) -> None:
+    sync(session_factory, lambda: None)(ctx(listed[0]))  # no client, no error
+
+
+def test_a_deleted_list_message_is_dropped(
+    session_factory: sessionmaker[Session], listed: list[int]
+) -> None:
+    gone = httpx2.Response(404, json={"message": "Unknown Message", "code": 10008})
+    requests, factory = fake_discord(gone)
+
+    sync(session_factory, factory)(ctx(listed[0]))
+
+    assert len(requests) == 1
+
+
+def test_changes_to_properties_on_one_list_share_one_sync(
+    session_factory: sessionmaker[Session], listed: list[int]
+) -> None:
+    store = SqlPropertyStore(session_factory)
+
+    store.transition(listed[1], PropertyStatus.APPROVED, actor=Actor.DASHBOARD, at=T0)
+    store.transition(listed[0], PropertyStatus.DENIED, actor=Actor.DASHBOARD, at=T0)
+
+    with session_scope(session_factory) as session:
+        synced = session.scalars(select(Job.payload).where(Job.kind == MESSAGE_SYNC_JOB))
+        assert [payload["message_id"] for payload in synced] == [MESSAGE]

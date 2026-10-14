@@ -452,3 +452,127 @@ def test_a_click_on_a_merged_property_points_at_the_survivor(
     assert_ephemeral(post(click(action, absorbed)), f"property #{survivor}")
     assert_ephemeral(post(submit_deny(absorbed, "x")), f"property #{survivor}")
     assert counts(session_factory) == before
+
+
+# --- List menu and the cards it opens -----------------------------------------------
+
+LIST_MESSAGE = "1300000000000000099"
+
+
+def pick(property_id: int | str) -> dict[str, Any]:
+    data = click("approve", 1)
+    data["data"] = {"custom_id": "furnest:open", "component_type": 3, "values": [str(property_id)]}
+    return data
+
+
+def on_card(data: dict[str, Any]) -> dict[str, Any]:
+    """``data`` as clicked on a card only the clicker sees."""
+    data["message"] = {"id": "1300000000000000077", "flags": EPHEMERAL}
+    return data
+
+
+def on_list(factory: sessionmaker[Session], property_id: int) -> None:
+    with session_scope(factory) as session:
+        session.execute(
+            update(Property)
+            .where(Property.id == property_id)
+            .values(discord_channel_id=CHANNEL, discord_message_id=LIST_MESSAGE)
+        )
+
+
+def test_picking_a_property_shows_its_card_to_the_picker(
+    post: Post, make_property: MakeProperty, session_factory: sessionmaker[Session]
+) -> None:
+    pid = make_property(S.APPROVED)
+    before = counts(session_factory)
+
+    body = post(pick(pid)).json()
+
+    assert body["type"] == ResponseType.CHANNEL_MESSAGE_WITH_SOURCE
+    assert body["data"]["flags"] == EPHEMERAL
+    assert body["data"]["embeds"][0]["title"] == "Listing 1"
+    buttons = {b["custom_id"]: b["disabled"] for b in body["data"]["components"][0]["components"]}
+    assert buttons[f"furnest:approve:{pid}"] is True  # already approved
+    assert buttons[f"furnest:deny:{pid}"] is False
+    assert counts(session_factory) == before  # looking changes nothing
+
+
+def test_picking_a_missing_property_gets_an_ephemeral_reply(post: Post) -> None:
+    body = post(pick(999)).json()
+
+    assert body["data"] == {
+        "content": "That property no longer exists.",
+        "flags": EPHEMERAL,
+        "allowed_mentions": {"parse": []},
+    }
+
+
+def test_picking_a_merged_property_shows_its_card_with_every_button_off(
+    post: Post, make_property: MakeProperty, session_factory: sessionmaker[Session]
+) -> None:
+    survivor, merged = make_property(), make_property()
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id == merged).values(merged_into_id=survivor)
+        )
+
+    body = post(pick(merged)).json()
+
+    assert all(b["disabled"] for b in body["data"]["components"][0]["components"])
+
+
+def test_approve_on_a_card_redraws_it_and_syncs_the_list(
+    post: Post,
+    make_property: MakeProperty,
+    store: SqlPropertyStore,
+    session_factory: sessionmaker[Session],
+) -> None:
+    pid = make_property()
+    on_list(session_factory, pid)
+
+    body = post(on_card(click("approve", pid))).json()
+
+    assert store.get(pid).status is S.APPROVED  # type: ignore[union-attr]
+    assert body["type"] == ResponseType.UPDATE_MESSAGE
+    buttons = {b["custom_id"]: b["disabled"] for b in body["data"]["components"][0]["components"]}
+    assert buttons[f"furnest:approve:{pid}"] is True
+    assert "flags" not in body["data"]
+    (sync,) = jobs(session_factory, MESSAGE_SYNC_JOB)
+    assert sync.payload == {"property_id": pid, "channel_id": CHANNEL, "message_id": LIST_MESSAGE}
+
+
+def test_a_refused_click_on_a_card_says_why_and_syncs_the_list(
+    post: Post, make_property: MakeProperty, session_factory: sessionmaker[Session]
+) -> None:
+    pid = make_property(S.ARCHIVED)
+    on_list(session_factory, pid)
+
+    body = post(on_card(click("approve", pid))).json()
+
+    assert body["data"]["flags"] == EPHEMERAL
+    assert "Can't approve" in body["data"]["content"]
+    (sync,) = jobs(session_factory, MESSAGE_SYNC_JOB)
+    assert sync.payload["message_id"] == LIST_MESSAGE
+
+
+def test_deny_submitted_from_a_card_redraws_it(
+    post: Post, make_property: MakeProperty, store: SqlPropertyStore
+) -> None:
+    pid = make_property()
+
+    body = post(on_card(submit_deny(pid, "too far"))).json()
+
+    assert store.get(pid).status is S.DENIED  # type: ignore[union-attr]
+    assert body["type"] == ResponseType.UPDATE_MESSAGE
+    # Never posted, so there is no list to sync.
+
+
+def test_snooze_on_a_card_of_a_property_never_posted_queues_no_sync(
+    post: Post, make_property: MakeProperty, session_factory: sessionmaker[Session]
+) -> None:
+    pid = make_property()
+
+    body = post(on_card(click("snooze", pid))).json()
+
+    assert body["type"] == ResponseType.UPDATE_MESSAGE
+    assert jobs(session_factory, MESSAGE_SYNC_JOB) == []

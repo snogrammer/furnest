@@ -1,0 +1,50 @@
+{
+  "allowed_mentions": {
+    "parse": []
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "furnest:open",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "description": "89/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 1",
+              "value": "1"
+            },
+            {
+              "description": "88/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 2",
+              "value": "2"
+            },
+            {
+              "label": "Property #3",
+              "value": "3"
+            },
+            {
+              "label": "Sunny furnished 2BR near the park",
+              "value": "4"
+            }
+          ],
+          "placeholder": "Open a listing to act on it",
+          "type": 3
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "embeds": [
+    {
+      "color": 2450411,
+      "description": "• [Furnished place number 1](https://furnest.example.com/properties/1) · 89/100 · $2,400.00/mo · 2 bd · 1.5 ba\n• [Furnished place number 2](https://furnest.example.com/properties/2) · 88/100 · $2,400.00/mo · 2 bd · 1.5 ba\n• [Property \\#3](https://furnest.example.com/properties/3)\n• [Sunny furnished 2BR near the park](https://furnest.example.com/properties/4)",
+      "footer": {
+        "text": "furnest · pick a listing below to approve, deny, inquire or snooze"
+      },
+      "title": "4 new matches",
+      "url": "https://furnest.example.com/"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "allowed_mentions": {
+    "parse": []
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "furnest:open",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "description": "89/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 1",
+              "value": "1"
+            },
+            {
+              "description": "88/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 2",
+              "value": "2"
+            },
+            {
+              "description": "87/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 3",
+              "value": "3"
+            },
+            {
+              "description": "86/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 4",
+              "value": "4"
+            },
+            {
+              "description": "85/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 5",
+              "value": "5"
+            },
+            {
+              "description": "84/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 6",
+              "value": "6"
+            },
+            {
+              "description": "83/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 7",
+              "value": "7"
+            },
+            {
+              "description": "82/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "Furnished place number 8",
+              "value": "8"
+            }
+          ],
+          "placeholder": "Open a listing to act on it",
+          "type": 3
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "embeds": [
+    {
+      "color": 2450411,
+      "description": "• [Furnished place number 1](https://furnest.example.com/properties/1) · 89/100 · $2,400.00/mo · 2 bd · 1.5 ba\n✅ [Furnished place number 2](https://furnest.example.com/properties/2) · 88/100 · $2,400.00/mo · 2 bd · 1.5 ba · *approved*\n✅ [Furnished place number 3](https://furnest.example.com/properties/3) · 87/100 · $2,400.00/mo · 2 bd · 1.5 ba · *inquiry sent*\n❌ [Furnished place number 4](https://furnest.example.com/properties/4) · 86/100 · $2,400.00/mo · 2 bd · 1.5 ba · *denied*\n💤 [Furnished place number 5](https://furnest.example.com/properties/5) · 85/100 · $2,400.00/mo · 2 bd · 1.5 ba · *snoozed*\n• [Furnished place number 6](https://furnest.example.com/properties/6) · 84/100 · $2,400.00/mo · 2 bd · 1.5 ba\n↪ [Furnished place number 7](https://furnest.example.com/properties/7) · 83/100 · $2,400.00/mo · 2 bd · 1.5 ba · *merged into #1*\n↪ [Furnished place number 8](https://furnest.example.com/properties/8) · 82/100 · $2,400.00/mo · 2 bd · 1.5 ba · *reposted*",
+      "footer": {
+        "text": "furnest · pick a listing below to approve, deny, inquire or snooze"
+      },
+      "title": "8 new matches",
+      "url": "https://furnest.example.com/"
+    }
+  ]
+}

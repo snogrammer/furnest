@@ -109,7 +109,7 @@ def create_app(
     app.state.authenticator = authenticator
     app.state.source_registry = source_registry or discover()
     app.state.discord_dispatcher = dispatcher = InteractionDispatcher()
-    register_buttons(dispatcher, settings)
+    register_buttons(dispatcher, settings, source_name=app.state.source_registry.display_name)
     app.state.csrf_signer = csrf_signer = CsrfSigner(authenticator.secret)
     app.state.auth_limiter = SlidingWindowLimiter(
         settings.auth.login_max_attempts, settings.auth.login_window_seconds

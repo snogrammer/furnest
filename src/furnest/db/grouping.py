@@ -495,7 +495,7 @@ def after_grouping(session: Session, survivor: Property, *, at: datetime, merged
         and survivor.discord_message_id is None
     ):
         # A merged-away property's pending notification is skipped; post the survivor.
-        _enqueue_notify(session, survivor.id)
+        _enqueue_notify(session, survivor, at=at)
 
 
 def audit_property_ids(session: Session, property_id: int) -> list[int]:

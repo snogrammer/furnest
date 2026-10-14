@@ -6,7 +6,8 @@ the hooks :class:`~furnest.pipeline.ingest.ListingIngestor` and
 :class:`~furnest.pipeline.rerun.RerunCriteria` take:
 
 * :meth:`~PropertyPipeline.record` stores each match. A passing listing moves its
-  ``new`` property to ``suggested`` and queues a :data:`NOTIFY` job. A property in
+  ``new`` property to ``suggested`` and marks it for the next batched post (a
+  :data:`NOTIFY` job). A property in
   any other state only gets the new score, so a re-run never regresses a decision.
 * :meth:`~PropertyPipeline.regroup` groups listings again once their photos are
   hashed (``GROUPING_*``; see :mod:`furnest.db.grouping`).
@@ -16,7 +17,7 @@ the hooks :class:`~furnest.pipeline.ingest.ListingIngestor` and
   and :class:`UnsnoozeExpired`, a scheduled worker job, brings it back afterwards.
 
 ``notify`` jobs are consumed by :class:`furnest.notify.post.NotifyPost`, which posts
-the property to Discord.
+every marked property to Discord in one list message.
 """
 
 from __future__ import annotations

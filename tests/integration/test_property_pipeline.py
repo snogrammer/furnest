@@ -68,11 +68,28 @@ def add_listing(session_factory: sessionmaker[Session]) -> AddListing:
     return add
 
 
-def notify_jobs(session_factory: sessionmaker[Session]) -> list[int]:
-    """The property id of every queued notify job, oldest first."""
+def notify_jobs(session_factory: sessionmaker[Session]) -> int:
+    """How many notify jobs were ever queued; one posts every marked property."""
     with session_scope(session_factory) as session:
-        jobs = session.scalars(select(Job).where(Job.kind == NOTIFY).order_by(Job.id))
-        return [job.payload["property_id"] for job in jobs]
+        return len(list(session.scalars(select(Job.id).where(Job.kind == NOTIFY))))
+
+
+def marked(session_factory: sessionmaker[Session]) -> list[int]:
+    """The properties marked for the next batched post, by id."""
+    with session_scope(session_factory) as session:
+        return list(
+            session.scalars(
+                select(Property.id)
+                .where(Property.notify_requested_at.is_not(None))
+                .order_by(Property.id)
+            )
+        )
+
+
+def unmark(session_factory: sessionmaker[Session]) -> None:
+    """What posting the batch does to the marks."""
+    with session_scope(session_factory) as session:
+        session.execute(update(Property).values(notify_requested_at=None))
 
 
 def finish_jobs(session_factory: sessionmaker[Session]) -> None:
@@ -123,7 +140,8 @@ def test_a_passing_match_suggests_the_property_and_queues_a_notification(
     ]
     assert events[1].actor_detail == "match"
     assert events[1].payload == {"score": 87, "criteria_version": 1}
-    assert notify_jobs(session_factory) == [state.id]
+    assert marked(session_factory) == [state.id]
+    assert notify_jobs(session_factory) == 1
 
 
 def test_the_match_result_is_stored_as_json(
@@ -145,7 +163,8 @@ def test_a_failing_match_only_scores_a_new_property(
     assert state.status is S.NEW
     assert state.score == 12
     assert [e.to_status for e in store.audit_events(state.id)] == [S.NEW]
-    assert notify_jobs(session_factory) == []
+    assert marked(session_factory) == []
+    assert notify_jobs(session_factory) == 0
 
 
 def test_a_new_property_passing_on_a_later_run_is_suggested_then(
@@ -158,7 +177,7 @@ def test_a_new_property_passing_on_a_later_run_is_suggested_then(
 
     assert state.status is S.SUGGESTED
     assert state.criteria_version_id == criteria_id(session_factory, 2)
-    assert notify_jobs(session_factory) == [state.id]
+    assert marked(session_factory) == [state.id]
 
 
 @pytest.mark.parametrize(
@@ -193,7 +212,7 @@ def test_a_rerun_updates_the_score_without_moving_a_decided_property(
     assert state.score == result.score
     assert state.criteria_version_id == criteria_id(session_factory, 2)
     assert store.audit_events(prop.id) == events_before
-    assert notify_jobs(session_factory) == [prop.id]
+    assert notify_jobs(session_factory) == 1
 
 
 def test_a_match_on_an_unknown_criteria_version_stores_no_version(
@@ -221,7 +240,7 @@ def test_a_failed_notification_enqueue_leaves_nothing_behind(
         store.record_match(listing_id, passing(), at=T0)
 
     assert store.for_listing(listing_id) is None
-    assert notify_jobs(session_factory) == []
+    assert notify_jobs(session_factory) == 0
 
 
 # --- Disappearance and relisting -------------------------------------------------
@@ -473,13 +492,15 @@ def test_expired_snoozes_are_cleared_and_suggested_ones_notified_again(
     store.snooze(decided.id, until=T0 + HOUR, actor=Actor.DISCORD, at=T0)
     store.snooze(later.id, until=T0 + 5 * HOUR, actor=Actor.DISCORD, at=T0)
     finish_jobs(session_factory)  # the first notifications went out
+    unmark(session_factory)
 
     assert store.unsnooze_expired(now=T0 + HOUR) == [waiting.id, decided.id]
 
     assert store.get(waiting.id).snoozed_until is None  # type: ignore[union-attr]
     assert store.get(decided.id).snoozed_until is None  # type: ignore[union-attr]
     assert store.get(later.id).snoozed_until == T0 + 5 * HOUR  # type: ignore[union-attr]
-    assert notify_jobs(session_factory) == [waiting.id, decided.id, later.id, waiting.id]
+    assert marked(session_factory) == [waiting.id]
+    assert notify_jobs(session_factory) == 2
     last = store.audit_events(waiting.id)[-1]
     assert (last.actor, last.payload) == (Actor.SYSTEM, {"unsnoozed": True})
     assert store.unsnooze_expired(now=T0 + 2 * HOUR) == []
@@ -493,7 +514,8 @@ def test_a_notification_still_waiting_to_run_is_not_queued_twice(
 
     store.unsnooze_expired(now=T0 + HOUR)
 
-    assert notify_jobs(session_factory) == [waiting.id]
+    assert marked(session_factory) == [waiting.id]
+    assert notify_jobs(session_factory) == 1
 
 
 def test_a_running_notification_does_not_stop_the_next_one(
@@ -506,7 +528,7 @@ def test_a_running_notification_does_not_stop_the_next_one(
 
     store.unsnooze_expired(now=T0 + HOUR)
 
-    assert notify_jobs(session_factory) == [waiting.id, waiting.id]
+    assert notify_jobs(session_factory) == 2
 
 
 def test_an_unavailable_property_with_no_audit_of_it_is_not_restored(

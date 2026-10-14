@@ -267,6 +267,9 @@ class DiscordSettings(_Group):
     # How far an interaction's signed timestamp may be from our clock, either way,
     # before ``POST /discord/interactions`` rejects it as a possible replay.
     interaction_max_age_seconds: PositiveInt = 300
+    # How long new suggestions are collected, from the first one, before they go out
+    # together in one list message. 0 posts at the worker's next turn.
+    notify_batch_minutes: Annotated[int, Field(ge=0)] = 30
     # Local time (``TIMEZONE``) of the daily digest; unset means no digest.
     digest_time: time | None = None
     # How many of the day's new suggestions the digest lists.

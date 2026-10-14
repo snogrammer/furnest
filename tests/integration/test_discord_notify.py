@@ -1,8 +1,9 @@
-"""NotifyPost posts suggested properties to Discord, and every later change to a posted
-property queues a sync of its message."""
+"""NotifyPost posts the properties marked for notifying to Discord in one list
+message, and every later change to a posted property queues a sync of its message."""
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,7 +19,7 @@ from furnest.db.property_store import NOTIFY, PropertyNotFoundError, SqlProperty
 from furnest.db.session import session_scope
 from furnest.domain import Actor, NormalizedListing, PropertyStatus
 from furnest.notify.discord import DiscordClient, DiscordError
-from furnest.notify.embeds import disabled_actions, match_message
+from furnest.notify.embeds import MAX_BATCH, batch_message
 from furnest.notify.post import NotifyPost
 from furnest.notify.sync import MESSAGE_SYNC_JOB, MessageSync
 from furnest.worker.execution import JobContext, default_registry
@@ -103,118 +104,221 @@ def poster(
     factory: Callable[[], DiscordClient | None],
     *,
     now: datetime = T0,
+    settings: Settings = SETTINGS,
 ) -> NotifyPost:
-    return NotifyPost(
-        session_factory,
-        settings=SETTINGS,
-        source_name=lambda key: key.upper(),
-        client_factory=factory,
-        clock=lambda: now,
+    return NotifyPost(session_factory, settings=settings, client_factory=factory, clock=lambda: now)
+
+
+def notify(payload: dict[str, Any] | None = None) -> JobContext:
+    return ctx(NOTIFY, payload or {})
+
+
+def marked(session_factory: sessionmaker[Session], *pids: int, at: datetime = T0) -> None:
+    """Mark ``pids`` for the next batched post, as a passing match does."""
+    with session_scope(session_factory) as session:
+        session.execute(
+            update(Property).where(Property.id.in_(pids)).values(notify_requested_at=at)
+        )
+
+
+def suggested(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore, key: str, score: int
+) -> int:
+    """Another suggested property, marked for the next post, with ``score``."""
+    listing = NormalizedListing.model_validate(
+        {"source": "test", "source_id": key, "url": f"https://example.com/{key}", "title": key}
     )
+    (listing_id,) = (
+        SqlListingStore(session_factory).upsert_batch("test", [listing], seen_at=T0).new_ids
+    )
+    pid = store.ensure_for_listing(listing_id, at=T0).id
+    store.transition(pid, PropertyStatus.SUGGESTED, actor=Actor.SYSTEM, at=T0)
+    with session_scope(session_factory) as session:
+        session.execute(update(Property).where(Property.id == pid).values(score=score))
+    marked(session_factory, pid)
+    return pid
 
 
-def notify(pid: int) -> JobContext:
-    return ctx(NOTIFY, {"property_id": pid})
+def notify_jobs(session_factory: sessionmaker[Session]) -> list[Job]:
+    with session_scope(session_factory) as session:
+        return list(session.scalars(select(Job).where(Job.kind == NOTIFY).order_by(Job.id)))
+
+
+def requested(session_factory: sessionmaker[Session], pid: int) -> datetime | None:
+    with session_scope(session_factory) as session:
+        row = session.get(Property, pid)
+        assert row is not None
+        return row.notify_requested_at
+
+
+LATER = T0 + timedelta(minutes=SETTINGS.discord.notify_batch_minutes)
 
 
 # --- NotifyPost ---------------------------------------------------------------------
 
 
-def test_posts_the_match_and_remembers_the_message(
+def test_posts_every_marked_property_in_one_list_message(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
+    marked(session_factory, property_id)
+    best = suggested(session_factory, store, "best", 90)
     requests, factory = fake_discord(created())
 
-    poster(session_factory, factory)(notify(property_id))
+    poster(session_factory, factory, now=LATER)(notify())
 
     (request,) = requests
     assert request.method == "POST"
     assert request.url.path == f"/api/v10/channels/{CHANNEL}/messages"
-    detail = store.detail(property_id)
-    assert detail is not None
-    expected = match_message(
-        detail,
-        base_url=str(SETTINGS.app.base_url),
-        source_name=lambda key: key.upper(),
-        disabled=disabled_actions(detail.property),
+    details = [store.detail(best), store.detail(property_id)]  # best score first
+    expected = batch_message(
+        [d for d in details if d is not None], base_url=str(SETTINGS.app.base_url), now=LATER
     )
     assert json.loads(request.content) == expected
-    with session_scope(session_factory) as session:
-        row = session.get(Property, property_id)
-        assert row is not None
-        assert (row.discord_channel_id, row.discord_message_id) == (CHANNEL, NEW_MESSAGE)
+    for pid in (property_id, best):
+        with session_scope(session_factory) as session:
+            row = session.get(Property, pid)
+            assert row is not None
+            assert (row.discord_channel_id, row.discord_message_id) == (CHANNEL, NEW_MESSAGE)
+            assert row.notify_requested_at is None
+    assert store.batch_property_ids(NEW_MESSAGE) == [best, property_id]
     assert sync_jobs(session_factory) == []  # nothing changed while posting
+
+
+def test_waits_for_the_batch_window_from_the_first_mark(
+    session_factory: sessionmaker[Session], property_id: int
+) -> None:
+    marked(session_factory, property_id)
+    requests, factory = fake_discord(created())
+
+    poster(session_factory, factory, now=T0 + timedelta(minutes=5))(notify())
+
+    assert requests == []
+    (job,) = notify_jobs(session_factory)
+    assert job.run_after == LATER
+    assert requested(session_factory, property_id) == T0
+
+
+def test_a_zero_window_posts_at_once(
+    session_factory: sessionmaker[Session], property_id: int
+) -> None:
+    marked(session_factory, property_id)
+    requests, factory = fake_discord(created())
+    settings = Settings(discord=DiscordSettings(channel_id=CHANNEL, notify_batch_minutes=0))
+
+    poster(session_factory, factory, settings=settings)(notify())
+
+    assert len(requests) == 1
+
+
+def test_more_than_a_menu_holds_takes_more_messages(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore
+) -> None:
+    pids = [suggested(session_factory, store, f"l{n}", n) for n in range(MAX_BATCH + 2)]
+    requests, factory = fake_discord(created(MESSAGE), created(NEW_MESSAGE))
+
+    poster(session_factory, factory, now=LATER)(notify())
+
+    first, second = (json.loads(r.content) for r in requests)
+    assert len(first["components"][0]["components"][0]["options"]) == MAX_BATCH
+    assert len(second["components"][0]["components"][0]["options"]) == 2
+    assert store.batch_property_ids(NEW_MESSAGE) == pids[1::-1]
+
+
+def test_an_old_style_job_posts_the_batch(
+    session_factory: sessionmaker[Session], property_id: int
+) -> None:
+    marked(session_factory, property_id)
+    requests, factory = fake_discord(created())
+
+    poster(session_factory, factory, now=LATER)(notify({"property_id": property_id}))
+
+    assert len(requests) == 1
+
+
+def test_nothing_marked_posts_nothing(
+    session_factory: sessionmaker[Session], property_id: int
+) -> None:
+    requests, factory = fake_discord()
+
+    poster(session_factory, factory, now=LATER)(notify())
+
+    assert requests == []
+    assert notify_jobs(session_factory) == []
 
 
 def test_does_nothing_when_discord_is_not_configured(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
-    poster(session_factory, lambda: None)(notify(property_id))
+    marked(session_factory, property_id)
+
+    poster(session_factory, lambda: None, now=LATER)(notify())
 
     assert store.get(property_id).discord_message_id is None  # type: ignore[union-attr]
+    assert requested(session_factory, property_id) == T0  # still waiting for Discord
 
 
 def test_does_nothing_without_a_channel(
     session_factory: sessionmaker[Session], property_id: int
 ) -> None:
+    marked(session_factory, property_id)
     requests, factory = fake_discord()
-    handler = NotifyPost(session_factory, settings=Settings(), client_factory=factory)
 
-    handler(notify(property_id))
+    poster(session_factory, factory, now=LATER, settings=Settings())(notify())
 
     assert requests == []
 
 
-def test_a_property_decided_before_the_job_ran_is_not_posted(
+def test_a_property_decided_before_the_job_ran_is_left_out(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
+    marked(session_factory, property_id)
     store.deny(property_id, actor=Actor.DASHBOARD, at=T0)
     requests, factory = fake_discord()
 
-    poster(session_factory, factory)(notify(property_id))
+    poster(session_factory, factory, now=LATER)(notify())
 
     assert requests == []
+    assert requested(session_factory, property_id) is None
 
 
-def test_a_snoozed_property_waits_for_its_snooze_to_end(
+def test_a_snoozed_property_is_left_out_until_its_snooze_ends(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
-    store.snooze(property_id, until=T0 + HOUR, actor=Actor.DASHBOARD, at=T0)
+    marked(session_factory, property_id)
+    store.snooze(property_id, until=LATER + HOUR, actor=Actor.DASHBOARD, at=T0)
     requests, factory = fake_discord(created())
 
-    poster(session_factory, factory, now=T0)(notify(property_id))
+    poster(session_factory, factory, now=LATER)(notify())
     assert requests == []
+    assert requested(session_factory, property_id) is None
 
-    poster(session_factory, factory, now=T0 + 2 * HOUR)(notify(property_id))
+    store.unsnooze_expired(now=LATER + HOUR)
+    assert requested(session_factory, property_id) == LATER + HOUR
+    poster(session_factory, factory, now=LATER + 2 * HOUR)(notify())
     assert len(requests) == 1
-
-
-def test_a_missing_property_is_skipped(session_factory: sessionmaker[Session]) -> None:
-    requests, factory = fake_discord()
-
-    poster(session_factory, factory)(notify(999))
-
-    assert requests == []
 
 
 def test_discord_errors_raise_so_the_queue_retries(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
+    marked(session_factory, property_id)
     _, factory = fake_discord(httpx2.Response(503, json={"message": "unavailable"}))
 
     with pytest.raises(DiscordError):
-        poster(session_factory, factory)(notify(property_id))
+        poster(session_factory, factory, now=LATER)(notify())
 
     assert store.get(property_id).discord_message_id is None  # type: ignore[union-attr]
+    assert requested(session_factory, property_id) == T0
 
 
 def test_renotifying_posts_again_and_retires_the_old_message(
     session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
 ) -> None:
     posted(session_factory, property_id)
+    marked(session_factory, property_id)
     requests, factory = fake_discord(created(NEW_MESSAGE))
 
-    poster(session_factory, factory)(notify(property_id))
+    poster(session_factory, factory, now=LATER)(notify())
 
     assert requests[0].method == "POST"
     assert store.get(property_id).discord_message_id == NEW_MESSAGE  # type: ignore[union-attr]
@@ -230,17 +334,33 @@ def test_a_change_made_while_posting_queues_a_sync(
     assert rendered is not None
     store.transition(property_id, PropertyStatus.APPROVED, actor=Actor.DASHBOARD, at=T0)
 
-    store.attach_message(property_id, channel_id=CHANNEL, message_id=MESSAGE, rendered=rendered)
+    store.attach_batch(channel_id=CHANNEL, message_id=MESSAGE, rendered=[rendered])
 
     assert sync_jobs(session_factory) == [
         {"property_id": property_id, "channel_id": CHANNEL, "message_id": MESSAGE}
     ]
 
 
+def test_a_property_deleted_while_posting_is_skipped(
+    session_factory: sessionmaker[Session], store: SqlPropertyStore, property_id: int
+) -> None:
+    rendered = store.get(property_id)
+    assert rendered is not None
+    gone = replace(rendered, id=999)
+
+    store.attach_batch(channel_id=CHANNEL, message_id=MESSAGE, rendered=[gone, rendered])
+
+    assert store.get(property_id).discord_message_id == MESSAGE  # type: ignore[union-attr]
+
+
 def test_attaching_to_a_missing_property_raises(store: SqlPropertyStore) -> None:
     rendered: Any = None
     with pytest.raises(PropertyNotFoundError):
         store.attach_message(999, channel_id=CHANNEL, message_id=MESSAGE, rendered=rendered)
+
+
+def test_a_single_card_is_not_a_list(store: SqlPropertyStore) -> None:
+    assert store.batch_property_ids(MESSAGE) is None
 
 
 def test_worker_registers_the_poster(session_factory: sessionmaker[Session]) -> None:
@@ -368,8 +488,10 @@ def test_a_merged_property_is_not_posted(
         session.execute(
             update(Property).where(Property.id == property_id).values(merged_into_id=survivor)
         )
+    marked(session_factory, property_id)
     requests, factory = fake_discord()
 
-    poster(session_factory, factory)(notify(property_id))
+    poster(session_factory, factory, now=LATER)(notify())
 
     assert requests == []
+    assert requested(session_factory, property_id) is None

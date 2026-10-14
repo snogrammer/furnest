@@ -61,6 +61,9 @@ class InteractionDispatcher:
         handler = self._handlers.get((interaction.type, interaction.action))
         if handler is not None:
             return handler(session, interaction)
+        if interaction.message_ephemeral:
+            # Only the clicker sees it, so the bot can't edit it; nothing to refresh.
+            return deferred_update()
         enqueue_sync(
             session,
             interaction.property_id,

@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from nacl.signing import SigningKey
 
-from furnest.notify.custom_ids import DiscordAction
+from furnest.notify.custom_ids import OPEN_CUSTOM_ID, DiscordAction
 from furnest.notify.interactions import (
     EPHEMERAL,
     MAX_TEXT_INPUT,
@@ -14,10 +14,12 @@ from furnest.notify.interactions import (
     ResponseType,
     deferred_update,
     ephemeral,
+    ephemeral_message,
     is_fresh,
     modal,
     paragraph_input,
     pong,
+    update_message,
     verify_signature,
 )
 from furnest.web.discord_dispatch import InteractionDispatcher
@@ -222,3 +224,47 @@ def test_dispatcher_refuses_a_second_handler_for_the_same_key() -> None:
         dispatcher.register(
             InteractionType.MESSAGE_COMPONENT, DiscordAction.DENY, lambda _s, _i: {}
         )
+
+
+def test_parses_a_pick_from_a_list_menu() -> None:
+    data = {"custom_id": OPEN_CUSTOM_ID, "component_type": 3, "values": ["42"]}
+
+    interaction = Interaction.from_json(interaction_json(data=data))
+
+    assert interaction.action is DiscordAction.OPEN
+    assert interaction.property_id == 42
+    assert not interaction.message_ephemeral
+
+
+@pytest.mark.parametrize(
+    "values",
+    [None, [], ["1", "2"], [42], ["0"], ["-1"], ["\uff14\uff12"], ["abc"], ["1" * 19]],
+)
+def test_a_malformed_pick_has_no_action(values: object) -> None:
+    data = {"custom_id": OPEN_CUSTOM_ID, "component_type": 3, "values": values}
+
+    interaction = Interaction.from_json(interaction_json(data=data))
+
+    assert interaction.action is None
+    assert interaction.property_id is None
+
+
+@pytest.mark.parametrize(
+    ("flags", "ephemeral_message"),
+    [(EPHEMERAL, True), (EPHEMERAL | 1, True), (0, False), ("64", False), (None, False)],
+)
+def test_parses_whether_the_clicked_message_is_ephemeral(
+    flags: object, ephemeral_message: bool
+) -> None:
+    data = interaction_json(message={"id": "1300000000000000000", "flags": flags})
+
+    assert Interaction.from_json(data).message_ephemeral is ephemeral_message
+
+
+def test_message_response_bodies() -> None:
+    payload = {"embeds": [{"title": "Loft"}], "allowed_mentions": {"parse": []}}
+
+    assert update_message(payload) == {"type": ResponseType.UPDATE_MESSAGE, "data": payload}
+    reply = ephemeral_message(payload)
+    assert reply["type"] == ResponseType.CHANNEL_MESSAGE_WITH_SOURCE
+    assert reply["data"] == {**payload, "flags": EPHEMERAL}

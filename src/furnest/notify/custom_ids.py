@@ -22,12 +22,20 @@ _PATTERN = re.compile(rf"{PREFIX}:([a-z]+):([1-9][0-9]{{0,17}})")
 
 
 class DiscordAction(StrEnum):
-    """The buttons on a match message, in the order they appear."""
+    """What a component on one of our messages does: the buttons on a match card, in
+    the order they appear, and the property menu on a list message."""
 
     APPROVE = "approve"
     DENY = "deny"
     INQUIRE = "inquire"
     SNOOZE = "snooze"
+    # Picking a property from a batched list message's menu (see OPEN_CUSTOM_ID).
+    OPEN = "open"
+
+
+# The custom_id of a list message's property menu. The picked property's id comes
+# back in the interaction's ``values``, not in the custom_id.
+OPEN_CUSTOM_ID = f"{PREFIX}:{DiscordAction.OPEN.value}"
 
 
 def encode_custom_id(action: DiscordAction, property_id: int) -> str:

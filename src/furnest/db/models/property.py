@@ -106,6 +106,9 @@ class Property(Base):
     )
     discord_channel_id: Mapped[str | None] = mapped_column(String(32))
     discord_message_id: Mapped[str | None] = mapped_column(String(32))
+    # Set when the property should go out in the next batched Discord post; cleared
+    # once it has (furnest.notify.post).
+    notify_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime, index=True)
     # Set once this property has been merged into another (grouping).
     merged_into_id: Mapped[int | None] = mapped_column(
         ForeignKey("properties.id", ondelete="SET NULL"), index=True

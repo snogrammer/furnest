@@ -8,10 +8,11 @@ paragraphs). Examples use `furnest.example.com`; use your own `BASE_URL` instead
 
 furnest doesn't run a gateway bot. It uses two one-way channels:
 
-- **furnest → Discord.** The worker posts match messages, the daily digest and source
-  alerts, and edits match messages when a property changes. It calls Discord's REST API
+- **furnest → Discord.** The worker posts new matches (together, as one list message
+  per data pull), the daily digest and source alerts, and edits a list when a property
+  on it changes. It calls Discord's REST API
   with the bot token.
-- **Discord → furnest.** Button clicks and the Deny form arrive at
+- **Discord → furnest.** Picks from a list's menu, button clicks and the Deny form arrive at
   `POST /discord/interactions` on the web process. Every request is checked against the
   application's Ed25519 public key.
 
@@ -111,6 +112,7 @@ The optional settings are documented in [`.env.example`](../.env.example):
 | `DISCORD_REQUEST_TIMEOUT_SECONDS` | 10 | Per-request timeout for the REST API. |
 | `DISCORD_MAX_RETRIES` | 3 | Retries for 5xx and network errors. Rate limits are waited out separately. |
 | `DISCORD_INTERACTION_MAX_AGE_SECONDS` | 300 | How far an interaction's signed timestamp may be from the server clock before it is rejected. |
+| `DISCORD_NOTIFY_BATCH_MINUTES` | `30` | New matches are collected this long, from the first one, then posted together as one list message. `0` posts at the worker's next turn. |
 | `DISCORD_DIGEST_TIME` | unset | Daily digest at this local time (`TIMEZONE`), as `HH:MM`. Unset means no digest. |
 | `DISCORD_DIGEST_TOP` | 5 | How many new suggestions the digest lists. |
 | `DISCORD_ALLOWED_USER_IDS` | empty | Comma-separated Discord user ids allowed to press Approve, Deny, Inquire and Snooze. Empty means anyone who can see the channel. Anyone else gets an ephemeral "not allowed" reply, and nothing changes. Copy a user id the same way as the channel id. |
@@ -139,13 +141,15 @@ again.
 ## 7. Check that it works
 
 1. The portal saved the URL. That proves the web side: reachability, TLS and the key.
-2. Wait for a property to be suggested, or set `DISCORD_DIGEST_TIME` a couple of minutes
-   ahead and restart the worker. The worker logs `discord_match_posted` or
-   `digest_posted`, and the message appears in the channel. That proves the bot token,
+2. Wait for a property to be suggested (the list goes out `DISCORD_NOTIFY_BATCH_MINUTES`
+   after the first one; set it to `0` while testing), or set `DISCORD_DIGEST_TIME` a
+   couple of minutes ahead and restart the worker. The worker logs
+   `discord_batch_posted` or `digest_posted`, and the message appears in the channel. That proves the bot token,
    the channel id and the bot's permissions.
-3. Click **Snooze** on a match. The web logs `discord_interaction` with
-   `action="snooze"`, then the worker logs `discord_message_synced` and the message
-   footer shows the snooze. That proves the whole round trip.
+3. Pick a listing from the list's menu: its card appears, visible only to you. Click
+   **Snooze** on it. The card redraws at once, the web logs `discord_interaction` with
+   `action="snooze"`, then the worker logs `discord_list_synced` and the list shows 💤
+   in front of the listing. That proves the whole round trip.
 
 ## Troubleshooting
 
@@ -189,15 +193,17 @@ error code. The job queue retries it.
 | `HTTP 403 (50013: Missing Permissions)` | The bot can see the channel but can't send messages or embeds there. | Allow Send Messages and Embed Links for the bot in that channel. |
 | `HTTP 404 (10003: Unknown Channel)` | `DISCORD_CHANNEL_ID` is wrong, or the channel was deleted. | Copy the channel id again (step 4). |
 
-`notify_skipped` with any other reason is normal: the property was no longer
-`suggested`, was snoozed, or was gone by the time the job ran.
+`notify_skipped` with any other reason is normal: nothing was waiting to be posted, or
+every waiting property was decided on, snoozed or merged by the time the job ran.
+`notify_deferred` means the job is waiting out `DISCORD_NOTIFY_BATCH_MINUTES` so the
+whole data pull goes out in one message.
 
 ### Buttons work but the message never changes
 
 The click is handled by `web`, but the message is edited by `worker`.
 
 - The worker must be running with the bot token and channel id. Look for
-  `discord_message_synced` or `discord_sync_skipped` after a click.
+  `discord_list_synced`, `discord_message_synced` or `discord_sync_skipped` after a click.
 - Edits fail with the same 401 and 403 errors as posts (see above).
 - `discord_sync_skipped` with `reason="message gone"` means the message was deleted in
   Discord. That is expected; the property keeps its state.

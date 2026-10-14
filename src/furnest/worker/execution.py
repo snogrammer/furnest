@@ -166,7 +166,7 @@ def default_registry(
     registry.register(RERUN_CRITERIA, rerun)
     registry.register(
         properties.NOTIFY,
-        NotifyPost(session_factory, settings=settings, source_name=source_name),
+        NotifyPost(session_factory, settings=settings),
     )
     registry.register(
         MESSAGE_SYNC_JOB,

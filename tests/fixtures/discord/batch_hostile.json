@@ -1,0 +1,37 @@
+{
+  "allowed_mentions": {
+    "parse": []
+  },
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "furnest:open",
+          "max_values": 1,
+          "min_values": 1,
+          "options": [
+            {
+              "description": "87/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+              "label": "@everyone **HUGE** [click](https://evil.example.com) deal deal deal deal deal deal deal deal deal d…",
+              "value": "42"
+            }
+          ],
+          "placeholder": "Open a listing to act on it",
+          "type": 3
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "embeds": [
+    {
+      "color": 2450411,
+      "description": "• [@everyone \\*\\*HUGE\\*\\* \\[click\\]\\(https://evil.example.com\\) deal deal deal d…](https://furnest.example.com/properties/42) · 87/100 · $2,400.00/mo · 2 bd · 1.5 ba",
+      "footer": {
+        "text": "furnest · pick a listing below to approve, deny, inquire or snooze"
+      },
+      "title": "1 new match",
+      "url": "https://furnest.example.com/"
+    }
+  ]
+}

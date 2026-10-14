@@ -1,4 +1,4 @@
-"""Keeping a match message in Discord in step with its property.
+"""Keeping the Discord messages a property is on in step with it.
 
 Whenever a posted property's status or snooze changes, from the dashboard, the API,
 a Discord button or the system, the property store queues a
@@ -6,8 +6,15 @@ a Discord button or the system, the property store queues a
 edits the message in-line: the interactions endpoint has to answer within 3 seconds,
 and no request should wait on Discord.
 
-The worker runs :class:`MessageSync`. It renders the property's message again from
-the database, with the buttons that no longer apply greyed out
+The worker runs :class:`MessageSync`. A list message (one batched post of new
+suggestions, see :mod:`furnest.notify.post`) is drawn again from the properties it
+lists, each with its current status in front, and edited with the bot token. A
+property that a later list showed again is marked as reposted. Several changes to
+properties on one list share one queued job, since jobs are told apart by message.
+
+A card posted on its own (before batching) is handled as it always was.
+:class:`MessageSync` renders the property's card again from the database, with the
+buttons that no longer apply greyed out
 (:func:`~furnest.notify.embeds.disabled_actions`), and edits it with the bot token.
 The edit always renders the property's current state, so a late or repeated job is
 harmless. The bot token is used rather than the interaction token, which expires
@@ -36,7 +43,7 @@ from furnest.db.property_store import MESSAGE_SYNC_JOB, SqlPropertyStore, enqueu
 from furnest.logging import get_logger
 from furnest.notify.custom_ids import DiscordAction
 from furnest.notify.discord import DiscordClient, DiscordNotFoundError, discord_client
-from furnest.notify.embeds import disabled_actions, match_message
+from furnest.notify.embeds import batch_message, disabled_actions, match_message
 
 if TYPE_CHECKING:
     from furnest.worker.execution import JobContext
@@ -70,6 +77,10 @@ class MessageSync:
         property_id = int(ctx.payload["property_id"])
         channel_id = str(ctx.payload["channel_id"])
         message_id = str(ctx.payload["message_id"])
+        listed = self._store.batch_property_ids(message_id)
+        if listed is not None:
+            self._sync_list(channel_id, message_id, listed)
+            return
         detail = self._store.detail(property_id)
         if detail is None:
             log.info("discord_sync_skipped", property_id=property_id, reason="no such property")
@@ -96,3 +107,19 @@ class MessageSync:
         log.info(
             "discord_message_synced", property_id=property_id, status=detail.property.status.value
         )
+
+    def _sync_list(self, channel_id: str, message_id: str, property_ids: list[int]) -> None:
+        details = [d for d in map(self._store.detail, property_ids) if d is not None]
+        client = self._client_factory()
+        if client is None:
+            log.info("discord_sync_skipped", message_id=message_id, reason="not configured")
+            return
+        superseded = {d.property.id for d in details if d.property.discord_message_id != message_id}
+        payload = batch_message(details, base_url=self._base_url, superseded=superseded)
+        with client:
+            try:
+                client.edit_message(channel_id, message_id, payload)
+            except DiscordNotFoundError:
+                log.info("discord_sync_skipped", message_id=message_id, reason="message gone")
+                return
+        log.info("discord_list_synced", message_id=message_id, count=len(details))

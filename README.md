@@ -12,7 +12,7 @@ A self-hosted monitor for furnished rental listings. furnest watches several lis
 
 - Watches several furnished-rental sources on a schedule through per-source adapters ([docs/adapters.md](docs/adapters.md)).
 - Filters and scores listings against your criteria, and groups duplicates of the same property across sources.
-- Posts matches to Discord with approve/deny/snooze buttons ([docs/discord-setup.md](docs/discord-setup.md)).
+- Posts each data pull's new matches to Discord as one list, with approve/deny/snooze buttons a pick away ([docs/discord-setup.md](docs/discord-setup.md)).
 - Drafts or sends inquiry emails and reads replies by IMAP.
 - Tracks every property through a review pipeline in a small web dashboard (list, board or map), with a JSON API.
 - Self-hosted: one Docker image, SQLite, no external services required ([docs/deployment.md](docs/deployment.md)).
@@ -106,6 +106,7 @@ Every setting, with its type and default (the table is generated from the code a
 | `DISCORD_REQUEST_TIMEOUT_SECONDS` | number | `10.0` |
 | `DISCORD_MAX_RETRIES` | integer | `3` |
 | `DISCORD_INTERACTION_MAX_AGE_SECONDS` | integer | `300` |
+| `DISCORD_NOTIFY_BATCH_MINUTES` | integer | `30` |
 | `DISCORD_DIGEST_TIME` | time | unset |
 | `DISCORD_DIGEST_TOP` | integer | `5` |
 | `DISCORD_ALERT_AFTER_FAILURES` | integer | `3` |

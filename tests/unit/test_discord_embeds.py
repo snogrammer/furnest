@@ -9,7 +9,7 @@ review the diff.
 import json
 import os
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +23,12 @@ from furnest.db.property_store import (
 )
 from furnest.domain import Money, NormalizedListing, OwnerType, PropertyStatus
 from furnest.matching.scoring import BreakdownItem, MatchResult
-from furnest.notify.custom_ids import DiscordAction, parse_custom_id
+from furnest.notify.custom_ids import OPEN_CUSTOM_ID, DiscordAction, parse_custom_id
 from furnest.notify.embeds import (
+    BUTTONS,
     LIMITS,
+    MAX_BATCH,
+    batch_message,
     dashboard_url,
     disabled_actions,
     embed_length,
@@ -204,7 +207,7 @@ def test_buttons_carry_parseable_custom_ids_in_order() -> None:
     (row,) = build(detail())["components"]
     parsed = [parse_custom_id(button["custom_id"]) for button in row["components"]]
 
-    assert parsed == [(action, 42) for action in DiscordAction]
+    assert parsed == [(action, 42) for action in BUTTONS]
     assert all(not button["disabled"] for button in row["components"])
 
 
@@ -298,3 +301,104 @@ def test_footer_shows_an_active_snooze() -> None:
     footer = build(snoozed)["embeds"][0]["footer"]["text"]
 
     assert footer == "furnest · suggested · snoozed until 2026-10-04"
+
+
+# --- List messages ----------------------------------------------------------------
+
+
+def numbered(n: int, **changes: Any) -> PropertyDetail:  # noqa: ANN401
+    """Property ``n`` with its own listing; ``changes`` go to its state."""
+    listing = listing_detail(source_id=f"abc-{n}", title=f"Furnished place number {n}")
+    return detail(property=state(id=n, score=90 - n, **changes), listings=[listing])
+
+
+def batch(details: list[PropertyDetail], **kwargs: Any) -> dict[str, Any]:  # noqa: ANN401
+    return batch_message(details, base_url=BASE_URL, now=AT, **kwargs)
+
+
+def test_snapshot_batch() -> None:
+    bare = listing_detail(beds=None, baths=None)
+    bare = replace(bare, summary=replace(bare.summary, monthly_price=None))
+    details = [
+        numbered(1),
+        numbered(2),
+        detail(property=state(id=3, score=None, address=None), listings=[]),
+        detail(property=state(id=4, score=None), listings=[bare]),
+    ]
+
+    assert_snapshot("batch_full", batch(details))
+
+
+def test_snapshot_batch_statuses() -> None:
+    details = [
+        numbered(1),
+        numbered(2, status=PropertyStatus.APPROVED),
+        numbered(3, status=PropertyStatus.INQUIRY_SENT),
+        numbered(4, status=PropertyStatus.DENIED),
+        numbered(5, snoozed_until=AT + timedelta(hours=1)),
+        numbered(6, snoozed_until=AT - timedelta(hours=1)),  # the snooze is over
+        numbered(7, merged_into_id=1),
+        numbered(8),
+    ]
+
+    assert_snapshot("batch_statuses", batch(details, superseded={8}))
+
+
+def test_snapshot_batch_hostile_text() -> None:
+    title = "@everyone **HUGE** [click](https://evil.example.com) " + "deal " * 30
+    hostile = listing_detail(title=title)
+    d = detail(property=state(address="*1* _Main_ St"), listings=[hostile])
+
+    assert_snapshot("batch_hostile", batch([d]))
+
+
+def test_a_full_batch_stays_within_discord_limits() -> None:
+    long = "Ünïcode-heavy furnished loft with [brackets] and *stars* " * 10
+    details = [
+        detail(
+            property=state(id=10**17 + n, score=100),
+            listings=[listing_detail(source_id=f"x{n}", title=long)],
+        )
+        for n in range(MAX_BATCH)
+    ]
+
+    payload = batch(details)
+
+    (embed,) = payload["embeds"]
+    assert len(embed["description"]) <= LIMITS["description"]
+    assert embed_length(embed) <= LIMITS["total"]
+    assert len(embed["description"].splitlines()) == MAX_BATCH  # no line was lost
+    (row,) = payload["components"]
+    (menu,) = row["components"]
+    assert len(menu["options"]) == MAX_BATCH
+    for option in menu["options"]:
+        assert len(option["label"]) <= 100
+        assert len(option["description"]) <= 100
+        assert len(option["value"]) <= 100
+
+
+def test_a_batch_links_each_line_to_the_dashboard() -> None:
+    (embed,) = batch([numbered(1)])["embeds"]
+
+    assert f"]({dashboard_url(BASE_URL, 1)})" in embed["description"]
+    assert embed["title"] == "1 new match"
+
+
+def test_a_batch_menu_picks_properties_by_id() -> None:
+    (row,) = batch([numbered(1), numbered(2)])["components"]
+    (menu,) = row["components"]
+
+    assert menu["custom_id"] == OPEN_CUSTOM_ID
+    assert [option["value"] for option in menu["options"]] == ["1", "2"]
+
+
+def test_an_empty_batch_has_no_menu() -> None:
+    payload = batch([])
+
+    assert "components" not in payload
+    assert payload["allowed_mentions"] == {"parse": []}
+
+
+def test_a_batch_holds_at_most_a_menu_full() -> None:
+    with pytest.raises(ValueError, match="at most"):
+        batch([numbered(n) for n in range(1, MAX_BATCH + 2)])

@@ -79,6 +79,11 @@ def add_listing(session_factory: sessionmaker[Session]) -> AddListing:
     return add
 
 
+def notify_requested(session_factory: sessionmaker[Session], pid: int) -> datetime | None:
+    with session_scope(session_factory) as session:
+        return session.get_one(Property, pid).notify_requested_at
+
+
 def jobs(session_factory: sessionmaker[Session], kind: str) -> list[dict[str, Any]]:
     with session_scope(session_factory) as session:
         return [
@@ -123,7 +128,8 @@ def test_a_listing_of_the_same_unit_joins_the_existing_property(
     assert joined.id == state.id
     assert property_of(session_factory, second) == state.id
     # Suggested once; the second source doesn't notify again.
-    assert jobs(session_factory, NOTIFY) == [{"property_id": state.id}]
+    assert jobs(session_factory, NOTIFY) == [{}]
+    assert notify_requested(session_factory, state.id) == T0
     grouped = [e for e in store.audit_events(state.id) if e.actor_detail == "grouped"]
     assert len(grouped) == 1
     assert grouped[0].actor is Actor.SYSTEM
@@ -147,7 +153,7 @@ def test_a_decided_property_stays_decided_when_a_duplicate_arrives(
 
     assert joined.id == state.id
     assert joined.status is S.DENIED
-    assert jobs(session_factory, NOTIFY) == [{"property_id": state.id}]
+    assert jobs(session_factory, NOTIFY) == [{}]
 
 
 def test_a_different_unit_gets_its_own_property(
@@ -410,10 +416,12 @@ def test_a_suggested_survivor_without_a_message_is_notified(
     a, pa, _b, _pb = two_properties(store, add_listing, session_factory)
     with session_scope(session_factory) as session:
         session.execute(update(Job).values(status="succeeded"))
+        session.execute(update(Property).values(notify_requested_at=None))
 
     store.regroup([a], at=LATER)
 
-    assert jobs(session_factory, NOTIFY)[-1] == {"property_id": pa}
+    assert len(jobs(session_factory, NOTIFY)) == 2
+    assert notify_requested(session_factory, pa) is not None
 
 
 def test_a_listing_matching_two_properties_merges_them(
